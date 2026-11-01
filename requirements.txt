@@ -1,0 +1,11 @@
+# Python 3.10+
+# Browser automation (TikTok / Xiaohongshu / Douyin). After installing run:  python -m playwright install chromium
+playwright>=1.45
+# Pixel fallback for buttons hidden in closed shadow roots
+Pillow>=10.0
+# YouTube Data API v3 (official upload)
+google-api-python-client>=2.100
+google-auth>=2.23
+google-auth-oauthlib>=1.1
+# Optional: local speech-to-text for render/captions.py transcribe and render/check.py --speech
+faster-whisper>=1.0

@@ -1,0 +1,61 @@
+{
+  "_readme": "One job = one video, for one or more platforms. Paths are relative to THIS file. Keys starting with _ are comments. Values inside platforms.<name> override the top-level values for that platform.",
+
+  "video": "renders/my_video.mp4",
+  "srt": "renders/my_video.srt",
+  "cover": "renders/my_cover.jpg",
+  "title": "Your video title",
+  "caption": "Your post text, without hashtags.",
+  "tags": ["tagone", "tagtwo"],
+  "aigc": true,
+  "schedule": "2026-11-01 19:00",
+
+  "platforms": {
+    "youtube": {
+      "description": "Your description. {{VIDEO_ID}} is replaced with the real video id after upload.",
+      "tags": ["tag one", "tag two"],
+      "privacy": "private",
+      "categoryId": 22,
+      "lang": "en"
+    },
+    "tiktok": {
+      "brand_disclosure": false
+    },
+    "xiaohongshu": {
+      "type": "video",
+      "title": "Short title, about 20 characters max",
+      "body": [
+        "First paragraph.",
+        "Second paragraph.",
+        "Third paragraph."
+      ],
+      "tags": ["topic one", "topic two"]
+    },
+    "douyin": {
+      "title": "Title, 30 characters max",
+      "desc": "Description text without hashtags.",
+      "tags": ["topic one", "topic two"]
+    },
+    "facebook": {
+      "_说明": "通过 Meta Business Suite 发主页 Reels。page_name 填你的主页名，用来核对没发错主页；composer_url 留空 = Business Suite 首页。",
+      "page_name": "Your Page name",
+      "composer_url": "",
+      "aigc": true
+    },
+    "instagram": {
+      "_说明": "format: reel（发 video）或 carousel（发 images，1-10 张）。网页版不能定时，schedule 必须留空。",
+      "format": "reel",
+      "schedule": "",
+      "aigc": true
+    },
+    "linkedin": {
+      "_说明": "只发文字帖，video / images 会被忽略。正文可以比短视频文案写长一些。",
+      "caption": "A longer post text for LinkedIn. Hashtags from tags are added at the end."
+    },
+    "x": {
+      "_说明": "attach_video=false 则不带视频；max_chars 默认 280（中日韩字符算 2）。",
+      "attach_video": true,
+      "max_chars": 280
+    }
+  }
+}

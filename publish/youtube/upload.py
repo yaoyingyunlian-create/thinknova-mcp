@@ -1,0 +1,210 @@
+# -*- coding: utf-8 -*-
+"""Upload one video to YouTube with the official YouTube Data API v3.
+
+    python upload.py ../../job.example.json
+    python upload.py ../../job.example.json --skip-check     # do not run render/check.py first
+
+Order of steps (do not reorder):
+    1. render/check.py on the video (unless --skip-check); a FAIL stops the upload
+    2. videos.insert (resumable upload)
+    3. replace {{VIDEO_ID}} in the description with the real id (if present)
+    4. set the "altered or synthetic content" flag when "aigc" is true
+    5. read the video back and compare title / privacy / schedule
+    6. append one line to upload_log.csv next to this script
+
+Job fields used (top level, or overridden in "platforms.youtube"):
+    video        path to the mp4 (required)
+    title        video title (required)
+    description  description text; falls back to "caption"
+    tags         list of tags (no "#")
+    privacy      "private" (default) | "unlisted" | "public"
+    publishAt    RFC3339 UTC time, e.g. "2026-11-01T11:00:00Z" (forces private until then)
+    schedule     "YYYY-MM-DD HH:MM" in THIS computer's local time; used if publishAt is absent
+    categoryId   YouTube category id, default 22 (People & Blogs)
+    lang         e.g. "en", "zh-Hans" (optional)
+    aigc         true -> declare altered/synthetic content (default true)
+    made_for_kids  default false
+    srt          optional subtitle file passed to render/check.py
+
+Notes:
+  * The synthetic-content flag (status.containsSyntheticMedia) can be WRITTEN by the API,
+    but reading it back through the API has been observed to return nothing. Verify it
+    once in YouTube Studio (video -> Details -> Show more -> Altered content).
+  * A vertical video of a few minutes or less is usually classified as a Short
+    automatically; check once in Studio.
+"""
+import csv
+import datetime
+import io
+import os
+import subprocess
+import sys
+import time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
+import yt_common  # noqa: E402
+from common import jobfile  # noqa: E402
+
+CHECK = os.path.normpath(os.path.join(HERE, "..", "..", "render", "check.py"))
+LOG_CSV = os.path.join(HERE, "upload_log.csv")
+ID_TOKEN = "{{VIDEO_ID}}"
+
+
+def log(m):
+    print(u"[%s] %s" % (time.strftime("%H:%M:%S"), m), flush=True)
+
+
+def run_check(video, srt):
+    if not os.path.isfile(CHECK):
+        log("render/check.py not found; skipping the pre-upload check.")
+        return 0
+    cmd = [sys.executable, CHECK, video]
+    if srt:
+        cmd += ["--srt", srt]
+    env = dict(os.environ, PYTHONIOENCODING="utf-8")
+    p = subprocess.run(cmd, env=env, capture_output=True)
+    print((p.stdout or b"").decode("utf-8", "replace"))
+    return p.returncode
+
+
+def local_to_utc_rfc3339(s):
+    dt = datetime.datetime.strptime(s.strip(), "%Y-%m-%d %H:%M")
+    utc = dt.astimezone(datetime.timezone.utc)   # naive -> interpreted as local time
+    return utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def append_log(row):
+    new = not os.path.isfile(LOG_CSV)
+    with io.open(LOG_CSV, "a", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        if new:
+            w.writerow(["time", "title", "videoId", "privacy", "publishAt", "check", "file"])
+        w.writerow(row)
+
+
+def main():
+    pos, flags, _ = jobfile.parse_args(sys.argv[1:], flags=("--skip-check",))
+    if not pos:
+        print(__doc__)
+        return 1
+    job = jobfile.load_job(pos[0], "youtube")
+    if not job.get("description") and job.get("caption"):
+        job["description"] = job["caption"]
+    jobfile.require(job, "video", "title")
+    video = job["video"]
+    if not os.path.isfile(video):
+        log("Video file not found: %s" % video)
+        return 1
+
+    # 1. pre-upload check
+    if "--skip-check" in flags:
+        log("Pre-upload check skipped (--skip-check).")
+        check_note = "skipped"
+    else:
+        log("Running render/check.py ...")
+        rc = run_check(video, job.get("srt"))
+        if rc != 0:
+            log("Check FAILED (exit code %s). Not uploading. Fix the video, or use --skip-check "
+                "if you are sure." % rc)
+            return 2
+        check_note = "pass"
+
+    # 2. upload
+    from googleapiclient.http import MediaFileUpload
+
+    snippet = {
+        "title": job["title"],
+        "description": job.get("description", ""),
+        "tags": job.get("tags", []),
+        "categoryId": str(job.get("categoryId", 22)),
+    }
+    if job.get("lang"):
+        snippet["defaultLanguage"] = job["lang"]
+        snippet["defaultAudioLanguage"] = job["lang"]
+    status = {
+        "privacyStatus": job.get("privacy", "private"),
+        "selfDeclaredMadeForKids": bool(job.get("made_for_kids", False)),
+    }
+    publish_at = job.get("publishAt")
+    if not publish_at and job.get("schedule"):
+        publish_at = local_to_utc_rfc3339(job["schedule"])
+        log("schedule %s (local) -> publishAt %s (UTC)" % (job["schedule"], publish_at))
+    if publish_at:
+        status["privacyStatus"] = "private"      # scheduled videos must be private until publishAt
+        status["publishAt"] = publish_at
+    body = {"snippet": snippet, "status": status}
+
+    yt = yt_common.youtube()
+    ch = yt_common.my_channel(yt)
+    log("Channel: %s (%s) | subscribers %s | videos %s"
+        % (ch["title"], ch["handle"] or "no handle", ch["subs"], ch["videos"]))
+
+    size_mb = os.path.getsize(video) / 1024.0 / 1024.0
+    log("Uploading %s (%.1f MB) ..." % (os.path.basename(video), size_mb))
+    media = MediaFileUpload(video, chunksize=4 * 1024 * 1024, resumable=True)
+    req = yt.videos().insert(part="snippet,status", body=body, media_body=media)
+    resp, last = None, -1
+    while resp is None:
+        st, resp = req.next_chunk()
+        if st:
+            pct = int(st.progress() * 100)
+            if pct >= last + 10:
+                last = pct
+                log("  %d%%" % pct)
+    vid = resp["id"]
+    log("Upload finished. videoId=%s" % vid)
+
+    # 3. fill {{VIDEO_ID}} in the description (the id only exists after upload)
+    if ID_TOKEN in (snippet.get("description") or ""):
+        snippet["description"] = snippet["description"].replace(ID_TOKEN, vid)
+        yt.videos().update(part="snippet", body={"id": vid, "snippet": snippet}).execute()
+        # Read endpoints lag behind writes; poll instead of reading once.
+        d = ""
+        for _ in range(6):
+            back = yt.videos().list(part="snippet", id=vid).execute()
+            d = back["items"][0]["snippet"]["description"]
+            if ID_TOKEN not in d:
+                break
+            time.sleep(5)
+        log("%s replaced %s with %s" % ("OK" if ID_TOKEN not in d else "NOT", ID_TOKEN, vid))
+
+    # 4. synthetic / altered content flag
+    if job.get("aigc", True):
+        try:
+            cur = yt.videos().list(part="status", id=vid).execute()["items"][0]["status"]
+            st2 = dict(cur)
+            st2["containsSyntheticMedia"] = True
+            yt.videos().update(part="status", body={"id": vid, "status": st2}).execute()
+            log("Altered/synthetic content flag written. Verify once in YouTube Studio.")
+        except Exception as e:
+            msg = str(e)
+            if "insufficient" in msg.lower():
+                log("Could not set the flag: token lacks youtube.force-ssl. Run auth.py again.")
+            else:
+                log("Could not set the flag: %s" % msg[:150])
+            log("Set 'Altered content' by hand in YouTube Studio for this video.")
+
+    # 5. read back (an OK response is not proof that it took effect)
+    time.sleep(4)
+    items = yt.videos().list(part="snippet,status", id=vid).execute().get("items") or []
+    if not items:
+        log("Could not read the video back. Do not assume success; check YouTube Studio.")
+        return 3
+    it = items[0]
+    got_title = it["snippet"]["title"]
+    got_priv = it["status"]["privacyStatus"]
+    got_at = it["status"].get("publishAt", "")
+    log("Read-back: title '%s' | privacy %s | publishAt %s" % (got_title, got_priv, got_at or "none"))
+    if got_title != job["title"]:
+        log("Title does not match the job. Check it in Studio.")
+
+    print("\nLink: https://youtube.com/shorts/%s" % vid)
+    append_log([time.strftime("%Y-%m-%d %H:%M"), job["title"], vid, got_priv,
+                got_at or "", check_note, os.path.basename(video)])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

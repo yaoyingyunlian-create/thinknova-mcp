@@ -1,0 +1,17 @@
+# Login sessions, tokens and OAuth client files are credentials. Never commit or share them.
+_profile/
+_logs/
+token.json
+token.json.bak_*
+oauth_client.json
+upload_log.csv
+publish/youtube/captions/
+*.env
+.env
+# Render outputs
+renders/
+_frames/
+memory.md
+memory_archive/
+analytics_targets.json
+draft_candidates.json

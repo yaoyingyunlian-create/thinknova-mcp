@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <title>Vertical slideshow template</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <!--
+      Vertical 9:16 template: title + image slideshow (slow zoom) + one-line subtitles.
+
+      How to customise:
+        1. Replace assets/images/slide1.jpg ... slide3.jpg with your own images (1080x1920 or larger).
+           More slides: copy an <img class="clip slide"> line, shift data-start, add it to `slides` below.
+        2. Edit the title text in #title.
+        3. Subtitles: edit the CAPTIONS list below, or generate it from an SRT file:
+             python ../../captions.py tohtml my.srt index.html
+        4. Voice / music: put a file in assets/audio/ and uncomment the <audio> element.
+        5. Font: this template uses the renderer's Noto Sans SC fallback by default.
+           To use a brand font, add a local @font-face rule and keep the font file in assets/fonts/.
+        6. Keep data-duration on #root >= the end of the last slide / caption / audio.
+      Preview:  npx hyperframes preview      Check:  npx hyperframes check
+      Render:   npx hyperframes render       (output goes to renders/)
+    -->
+    <style>
+      @font-face {
+        font-family: "Noto Sans SC";
+        src: local("Noto Sans SC");
+        font-weight: 100 900;
+        font-display: block;
+      }
+      :root {
+        --ink: #FFFFFF;
+        --stroke: #141414;
+        --accent: #FFD34D;
+        --font: "Noto Sans SC", system-ui, sans-serif;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+      #root {
+        position: relative; width: 100%; height: 100%; overflow: hidden;
+        background: #111; font-family: var(--font); color: var(--ink);
+      }
+
+      /* Slides: each <img> is a timed clip; the timeline zooms and fades it. */
+      .slide { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      /* Dark gradient at top and bottom so white text stays readable on any image */
+      #shade {
+        position: absolute; inset: 0; z-index: 2; pointer-events: none;
+        background:
+          linear-gradient(180deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 32%),
+          linear-gradient(0deg, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 40%);
+      }
+
+      /* Layout guide for 1080x1920:
+           0-5%    keep empty (status bar)
+           5-30%   title area
+           30-70%  main subject
+           ~72%    subtitle baseline - below it most apps draw buttons and the caption text */
+      #title-wrap {
+        position: absolute; left: 56px; right: 56px; top: 126px; z-index: 3;
+        padding: 24px; border-radius: 28px; background: rgba(0,0,0,.52);
+      }
+      #title {
+        font-size: 92px; font-weight: 900; line-height: 1.18; letter-spacing: .01em;
+        text-shadow: 0 6px 24px rgba(0,0,0,.45);
+      }
+      #title .hi { color: var(--accent); }
+
+      #captions { position: absolute; left: 0; right: 0; bottom: 538px; z-index: 4; height: 120px; }
+      .cap {
+        position: absolute; left: 60px; right: 60px; bottom: 0; opacity: 0;
+        text-align: center; font-size: 76px; font-weight: 900; line-height: 1.1;
+        color: var(--ink); -webkit-text-stroke: 9px var(--stroke); paint-order: stroke fill;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="12"
+      data-width="1080"
+      data-height="1920"
+    >
+      <img id="img-1" class="clip slide" src="assets/images/slide1.jpg" alt="" data-start="0" data-duration="4.2" data-track-index="0" style="z-index:1" />
+      <img id="img-2" class="clip slide" src="assets/images/slide2.jpg" alt="" data-start="4" data-duration="4.2" data-track-index="1" style="z-index:1" />
+      <img id="img-3" class="clip slide" src="assets/images/slide3.jpg" alt="" data-start="8" data-duration="4" data-track-index="0" style="z-index:1" />
+
+      <div id="shade"></div>
+
+      <div id="title-wrap">
+        <div id="title">Your headline <span class="hi">goes here</span></div>
+      </div>
+
+      <div id="captions"></div>
+
+      <!-- Voice-over or music (uncomment and set the file name; every <audio> needs an id):
+      <audio id="voice" src="assets/audio/voice.mp3" data-start="0" data-duration="12" data-track-index="10" data-volume="1"></audio>
+      -->
+    </div>
+
+    <script>
+      /* CAPTIONS:BEGIN */
+      const CAPTIONS = [
+        { "start": 0.4, "end": 3.8, "text": "First subtitle line" },
+        { "start": 4.2, "end": 7.8, "text": "Second subtitle line" },
+        { "start": 8.2, "end": 11.6, "text": "Third subtitle line" }
+      ];
+      /* CAPTIONS:END */
+
+      const tl = gsap.timeline({ paused: true });
+
+      // Slides: slow zoom, short fade-in from the second slide on.
+      const slides = [["#img-1", 0, 4.2], ["#img-2", 4, 4.2], ["#img-3", 8, 4]];
+      slides.forEach(([sel, start, dur], i) => {
+        tl.fromTo(sel, { scale: 1.0 }, { scale: 1.08, duration: dur, ease: "none" }, start);
+        if (i > 0) tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.25, ease: "power1.out" }, start);
+      });
+
+      // Title
+      tl.fromTo("#title", { opacity: 0, y: -30 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.15);
+
+      // Subtitles: one element per cue, shown/hidden with seek-safe tl.set calls.
+      const box = document.getElementById("captions");
+      CAPTIONS.forEach((c, i) => {
+        const el = document.createElement("div");
+        el.className = "cap";
+        el.id = "cap-" + i;
+        el.textContent = c.text;
+        box.appendChild(el);
+        tl.set(el, { opacity: 1 }, c.start);
+        tl.fromTo(el, { y: 14 }, { y: 0, duration: 0.18, ease: "power2.out" }, c.start);
+        tl.set(el, { opacity: 0 }, c.end);
+      });
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
