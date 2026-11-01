@@ -66,6 +66,14 @@ speech-gap check). Skip it if you already have subtitles.
 `python toolkit.py archive`。草稿候选只可先用 `python drafts.py list` 展示；删除本地候选记录必须显式
 `python drafts.py purge --confirm <id>`，平台草稿仍需在平台页面手动确认删除。
 
+定时任务每天10点按本机时区执行 `toolkit.py maintenance`：只读采集、保存完整归档快照、仅压缩历史事件并生成 `reminders.txt`。它不启动 AI 会话，也不自动扣费或发帖。旧格式记忆无“历史事件”节时仅备份，不自动删段；初始模板不会覆盖已有记忆。其他活动章节即使超过阈值也保留，需助手保留快照后人工整理。日志和状态写入有进程锁；其他 AI 编辑器仍应避免同时改同一文件。
+
+Scheduled maintenance runs at 10:00 local time: collect metrics, archive history with full snapshots, and write local reminders. It never wakes an AI session or generates/publishes content. Active memory is retained; legacy files are backed up without truncation. Use the template's task/billing and publication-approval records to preserve traceability.
+
+旧用户更新后，setup 会自动执行 `toolkit.py migrate-memory`：先备份，再添加缺少的章节，保留旧内容。也可单独运行此命令。旧系统定时任务的命令不会随源码更新自动变化，需要先卸载旧任务、说明新维护范围后再由用户确认安装。维护提醒写在本地 reminders.txt，不发送邮件或社媒消息。
+
+After upgrading, setup runs `toolkit.py migrate-memory` to snapshot existing memory and add missing sections without replacing old content. Existing OS schedules need an explicit uninstall/reinstall to use the maintenance command; source updates alone do not rewrite them. Reminders remain local and never send messages.
+
 If ffmpeg is not on PATH, pass `--ffmpeg C:/path/to/ffmpeg.exe` or set the `FFMPEG` / `FFPROBE`
 environment variables.
 
@@ -184,13 +192,13 @@ Then run `loudnorm.py` and `check.py` on the rendered MP4.
 
 ## 5. Publish
 
-Always run a platform's script with `--dry` first: it fills in everything and stops before posting.
+Run `--dry` first. YouTube dry-run performs LOCAL validation only and never accesses an account or uploads. Other platform dry-runs may upload assets/fill forms and leave drafts, so explain those effects within the user's authorization before running them.
 
 ```bash
 # YouTube (official API)
 python publish/youtube/auth.py                       # once
-python publish/youtube/upload.py job.json            # runs render/check.py first
-python publish/youtube/upload.py job.json --skip-check
+python publish/youtube/upload.py job.json --dry       # local checks only, no OAuth/upload
+python publish/youtube/upload.py job.json --execute   # real upload, explicit confirmation required
 python publish/youtube/yt_captions.py VIDEO_ID --get # download captions of your own video
 
 # TikTok (browser automation)
@@ -288,7 +296,7 @@ Delete it to log out.
 
 **job.json**：一条视频一个文件。公共字段写在最外层，某个平台要不一样就写在 `platforms.<平台名>` 里覆盖。相对路径按 job 文件所在目录算。字段含义见第 3 节的表。
 
-**常用命令**：见第 4、5 节。每个平台第一次一律先加 `--dry`，只填不发，看截图（在各平台目录的 `_logs/` 里）没问题再正式发。
+**常用命令**：见第 4、5 节。YouTube 的 `--dry` 仅本地检查，`--execute` 才实际上传，不再允许绕过检查。其他平台的 `--dry` 可能上传素材、填写表单或产生草稿，并非零副作用；先说明影响，真实上传/发布仍须对应确认。
 
 **首次登录**：
 - YouTube：用你自己的 Google Cloud 项目，开 YouTube Data API v3，建「桌面应用」OAuth 客户端，下载的 JSON 改名为 `oauth_client.json` 放进 `publish/youtube/`，再跑 `auth.py`，用拥有频道的 Google 账号点「允许」。同意屏幕处于「测试」状态时，授权大约 7 天过期，到时重跑一次 `auth.py` 即可。

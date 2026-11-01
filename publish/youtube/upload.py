@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """Upload one video to YouTube with the official YouTube Data API v3.
 
-    python upload.py ../../job.example.json
-    python upload.py ../../job.example.json --skip-check     # do not run render/check.py first
+    python upload.py ../../job.example.json --dry       # LOCAL checks only, no API calls
+    python upload.py ../../job.example.json --execute   # real upload after user confirmation
 
 Order of steps (do not reorder):
-    1. render/check.py on the video (unless --skip-check); a FAIL stops the upload
+    1. render/check.py on the video; a FAIL or missing checker stops the upload
     2. videos.insert (resumable upload)
     3. replace {{VIDEO_ID}} in the description with the real id (if present)
     4. set the "altered or synthetic content" flag when "aigc" is true
@@ -58,8 +58,8 @@ def log(m):
 
 def run_check(video, srt):
     if not os.path.isfile(CHECK):
-        log("render/check.py not found; skipping the pre-upload check.")
-        return 0
+        log("render/check.py not found; repair the toolkit before uploading.")
+        return 2
     cmd = [sys.executable, CHECK, video]
     if srt:
         cmd += ["--srt", srt]
@@ -85,10 +85,13 @@ def append_log(row):
 
 
 def main():
-    pos, flags, _ = jobfile.parse_args(sys.argv[1:], flags=("--skip-check",))
-    if not pos:
+    pos, flags, _ = jobfile.parse_args(sys.argv[1:], flags=("--skip-check", "--dry", "--execute"))
+    if not pos or ("--dry" in flags) == ("--execute" in flags):
         print(__doc__)
         return 1
+    if "--skip-check" in flags:
+        log("--skip-check is no longer supported. Fix failed checks before uploading.")
+        return 2
     job = jobfile.load_job(pos[0], "youtube")
     if not job.get("description") and job.get("caption"):
         job["description"] = job["caption"]
@@ -99,20 +102,12 @@ def main():
         return 1
 
     # 1. pre-upload check
-    if "--skip-check" in flags:
-        log("Pre-upload check skipped (--skip-check).")
-        check_note = "skipped"
-    else:
-        log("Running render/check.py ...")
-        rc = run_check(video, job.get("srt"))
-        if rc != 0:
-            log("Check FAILED (exit code %s). Not uploading. Fix the video, or use --skip-check "
-                "if you are sure." % rc)
-            return 2
-        check_note = "pass"
-
-    # 2. upload
-    from googleapiclient.http import MediaFileUpload
+    log("Running render/check.py ...")
+    rc = run_check(video, job.get("srt"))
+    if rc != 0:
+        log("Check FAILED (exit code %s). Not uploading. Fix the video first." % rc)
+        return 2
+    check_note = "pass"
 
     snippet = {
         "title": job["title"],
@@ -126,7 +121,11 @@ def main():
     status = {
         "privacyStatus": job.get("privacy", "private"),
         "selfDeclaredMadeForKids": bool(job.get("made_for_kids", False)),
+        "containsSyntheticMedia": bool(job.get("aigc", True)),
     }
+    if status['privacyStatus'] not in ('private', 'unlisted', 'public'):
+        log('Invalid privacy value; not uploading.')
+        return 2
     publish_at = job.get("publishAt")
     if not publish_at and job.get("schedule"):
         publish_at = local_to_utc_rfc3339(job["schedule"])
@@ -135,6 +134,13 @@ def main():
         status["privacyStatus"] = "private"      # scheduled videos must be private until publishAt
         status["publishAt"] = publish_at
     body = {"snippet": snippet, "status": status}
+
+    if "--dry" in flags:
+        log("LOCAL DRY RUN passed. No OAuth, upload or scheduling request was made. Intended privacy: %s; schedule: %s" % (status['privacyStatus'], status.get('publishAt', 'none')))
+        return 0
+
+    # Only explicit --execute reaches account access or upload.
+    from googleapiclient.http import MediaFileUpload
 
     yt = yt_common.youtube()
     ch = yt_common.my_channel(yt)
@@ -199,6 +205,10 @@ def main():
     log("Read-back: title '%s' | privacy %s | publishAt %s" % (got_title, got_priv, got_at or "none"))
     if got_title != job["title"]:
         log("Title does not match the job. Check it in Studio.")
+        return 3
+    if got_priv != status['privacyStatus'] or got_at != status.get('publishAt', ''):
+        log('Privacy/schedule read-back mismatch. Content may already exist; inspect Studio before any retry.')
+        return 3
 
     print("\nLink: https://youtube.com/shorts/%s" % vid)
     append_log([time.strftime("%Y-%m-%d %H:%M"), job["title"], vid, got_priv,

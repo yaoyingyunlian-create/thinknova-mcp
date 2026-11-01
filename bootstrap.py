@@ -117,6 +117,7 @@ def setup():
     subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(ROOT / 'requirements.txt')], check=True)
     subprocess.run([str(python), '-m', 'playwright', 'install', 'chromium'], check=True)
     subprocess.run([str(python), str(ROOT / 'toolkit.py'), 'init'], check=True)
+    subprocess.run([str(python), str(ROOT / 'toolkit.py'), 'migrate-memory'], check=True)
     subprocess.run([str(python), str(ROOT / 'toolkit.py'), 'doctor'], check=True)
     print('Toolkit ready. Use the Python interpreter inside .venv for local toolkit commands.')
 

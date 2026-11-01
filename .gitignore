@@ -17,3 +17,7 @@ analytics_targets.json
 draft_candidates.json
 .venv/
 __pycache__/
+reminders.txt
+.memory.md.tmp
+.analytics_targets.json.tmp
+.*.lock

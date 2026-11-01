@@ -11,8 +11,10 @@ import shutil
 import subprocess
 import sys
 import importlib.util
+import re
 from datetime import datetime
 from pathlib import Path
+from local_state import state_lock
 
 ROOT = Path(__file__).resolve().parent
 MEMORY = ROOT / "memory.md"
@@ -31,6 +33,10 @@ def sha256(path: Path) -> str:
 
 
 def init() -> int:
+    with state_lock(MEMORY): return _init()
+
+
+def _init() -> int:
     if MEMORY.exists():
         print("memory.md already exists; it was not changed.")
         return 0
@@ -40,6 +46,11 @@ def init() -> int:
 
 
 def archive(max_lines: int = 300, max_chars: int = 15000) -> int:
+    if not MEMORY.exists(): return init()
+    with state_lock(MEMORY): return _archive(max_lines, max_chars)
+
+
+def _archive(max_lines: int = 300, max_chars: int = 15000) -> int:
     if not MEMORY.exists():
         return init()
     text = MEMORY.read_text(encoding="utf-8")
@@ -47,14 +58,41 @@ def archive(max_lines: int = 300, max_chars: int = 15000) -> int:
     if len(lines) <= max_lines and len(text) <= max_chars:
         print("memory.md is within the archive threshold.")
         return 0
-    marker = "## 偏好、拒绝与本机问题"
+    marker = "## 历史事件"
     keep_from = text.find(marker)
-    retained = text[keep_from:] if keep_from >= 0 else "\n".join(lines[-80:])
     ARCHIVE.mkdir(exist_ok=True)
-    target = ARCHIVE / ("memory_%s.md" % datetime.now().strftime("%Y%m%d_%H%M%S"))
-    target.write_text(text, encoding="utf-8")
-    MEMORY.write_text("# ThinkNova 本地运营记忆\n\n> 已归档历史：%s\n\n%s\n" % (target.name, retained), encoding="utf-8")
-    print("Archived memory to %s without deleting the current preference section." % target)
+    target = ARCHIVE / ("memory_%s.md" % datetime.now().strftime("%Y%m%d_%H%M%S_%f"))
+    with target.open('x', encoding='utf-8') as stream: stream.write(text)
+    if keep_from < 0:
+        print("Legacy memory snapshot saved to %s; content preserved in full. Add a history section before automatic compaction." % target)
+        return 0
+    protected = text[:keep_from]
+    history = text[keep_from + len(marker):].splitlines()
+    updated = protected + marker + "\n\n> 完整历史快照：memory_archive/" + target.name + "\n" + "\n".join(history[-60:]) + "\n"
+    temporary = MEMORY.with_name('.memory.md.tmp')
+    temporary.write_text(updated, encoding='utf-8')
+    temporary.replace(MEMORY)
+    print("Archived history to %s; all active sections were retained." % target)
+    return 0
+
+
+def migrate_memory() -> int:
+    if not MEMORY.exists(): return init()
+    with state_lock(MEMORY):
+        original = MEMORY.read_text(encoding='utf-8')
+        template = TEMPLATE.read_text(encoding='utf-8')
+        sections = re.findall(r'(?ms)^## [^\n]+\n.*?(?=^## |\Z)', template)
+        missing = [section.rstrip() for section in sections if section.splitlines()[0] not in original.splitlines() and not section.startswith('## 历史事件\n')]
+        if not missing and '## 历史事件' in original: return 0
+        ARCHIVE.mkdir(exist_ok=True)
+        backup = ARCHIVE / ('memory_migration_%s.md' % datetime.now().strftime('%Y%m%d_%H%M%S_%f'))
+        with backup.open('x', encoding='utf-8') as stream: stream.write(original)
+        before, marker, after = original.partition('## 历史事件')
+        updated = before.rstrip() + '\n\n' + '\n\n'.join(missing) + '\n\n## 历史事件' + after
+        temporary = MEMORY.with_name('.memory.md.tmp')
+        temporary.write_text(updated.rstrip() + '\n', encoding='utf-8')
+        temporary.replace(MEMORY)
+        print('Memory migration added missing sections only; prior content is retained and backed up in %s.' % backup)
     return 0
 
 
@@ -76,7 +114,17 @@ def verify() -> int:
 
 
 def metrics_command() -> list[str]:
-    return [sys.executable, str(ROOT / "analytics.py"), "collect"]
+    return [sys.executable, str(ROOT / "toolkit.py"), "maintenance"]
+
+
+def maintenance() -> int:
+    init()
+    result = subprocess.run([sys.executable, str(ROOT / 'analytics.py'), 'collect'], check=False)
+    archive()
+    pending = [line for line in MEMORY.read_text(encoding='utf-8').splitlines() if line.lstrip().startswith('- [ ]')]
+    (ROOT / 'reminders.txt').write_text('Local pending work / 本机待办\n' + '\n'.join(pending) + '\n', encoding='utf-8')
+    print('Read-only maintenance finished. See reminders.txt. No AI session, generation or publication was started.')
+    return result.returncode
 
 
 def doctor() -> int:
@@ -142,13 +190,15 @@ def uninstall_schedule() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("init"); sub.add_parser("verify"); sub.add_parser("doctor"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
+    sub.add_parser("init"); sub.add_parser("verify"); sub.add_parser("doctor"); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
     args = parser.parse_args()
     if args.command == "init": return init()
     if args.command == "verify": return verify()
     if args.command == "doctor": return doctor()
     if args.command == "archive": return archive(args.max_lines, args.max_chars)
+    if args.command == "maintenance": return maintenance()
+    if args.command == "migrate-memory": return migrate_memory()
     if args.command == "install-schedule": return install_schedule()
     return uninstall_schedule()
 

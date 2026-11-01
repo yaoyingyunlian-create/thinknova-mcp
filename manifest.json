@@ -1,26 +1,26 @@
 {
   "version": "thinknova-automation-toolkit-v3",
-  "revision": "77162350e43cf5132a2ce1fcf91547c5970c0b80efabb4656211fa562d7abef1",
+  "revision": "fcb33d0f3de311b96d6ad7747853343ad7bd43ed2b069f91ce3ee8710e8304c3",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "2ac8a953b03b09b9f217ed212ed4c4a0eeac75b1f7483df0a9638c6550a789d6"
+      "sha256": "c3e96607f6a31112a106b6f3b690ae52743f9be1f1de4901f493af480a116283"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "74a3d12eba3417bfc8aa840c9b93ca4054f7ea0341044c2e4e0d7e2613270565"
+      "sha256": "24d19932f4e0430033ce81d32e69670d409a41b8d349eaf84cf5b759e1fa15c3"
     },
     {
       "path": "README.md",
-      "sha256": "491c3724d635261832cb91309fea2625fa58a7972526f97cfcc0aeafb9885b59"
+      "sha256": "9054cdc748055f3d94749f3a6d4254a6d20b0446f51a84946924598b5c252d55"
     },
     {
       "path": "analytics.py",
-      "sha256": "b78a13ec33f1635c69a48f0651ccc3323e9072218af4b8044bb14e32a8e5ac15"
+      "sha256": "e774164a68f341bc2afcc2c5da467aa80f90aabff6f60e39b6e21d4fafa727e7"
     },
     {
       "path": "bootstrap.py",
-      "sha256": "1c964e909c21b336c79ecfb83dbc8752e93d8c481c731ca4dab7915293cbb758"
+      "sha256": "be1b47de5c74ccdf4827d137db184717d5a0cfc5b539aa6f462885e1fa0e2fd4"
     },
     {
       "path": "build_manifest.py",
@@ -43,8 +43,12 @@
       "sha256": "f7d96e6bd08d05fe509dedc331324160662bc183cc980c6bde38030f3f1a8a85"
     },
     {
+      "path": "local_state.py",
+      "sha256": "c1ea4bc1f23a321b4e137f66386c107729ba3157dcb72c3c6355ea01a2107f43"
+    },
+    {
       "path": "memory.template.md",
-      "sha256": "d3d8ebd87b5ca990e3a46a77d51f16de3bf5b90a043c31d593d252b2edba3228"
+      "sha256": "cddeba68ae0a4680a4078054cb91cd85c886fc85af7e6f3ca1f313b0482aa3ea"
     },
     {
       "path": "publish/common/__init__.py",
@@ -144,7 +148,7 @@
     },
     {
       "path": "publish/youtube/upload.py",
-      "sha256": "d68ebd59c196ed9e6c72502491287054f6f9a20c70bdcd2ff6e550a87887d746"
+      "sha256": "f6ca7a201795088419ba8aa4752fc0d6c9434d614aa9b93499401a7e205ba86a"
     },
     {
       "path": "publish/youtube/yt_captions.py",
@@ -200,11 +204,11 @@
     },
     {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
-      "sha256": "2f6c8ed2dca44610f2907a2361d3930e1d4a410b7eeaab7ab18f3aea8a1e1b32"
+      "sha256": "668d0c238542242642846047e9b647916aebdd968f9e5d7a808dca0380b3d18f"
     },
     {
       "path": "skills/\u5168\u5e73\u53f0\u5185\u5bb9\u8fd0\u8425/SKILL.md",
-      "sha256": "687c85429988b0a31aa90ad673f7e421a4b4668d8c685753436e4f73153794bb"
+      "sha256": "16ae647ae0f68dc312bbe13fb3caf7831364883e33e971898471f5d04a703c84"
     },
     {
       "path": "skills/\u5168\u7247\u7559\u5b58\u8282\u594f/SKILL.md",
@@ -227,8 +231,12 @@
       "sha256": "a86afb07845072b6c253b4fc142a2f956c75fb305aaaf142ac353b685142970e"
     },
     {
+      "path": "test_local_workflow.py",
+      "sha256": "4bf897e6b112decfef6de7a01314adebb40c7fcc4b0ab0ec8d5ffb78dbdeb93c"
+    },
+    {
       "path": "toolkit.py",
-      "sha256": "abc80fdbfd214f48361b9caef55bef1eab2e6a10e680b0b814ea7ec623ed75ed"
+      "sha256": "1752a3d70a6f7d6b6a22645a2148fad23c92ec73c9be547c3e91e0abd4ba327b"
     },
     {
       "path": "update.py",
