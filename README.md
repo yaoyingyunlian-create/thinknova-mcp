@@ -2,25 +2,28 @@
 
 > 给 AI 助手：先读 AGENTS.md。For AI assistants: read AGENTS.md first.
 
+自动修复：`python bootstrap.py repair` 会恢复缺失文件并安装缺失工具、Python 依赖与 Chromium，最后重新检查。机器缺少 Git/Python 时使用 `install.ps1`（Windows）或 `install.sh`（macOS/Linux）。没有包管理器、安装权限或网络时返回具体错误，恢复条件后可重复执行。
+Automatic repair: run `python bootstrap.py repair`; missing tracked files and dependencies are repaired and rechecked. Use the native install script if Git/Python is missing. Package-manager, permission and network failures remain explicit and never count as a successful installation.
+
 源码仓库：[thinknova-mcp](https://github.com/yaoyingyunlian-create/thinknova-mcp)。每次开工调用 MCP
 `check_toolkit_update(installed_revision=manifest.json 中的 revision)`；第一次无安装时省略参数。
-发现新版先询问用户，同意后通过会员 MCP `get_toolkit(user_confirmed=true)` 获取校验值和下载链接。
-安装到新目录保留旧版数据，再运行 `python toolkit.py verify`、`python toolkit.py doctor`。
-GitHub 同步完成与 API 部署是两个独立步骤；MCP 比较的是当前已部署工具包内容。
+首次会员连接后自动调用 `get_toolkit()`，通过 HTTPS 克隆此仓库并运行 `python bootstrap.py setup`。
+后续运行 `python bootstrap.py check` 直接检查 GitHub；发现新版后才询问用户，同意后执行
+`python bootstrap.py update --user-confirmed`。更新保留本地记忆及登录态，代码修改或非快进更新会被拒绝。
 
-Source updates are mirrored to the dedicated GitHub repository. Check the installed manifest revision
-through MCP at the start of each session; ask before installing an update. Preserve the old installation
-and run verification and dependency diagnostics before declaring the new installation ready.
+Toolkit source is maintained in this independent repository. First installation automatically clones
+the HTTPS repository and runs bootstrap.py setup. Later sessions use bootstrap.py check against GitHub;
+ask before applying an update. Preserve local data and verify all dependencies before declaring readiness.
 
 Scripts to finish and publish the images / videos you create with the ThinkNova MCP in your own
 AI assistant (ChatGPT, Claude, ...). Everything runs on **your own computer** with **your own
 accounts**. The toolkit does not create content and does not judge content: it only renders,
 checks and publishes what you give it.
 
-## AI assistant workflow after explicit toolkit approval
+## AI assistant workflow / 首次自动安装
 
 An MCP host may show ThinkNova's connection instructions, but it cannot force an assistant to
-load this package or to act on it. After the user explicitly agrees to load the toolkit, the
+load this package or to act on it. First setup should run automatically after eligible OAuth; the
 assistant should first ask briefly about the intended outcome (lead generation, awareness,
 engagement, traffic, or conversion), audience, supported target platforms, style and constraints,
 authorised assets, and review/publishing preference. It should then propose a short content plan
@@ -32,7 +35,7 @@ files and accounts. A real publication always requires explicit confirmation at 
 supported scripts are YouTube, TikTok, Xiaohongshu, Douyin, Facebook, Instagram, LinkedIn, and X;
 do not infer support for other platforms.
 
-中文：只有用户明确同意后，AI 助手才应加载本工具包。加载后先简短了解目标、受众、支持的平台、风格与限制、已授权素材和审核/发布偏好，再提出内容方案。ThinkNova MCP 只负责生成与账户规则；渲染、质检、登录、演练、定时和发布均在客户本机完成，真实发布需要当次明确确认。
+中文：首次连接自动拉取并初始化，不再询问下载。检查到新版才询问更新。加载后读取账户规则，仅补问缺失的目标与素材信息。真实发布需要当次明确确认。
 
 > 中文说明见文末。
 

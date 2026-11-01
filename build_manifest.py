@@ -5,9 +5,9 @@ import subprocess
 from pathlib import Path
 
 root = Path(__file__).resolve().parent
-paths = subprocess.check_output(['git', 'ls-files', '-z'], cwd=root).decode('utf-8').split('\0')
+paths = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=root).decode('utf-8').split('\0')
 files = []
-for name in sorted(filter(None, paths)):
+for name in sorted(set(filter(None, paths))):
     if name == 'manifest.json': continue
     path = root / name
     if path.is_file():

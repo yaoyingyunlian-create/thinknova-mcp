@@ -15,3 +15,5 @@ memory.md
 memory_archive/
 analytics_targets.json
 draft_candidates.json
+.venv/
+__pycache__/

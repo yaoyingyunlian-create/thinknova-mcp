@@ -1,30 +1,42 @@
 {
   "version": "thinknova-automation-toolkit-v3",
-  "revision": "acd657d44b7a2777dfc9e9ea1944d3c8b515f348431ff85df221c2224e163f71",
+  "revision": "77162350e43cf5132a2ce1fcf91547c5970c0b80efabb4656211fa562d7abef1",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "5d518801e3dfa8420690ce6dd7a008829fc35212ce8fa1fd15d0c8668fc9e0c7"
+      "sha256": "2ac8a953b03b09b9f217ed212ed4c4a0eeac75b1f7483df0a9638c6550a789d6"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "542d56800828f9eb0867847749d6dca20b9690f0c96be4ee93de310bffc426d5"
+      "sha256": "74a3d12eba3417bfc8aa840c9b93ca4054f7ea0341044c2e4e0d7e2613270565"
     },
     {
       "path": "README.md",
-      "sha256": "63ce5b10a37ff7604ba7dd139a70dbd186f17f79e963753444e486ef14afbe64"
+      "sha256": "491c3724d635261832cb91309fea2625fa58a7972526f97cfcc0aeafb9885b59"
     },
     {
       "path": "analytics.py",
       "sha256": "b78a13ec33f1635c69a48f0651ccc3323e9072218af4b8044bb14e32a8e5ac15"
     },
     {
+      "path": "bootstrap.py",
+      "sha256": "1c964e909c21b336c79ecfb83dbc8752e93d8c481c731ca4dab7915293cbb758"
+    },
+    {
       "path": "build_manifest.py",
-      "sha256": "ba5381926a733784c495b1d1cacd28e6712368459b412ba864c2e012d01f22ba"
+      "sha256": "d368d38d9fd52bcaa43947cd1f43ebee19f09ce1346228a1770195bb1094a897"
     },
     {
       "path": "drafts.py",
       "sha256": "e9756e010d533332056a36ab0f10d36b2e20c98728671fd12a5ee5b026f20454"
+    },
+    {
+      "path": "install.ps1",
+      "sha256": "2cd3a2c835b85e9ff9e1c530cb4a97d3b2bb12a33eda9ba1c4627fb03ffb072d"
+    },
+    {
+      "path": "install.sh",
+      "sha256": "98f303ecb1ce84dda22b24445dc86439a769facdf8c9cb90ff2e3235719ddb52"
     },
     {
       "path": "job.example.json",
@@ -209,6 +221,10 @@
     {
       "path": "skills/\u5f00\u573a\u94a9\u5b50/SKILL.md",
       "sha256": "ec0a365abdbf83c6ef7b6023c1256fecd5a1e5f97aafa2c794fde8572d75d44c"
+    },
+    {
+      "path": "test_bootstrap.py",
+      "sha256": "a86afb07845072b6c253b4fc142a2f956c75fb305aaaf142ac353b685142970e"
     },
     {
       "path": "toolkit.py",
