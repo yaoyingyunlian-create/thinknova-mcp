@@ -1,6 +1,6 @@
 {
   "version": "thinknova-automation-toolkit-v3",
-  "revision": "8640f7dc719bc664296df76effd25728318bc76955e6c389244cf95be965111f",
+  "revision": "36b5a9a60bc6d092380c7d85f931d7c7124ea7094b7037990a27700d1e209202",
   "files": [
     {
       "path": ".gitignore",
@@ -8,7 +8,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "cada41d0c6e5583576e0d17989302f33c24bac246f0f2d0d6cc5d5f3424f04a6"
+      "sha256": "51fd25fee563b85dddd40155ff74279965e8ad4f3f63b578f27ce56adc15a25f"
     },
     {
       "path": "AUTOMATION.md",
@@ -16,7 +16,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "e85128e0f763135d22eaf63db69cef38975ffbb60c2408b21e17884b88e7eabb"
+      "sha256": "42902b3eabc6f3f8fe1aa0bdf214403cfb49226a9adbd51081012aa68260cd70"
     },
     {
       "path": "analytics.py",
@@ -36,7 +36,7 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "13c99b0be6e3356002ea1caf4da04381d0dcf0a656986ea00b6739cfbc62d2d0"
+      "sha256": "8ec3b26d83eb50149bffb3dcdbd587847670ca33bd11d289096ac75b9eb920ca"
     },
     {
       "path": "build_manifest.py",
@@ -47,8 +47,12 @@
       "sha256": "e9756e010d533332056a36ab0f10d36b2e20c98728671fd12a5ee5b026f20454"
     },
     {
+      "path": "ego_runtime.py",
+      "sha256": "384f5a4941f38bd0a4a9e0ffd16bf387a4b305b15835fa7c41aabf5ee52b3982"
+    },
+    {
       "path": "health.py",
-      "sha256": "84858b6e446d2ad3c76d27a4545bdcee157cbd9973c42f7759d78e846842702f"
+      "sha256": "4fa17de732ed17fbd03aea2bd849a51b82edb29b44c9b7214266d137823a2296"
     },
     {
       "path": "install.ps1",
@@ -261,6 +265,10 @@
     {
       "path": "test_controlled_youtube.py",
       "sha256": "02ce6102ad1159c240f01630f8effc25e0248bc3a08e8639e973527273b4439e"
+    },
+    {
+      "path": "test_ego_runtime.py",
+      "sha256": "49c7dca45815bbb0ff8b194713998a4416521c599f4c4eb2c3d3ab280a16b43b"
     },
     {
       "path": "test_local_workflow.py",

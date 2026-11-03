@@ -320,3 +320,8 @@ Delete it to log out.
 - 默认会打开各平台的「AI 生成内容」声明（`"aigc": true`），开不上就中止不发；是否声明、如何声明由你根据平台规则自行决定并负责。
 - 脚本中止 ≠ 没发出去：重跑前先去平台后台（或用 `dupcheck.py` / `check.py`）确认一次。
 - 定时时间按运行脚本那台电脑 / 浏览器的时区计算。
+# AI 浏览器 / AI browser
+
+AI 助手默认使用 ego lite；浏览器操作前运行 `ego-browser skill`。Windows x64 的 `bootstrap.py setup` 会在缺少时自动下载官方安装器，验证 Windows 签名并启动；用户仍需完成安装和首次引导，然后重新运行 setup。未完成时返回 `EGO_ONBOARDING_REQUIRED`，不会显示全就绪。已启动标记位于 `%LOCALAPPDATA%/ThinkNova/installers/ego-install-started`，安装失败检查后才删除该标记并重试。其他系统暂需从官网安装对应版本。
+
+AI browser work defaults to ego lite. Windows x64 setup downloads and verifies the official installer; complete GUI installation/onboarding and rerun setup. Existing browser versions are not silently upgraded. Other platforms currently require the matching official installer. Legacy Python publishers still require Playwright Chromium; their profiles are preserved and are not automatically imported into ego lite.

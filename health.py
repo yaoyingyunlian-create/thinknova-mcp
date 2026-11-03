@@ -55,6 +55,8 @@ def report(root: Path = ROOT, online: bool = False) -> dict:
     check('node', lambda: int(subprocess.check_output(['node', '--version'], text=True, timeout=10).strip().lstrip('v').split('.')[0]) >= 18, 'Install Node.js 18+ / 安装 Node.js 18+')
     check('playwright', lambda: importlib.util.find_spec('playwright') is not None, 'Install requirements in .venv / 在虚拟环境安装依赖')
     check('chromium_runtime', chromium_probe, 'Run .venv Python -m playwright install chromium; inspect system restrictions / 检查浏览器安装和系统权限')
+    import ego_runtime
+    check('ego_runtime', ego_runtime.probe, 'Open ego lite and complete onboarding, then rerun bootstrap.py setup / 打开 ego lite 完成首次引导后重新检查')
     version = {'name': 'github_version', 'status': 'unknown', 'update_available': None, 'remedy': 'Run bootstrap.py check when online / 联网检查版本'}
     if online:
         try:

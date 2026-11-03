@@ -127,6 +127,9 @@ def setup(json_output=False):
     run('chromium_install', [str(python), '-m', 'playwright', 'install', 'chromium'])
     run('memory_init', [str(python), str(ROOT / 'toolkit.py'), 'init'])
     run('memory_migration', [str(python), str(ROOT / 'toolkit.py'), 'migrate-memory'])
+    SETUP_PHASE = 'ego_browser'; refresh_path()
+    import ego_runtime
+    ego_runtime.prepare()
     run('local_runtime_check', [str(python), str(ROOT / 'toolkit.py'), 'doctor'])
     SETUP_PHASE = 'complete'
     print('Local setup completed; verify MCP account, rules and platform authorization separately. 本机准备完成，账户、规则和平台授权仍需核实。')
