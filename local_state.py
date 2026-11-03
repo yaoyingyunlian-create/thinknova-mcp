@@ -5,6 +5,10 @@ import os
 import time
 
 
+class LocalStateBusy(RuntimeError):
+    pass
+
+
 @contextmanager
 def state_lock(path, timeout=5):
     lock_path = Path(path).with_name('.' + Path(path).name + '.lock')
@@ -22,7 +26,7 @@ def state_lock(path, timeout=5):
                     fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
                 break
             except OSError:
-                if time.monotonic() - started >= timeout: raise RuntimeError('Local state is busy: %s. Retry later; no data was overwritten.' % path)
+                if time.monotonic() - started >= timeout: raise LocalStateBusy('Local state is busy: %s. Retry later; no data was overwritten.' % path)
                 time.sleep(0.05)
         try:
             yield

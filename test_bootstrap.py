@@ -44,10 +44,10 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(git.call_count, 1)
 
     def test_confirmed_update_fast_forwards(self):
-        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc'}), patch.object(bootstrap, 'git', return_value='') as git, patch.object(bootstrap, 'setup') as setup:
+        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc'}), patch.object(bootstrap, 'git', return_value='') as git, patch.object(bootstrap.subprocess, 'run') as fresh_setup:
             bootstrap.update(True)
             self.assertEqual(git.call_args_list[-1].args, ('merge', '--ff-only', 'abc'))
-            setup.assert_called_once()
+            fresh_setup.assert_called_once_with([bootstrap.sys.executable, str(bootstrap.ROOT / 'bootstrap.py'), 'setup'], check=True)
 
     def test_network_failure_is_not_latest(self):
         with patch.object(bootstrap, 'git', side_effect=[bootstrap.REPOSITORY, 'abc', RuntimeError('offline')]):

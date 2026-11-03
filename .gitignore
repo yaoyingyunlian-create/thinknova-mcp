@@ -21,3 +21,7 @@ reminders.txt
 .memory.md.tmp
 .analytics_targets.json.tmp
 .*.lock
+*.dpapi
+*.dpapi.tmp
+*.receipt.json
+*.receipt.json.tmp

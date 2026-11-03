@@ -36,6 +36,7 @@ Notes:
 import csv
 import datetime
 import io
+import json
 import os
 import subprocess
 import sys
@@ -133,6 +134,9 @@ def main():
     if publish_at:
         status["privacyStatus"] = "private"      # scheduled videos must be private until publishAt
         status["publishAt"] = publish_at
+    intended_privacy = status['privacyStatus']
+    if job.get('automation_run_id') and not publish_at:
+        status['privacyStatus'] = 'private'  # Stage privately before the final live authorization check.
     body = {"snippet": snippet, "status": status}
 
     if "--dry" in flags:
@@ -144,6 +148,22 @@ def main():
 
     yt = yt_common.youtube()
     ch = yt_common.my_channel(yt)
+    expected_channel = job.get('expected_channel_id')
+    if expected_channel and ch['id'] != expected_channel:
+        log('Channel does not match the authorized channel. Not uploading.')
+        return 2
+    receipt_path = job['_job_path'] + '.receipt.json' if job.get('automation_run_id') else None
+    if receipt_path:
+        if not expected_channel:
+            log('Controlled automation requires an explicit channel.')
+            return 2
+        # Exclusive marker before any upload. Unknown outcomes require reconciliation.
+        try:
+            with open(receipt_path, 'x', encoding='utf-8') as marker:
+                json.dump({'state':'uploading','channel_id':expected_channel}, marker)
+        except FileExistsError:
+            log('An upload was already attempted. Reconcile the existing receipt; do not re-upload.')
+            return 2
     log("Channel: %s (%s) | subscribers %s | videos %s"
         % (ch["title"], ch["handle"] or "no handle", ch["subs"], ch["videos"]))
 
@@ -160,6 +180,10 @@ def main():
                 last = pct
                 log("  %d%%" % pct)
     vid = resp["id"]
+    if receipt_path:
+        with open(receipt_path + '.tmp', 'w', encoding='utf-8') as marker:
+            json.dump({'state':'uploaded','video_id':vid,'channel_id':expected_channel}, marker)
+        os.replace(receipt_path + '.tmp', receipt_path)
     log("Upload finished. videoId=%s" % vid)
 
     # 3. fill {{VIDEO_ID}} in the description (the id only exists after upload)
@@ -210,6 +234,27 @@ def main():
         log('Privacy/schedule read-back mismatch. Content may already exist; inspect Studio before any retry.')
         return 3
 
+    if receipt_path:
+        if job.get('aigc', True) and it['status'].get('containsSyntheticMedia') is not True:
+            log('Synthetic content declaration could not be verified. Do not retry the upload.')
+            return 3
+        if intended_privacy != status['privacyStatus']:
+            from pathlib import Path
+            sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+            from automation import STATE
+            from automation_client import Client
+            import secure_state
+            control = Client(secure_state.load(STATE / 'credentials.dpapi'))
+            control.lease = os.environ.get('THINKNOVA_RUN_LEASE', '')
+            control.receipt(job['automation_run_id'], job.get('automation_steps', {}))
+            yt.videos().update(part='status', body={'id':vid, 'status':{'privacyStatus':intended_privacy,'selfDeclaredMadeForKids':bool(job.get('made_for_kids',False)),'containsSyntheticMedia':bool(job.get('aigc',True))}}).execute()
+            final = yt.videos().list(part='status', id=vid).execute().get('items') or []
+            if not final or final[0]['status'].get('privacyStatus') != intended_privacy:
+                log('Final publication not verified; do not re-upload.')
+                return 3
+        with open(receipt_path + '.tmp', 'w', encoding='utf-8') as marker:
+            json.dump({'state':'verified','video_id':vid,'channel_id':expected_channel}, marker)
+        os.replace(receipt_path + '.tmp', receipt_path)
     print("\nLink: https://youtube.com/shorts/%s" % vid)
     append_log([time.strftime("%Y-%m-%d %H:%M"), job["title"], vid, got_priv,
                 got_at or "", check_note, os.path.basename(video)])

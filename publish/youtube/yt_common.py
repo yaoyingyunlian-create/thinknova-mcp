@@ -56,7 +56,13 @@ def get_creds(interactive=False):
     creds = None
     if os.path.isfile(TOKEN):
         try:
-            creds = Credentials.from_authorized_user_file(TOKEN, SCOPES)
+            if TOKEN.endswith('.dpapi'):
+                from pathlib import Path
+                sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+                import secure_state
+                creds = Credentials.from_authorized_user_info(secure_state.load(Path(TOKEN)), SCOPES)
+            else:
+                creds = Credentials.from_authorized_user_file(TOKEN, SCOPES)
         except Exception as e:
             print("Saved token could not be read (%s); you need to authorise again." % str(e)[:60])
             creds = None
@@ -86,6 +92,13 @@ def get_creds(interactive=False):
 
 
 def _save(creds):
+    if TOKEN.endswith('.dpapi'):
+        from pathlib import Path
+        sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
+        import secure_state
+        secure_state.save(Path(TOKEN), json.loads(creds.to_json()))
+        print('YouTube credentials protected with Windows DPAPI.')
+        return
     with io.open(TOKEN, "wb") as f:
         f.write(creds.to_json().encode("utf-8"))
     try:

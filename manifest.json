@@ -1,26 +1,42 @@
 {
   "version": "thinknova-automation-toolkit-v3",
-  "revision": "fcb33d0f3de311b96d6ad7747853343ad7bd43ed2b069f91ce3ee8710e8304c3",
+  "revision": "8640f7dc719bc664296df76effd25728318bc76955e6c389244cf95be965111f",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "c3e96607f6a31112a106b6f3b690ae52743f9be1f1de4901f493af480a116283"
+      "sha256": "ac177d849646e650ded4ca57e9e394501954ed2ca8555496f6936cd613a3f242"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "24d19932f4e0430033ce81d32e69670d409a41b8d349eaf84cf5b759e1fa15c3"
+      "sha256": "cada41d0c6e5583576e0d17989302f33c24bac246f0f2d0d6cc5d5f3424f04a6"
+    },
+    {
+      "path": "AUTOMATION.md",
+      "sha256": "9f8f1e3b88c68c1be5c16716f364115b559e3e1f6cd3ef39137a407bc47b2260"
     },
     {
       "path": "README.md",
-      "sha256": "9054cdc748055f3d94749f3a6d4254a6d20b0446f51a84946924598b5c252d55"
+      "sha256": "e85128e0f763135d22eaf63db69cef38975ffbb60c2408b21e17884b88e7eabb"
     },
     {
       "path": "analytics.py",
       "sha256": "e774164a68f341bc2afcc2c5da467aa80f90aabff6f60e39b6e21d4fafa727e7"
     },
     {
+      "path": "automation.py",
+      "sha256": "e03bf2fe377d94cdea34a424bac5129af1a748197f811435174c227fad3ed18a"
+    },
+    {
+      "path": "automation_client.py",
+      "sha256": "2317603e47713bdffb977532205516f57c50fde0188a622d801b5f20621113b3"
+    },
+    {
+      "path": "automation_plan.schema.json",
+      "sha256": "6747a978f5970f1e631a3b1c51e991663258b9c2037f956f83139a594d52d2ce"
+    },
+    {
       "path": "bootstrap.py",
-      "sha256": "be1b47de5c74ccdf4827d137db184717d5a0cfc5b539aa6f462885e1fa0e2fd4"
+      "sha256": "13c99b0be6e3356002ea1caf4da04381d0dcf0a656986ea00b6739cfbc62d2d0"
     },
     {
       "path": "build_manifest.py",
@@ -29,6 +45,10 @@
     {
       "path": "drafts.py",
       "sha256": "e9756e010d533332056a36ab0f10d36b2e20c98728671fd12a5ee5b026f20454"
+    },
+    {
+      "path": "health.py",
+      "sha256": "84858b6e446d2ad3c76d27a4545bdcee157cbd9973c42f7759d78e846842702f"
     },
     {
       "path": "install.ps1",
@@ -44,7 +64,7 @@
     },
     {
       "path": "local_state.py",
-      "sha256": "c1ea4bc1f23a321b4e137f66386c107729ba3157dcb72c3c6355ea01a2107f43"
+      "sha256": "2d823c5bd80957255a370fb710210227f53cd8f373d0316f02a020402952ec7d"
     },
     {
       "path": "memory.template.md",
@@ -148,7 +168,7 @@
     },
     {
       "path": "publish/youtube/upload.py",
-      "sha256": "f6ca7a201795088419ba8aa4752fc0d6c9434d614aa9b93499401a7e205ba86a"
+      "sha256": "9c55a917e997e26b068cef881edd942af8f7a0861f99b25349fde0770c510185"
     },
     {
       "path": "publish/youtube/yt_captions.py",
@@ -156,7 +176,7 @@
     },
     {
       "path": "publish/youtube/yt_common.py",
-      "sha256": "a5fc450df457d6f30c3ffe2526820ece60f285ed97d2f88bf522bcf8d3af54ef"
+      "sha256": "922b287eb9810c3a0cb13799e0571046b7903a141049b6876518f415dba8074c"
     },
     {
       "path": "render/captions.py",
@@ -203,40 +223,56 @@
       "sha256": "c7e862ff1105496fbfc293613b8e1ea12850ccfe4269cc41a8605535225282a3"
     },
     {
-      "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
+      "path": "rules/固定角色系列短片.md",
       "sha256": "668d0c238542242642846047e9b647916aebdd968f9e5d7a808dca0380b3d18f"
     },
     {
-      "path": "skills/\u5168\u5e73\u53f0\u5185\u5bb9\u8fd0\u8425/SKILL.md",
+      "path": "secure_state.py",
+      "sha256": "7badda4f7396195f0f3327f4bbc2faea789eb0c4551ab69fad95ca7b1b984e25"
+    },
+    {
+      "path": "skills/全平台内容运营/SKILL.md",
       "sha256": "16ae647ae0f68dc312bbe13fb3caf7831364883e33e971898471f5d04a703c84"
     },
     {
-      "path": "skills/\u5168\u7247\u7559\u5b58\u8282\u594f/SKILL.md",
+      "path": "skills/全片留存节奏/SKILL.md",
       "sha256": "c55e247848c541d261bb6ab0ce1a5ac1dde5c0e58e783d623516e1b3c224a769"
     },
     {
-      "path": "skills/\u53e3\u8bed\u53f0\u8bcd/SKILL.md",
+      "path": "skills/口语台词/SKILL.md",
       "sha256": "74d8401162b4f1078173ca331d9f90483c5d51750097d47d858c65d3d8e57027"
     },
     {
-      "path": "skills/\u5c0f\u7ea2\u4e66\u7b14\u8bb0/SKILL.md",
+      "path": "skills/小红书笔记/SKILL.md",
       "sha256": "a6b5931274c80e4bb038cc0e9ccfa14e5c2c99c3437147188a30dbfc3cd1204b"
     },
     {
-      "path": "skills/\u5f00\u573a\u94a9\u5b50/SKILL.md",
+      "path": "skills/开场钩子/SKILL.md",
       "sha256": "ec0a365abdbf83c6ef7b6023c1256fecd5a1e5f97aafa2c794fde8572d75d44c"
     },
     {
+      "path": "test_automation.py",
+      "sha256": "86157c4ad78c1d709dcf013c9d95469a9b0004ccd80905b0270c88144f993d9f"
+    },
+    {
       "path": "test_bootstrap.py",
-      "sha256": "a86afb07845072b6c253b4fc142a2f956c75fb305aaaf142ac353b685142970e"
+      "sha256": "d11031cdf4623a0aac4cc70b96c6fd4d0acbbf25e12467e9d4916abf1e28bdc1"
+    },
+    {
+      "path": "test_controlled_youtube.py",
+      "sha256": "02ce6102ad1159c240f01630f8effc25e0248bc3a08e8639e973527273b4439e"
     },
     {
       "path": "test_local_workflow.py",
       "sha256": "4bf897e6b112decfef6de7a01314adebb40c7fcc4b0ab0ec8d5ffb78dbdeb93c"
     },
     {
+      "path": "test_render_pipeline.py",
+      "sha256": "9b52a62bd1f0dd5204dff7ee55e0fc1c2668dda911e738df1e4080bfd4da1837"
+    },
+    {
       "path": "toolkit.py",
-      "sha256": "1752a3d70a6f7d6b6a22645a2148fad23c92ec73c9be547c3e91e0abd4ba327b"
+      "sha256": "9c3fd340bc45e3722eebee77592e3a735f6f51939cb8893781da7e57e1ef6976"
     },
     {
       "path": "update.py",

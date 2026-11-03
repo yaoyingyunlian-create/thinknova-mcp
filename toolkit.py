@@ -128,23 +128,10 @@ def maintenance() -> int:
 
 
 def doctor() -> int:
-    checks = {"Python >=3.10": sys.version_info >= (3, 10),
-              "ffmpeg": shutil.which("ffmpeg") is not None, "ffprobe": shutil.which("ffprobe") is not None,
-              "Node.js >=18": False, "playwright": importlib.util.find_spec("playwright") is not None}
-    node = shutil.which("node")
-    if node:
-        version = subprocess.run([node, "--version"], capture_output=True, text=True, check=True).stdout.strip()
-        checks["Node.js >=18"] = int(version.lstrip("v").split(".")[0]) >= 18
-    for name, ok in checks.items(): print(("OK " if ok else "MISSING ") + name)
-    for name in ("AGENTS.md", "memory.template.md", "requirements.txt", "analytics.py", "render/check.py"):
-        checks[name] = (ROOT / name).is_file()
-        print(("OK " if checks[name] else "MISSING ") + name)
-    if checks["playwright"]:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            checks["Chromium"] = Path(p.chromium.executable_path).is_file()
-            print(("OK " if checks["Chromium"] else "MISSING ") + "Chromium")
-    return 0 if all(checks.values()) else 2
+    from health import report, display
+    result = report()
+    display(result)
+    return 0 if result['local_ready'] else 2
 
 
 def install_schedule() -> int:
@@ -190,12 +177,15 @@ def uninstall_schedule() -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("init"); sub.add_parser("verify"); sub.add_parser("doctor"); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
+    sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
     args = parser.parse_args()
     if args.command == "init": return init()
     if args.command == "verify": return verify()
-    if args.command == "doctor": return doctor()
+    if args.command == "doctor":
+        from health import report, display
+        result = report(online=args.online); display(result, args.json)
+        return 0 if result['local_ready'] else 2
     if args.command == "archive": return archive(args.max_lines, args.max_chars)
     if args.command == "maintenance": return maintenance()
     if args.command == "migrate-memory": return migrate_memory()

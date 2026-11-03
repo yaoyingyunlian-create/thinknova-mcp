@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = 'https://github.com/yaoyingyunlian-create/thinknova-mcp.git'
+SETUP_PHASE = 'not_started'
 
 
 def refresh_path():
@@ -100,35 +101,55 @@ def update(confirmed=False):
     if git('status', '--porcelain'): raise RuntimeError('Local source changes detected; preserve them before updating.')
     git('fetch', 'origin', 'main')
     git('merge', '--ff-only', status['latest_commit'])
-    setup()
+    # The running module still contains OLD code after merge. Start the updated entrypoint.
+    subprocess.run([sys.executable, str(ROOT / 'bootstrap.py'), 'setup'], check=True)
 
 
-def setup():
+def setup(json_output=False):
+    global SETUP_PHASE
+    SETUP_PHASE = 'python'
     if sys.version_info < (3, 10):
         raise RuntimeError('PYTHON_TOO_OLD: use install.ps1 on Windows or install.sh on macOS/Linux to automatically install Python 3.10+ and resume setup.')
-    repair_runtime()
-    repair_files()
+    SETUP_PHASE = 'runtime_dependencies'; repair_runtime()
+    SETUP_PHASE = 'tracked_files'; repair_files()
+    def run(phase, command):
+        global SETUP_PHASE
+        SETUP_PHASE = phase
+        subprocess.run(command, check=True, stdout=sys.stderr if json_output else None)
     # Verify all shipped files before running dependency installation.
-    subprocess.run([sys.executable, str(ROOT / 'toolkit.py'), 'verify'], check=True)
+    run('integrity', [sys.executable, str(ROOT / 'toolkit.py'), 'verify'])
     environment = ROOT / '.venv'
     python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    SETUP_PHASE = 'virtual_environment'
     if not python.exists(): venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
-    subprocess.run([str(python), '-m', 'pip', 'install', '-r', str(ROOT / 'requirements.txt')], check=True)
-    subprocess.run([str(python), '-m', 'playwright', 'install', 'chromium'], check=True)
-    subprocess.run([str(python), str(ROOT / 'toolkit.py'), 'init'], check=True)
-    subprocess.run([str(python), str(ROOT / 'toolkit.py'), 'migrate-memory'], check=True)
-    subprocess.run([str(python), str(ROOT / 'toolkit.py'), 'doctor'], check=True)
-    print('Toolkit ready. Use the Python interpreter inside .venv for local toolkit commands.')
+    run('python_dependencies', [str(python), '-m', 'pip', 'install', '-r', str(ROOT / 'requirements.txt')])
+    run('chromium_install', [str(python), '-m', 'playwright', 'install', 'chromium'])
+    run('memory_init', [str(python), str(ROOT / 'toolkit.py'), 'init'])
+    run('memory_migration', [str(python), str(ROOT / 'toolkit.py'), 'migrate-memory'])
+    run('local_runtime_check', [str(python), str(ROOT / 'toolkit.py'), 'doctor'])
+    SETUP_PHASE = 'complete'
+    print('Local setup completed; verify MCP account, rules and platform authorization separately. 本机准备完成，账户、规则和平台授权仍需核实。')
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['setup', 'repair', 'check', 'update'])
     parser.add_argument('--user-confirmed', action='store_true')
+    parser.add_argument('--json', action='store_true', help='Emit a structured setup result; installation logs go to stderr')
     args = parser.parse_args()
     try:
-        if args.command in ('setup', 'repair'): setup()
+        if args.command in ('setup', 'repair'):
+            import contextlib
+            try:
+                with contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext(): setup(json_output=args.json)
+            except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
+                if not args.json: raise
+                print(json.dumps({'schema_version': 1, 'overall': 'blocked', 'local_ready': False, 'failed_stage': SETUP_PHASE, 'failure': type(exc).__name__, 'remedy': 'Resolve the failed stage shown in stderr; rerun setup. 请修复失败阶段后重试。'}))
+                return 2
+            if args.json:
+                python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+                subprocess.run([str(python), str(ROOT / 'health.py'), '--json'], check=True)
         elif args.command == 'check': check()
         else: update(args.user_confirmed)
         return 0
