@@ -14,6 +14,7 @@ One-line alternative (single pass, slightly less accurate):
 Check the result with:  python check.py out.mp4
 """
 import json
+import math
 import os
 import re
 import shutil
@@ -58,6 +59,10 @@ def main():
     print("  measured: I=%s LUFS, TP=%s dBTP, LRA=%s LU" % (meas["input_i"], meas["input_tp"], meas["input_lra"]))
 
     print("Pass 2/2: applying ...")
+    if not math.isfinite(float(meas['input_i'])):
+        print('SILENT_AUDIO: preserving silence; loudness normalization is not applicable.')
+        result = subprocess.run([ff, '-hide_banner', '-y', '-i', src, '-c', 'copy', '-movflags', '+faststart', dst], capture_output=True)
+        return 0 if result.returncode == 0 else 3
     af = ("loudnorm=I=%s:TP=%s:LRA=%s:measured_I=%s:measured_TP=%s:measured_LRA=%s:"
           "measured_thresh=%s:offset=%s:linear=true:print_format=summary"
           % (I, TP, LRA, meas["input_i"], meas["input_tp"], meas["input_lra"],

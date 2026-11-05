@@ -42,6 +42,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -79,7 +80,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small"}
-    flags = {"--speech"}
+    flags = {"--speech", "--allow-silent"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -168,7 +169,7 @@ def s3_audio(ff, path, dur, o):
         mean = float(m.group(1))
         INFO.append("mean volume %.1f dB" % mean)
         if mean < -30:
-            fail("S3a", "mean volume %.1f dB is below -30 dB (practically silent)" % mean)
+            (warn if o.get("allow_silent") else fail)("S3a", "mean volume %.1f dB is below -30 dB (practically silent)" % mean)
     else:
         warn("S3a", "could not read the volume")
 
@@ -276,20 +277,21 @@ def s6_speech(ff, path, dur, o, tmp_dir):
 
 
 def contact_sheet(ff, path, dur, out_dir):
-    fr = os.path.join(out_dir, "_frames")
-    os.makedirs(fr, exist_ok=True)
-    for old in glob.glob(os.path.join(fr, "*.jpg")):
-        os.remove(old)
-    n = max(1, int(dur))
-    for i in range(n):
-        subprocess.run([ff, "-v", "error", "-y", "-ss", str(i + 0.5), "-i", path, "-frames:v", "1",
-                        "-vf", "scale=216:-1", os.path.join(fr, "%03d.jpg" % i)])
-    cols = 9
-    rows = (n + cols - 1) // cols
     sheet = os.path.join(out_dir, os.path.splitext(os.path.basename(path))[0] + "_sheet.jpg")
-    subprocess.run([ff, "-v", "error", "-y", "-i", os.path.join(fr, "%03d.jpg"),
-                    "-vf", "tile=%dx%d" % (cols, rows), "-frames:v", "1", sheet])
-    INFO.append("contact sheet: %s" % sheet)
+    with tempfile.TemporaryDirectory(prefix='thinknova_frames_', dir=out_dir) as fr:
+        n = max(1, int(dur))
+        for i in range(n):
+            position = min(i + 0.5, max(0, dur / 2 if dur < 1 else dur - 0.05))
+            frame = os.path.join(fr, "%03d.jpg" % i)
+            result = subprocess.run([ff, '-v', 'error', '-y', '-ss', str(position), '-i', path,
+                                     '-frames:v', '1', '-vf', 'scale=216:-2', frame], capture_output=True)
+            if result.returncode or not os.path.isfile(frame) or os.path.getsize(frame) == 0:
+                fail('CONTACT_SHEET_FAILED', 'Could not extract review frame'); return
+        result = subprocess.run([ff, '-v', 'error', '-y', '-i', os.path.join(fr, '%03d.jpg'),
+                                 '-vf', 'tile=9x%d' % ((n + 8) // 9), '-frames:v', '1', sheet], capture_output=True)
+        if result.returncode or not os.path.isfile(sheet) or not os.path.getsize(sheet):
+            fail('CONTACT_SHEET_FAILED', 'Could not generate contact sheet'); return
+    INFO.append('contact sheet: %s' % sheet)
 
 
 def main():
@@ -321,6 +323,7 @@ def main():
         return 1
     dur = s1_spec(meta, o)
     s2_opening(ff, path)
+    o["allow_silent"] = "--allow-silent" in on
     s3_audio(ff, path, dur, o)
     s4_cuts(ff, path, dur, o)
     if o["--srt"]:

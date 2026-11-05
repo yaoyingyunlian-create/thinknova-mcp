@@ -6,7 +6,7 @@
     复用你在 login.py 打开的窗口里手动登录后的状态；
   * 判断「是否已登录」：没登录就给出中文提示并退出（退出码 2），什么都不填、什么都不发；
   * 统一的命令行：
-        python publish.py --job job.json --dry       只填到最后一步前停下（先跑这个）
+        python publish.py --job job.json --dry       仅本地检查，不上传
         python publish.py --job job.json --execute   真的发布（必须显式写 --execute）
   * 小工具：只认「正好一个可见」的控件、开关回读、正文回读、定时时间解析、#话题拼接。
 
@@ -334,7 +334,7 @@ def run_login(platform, here, argv):
     return 0 if ok else 1
 
 
-USAGE = (u"用法：python publish.py --job job.json --dry       只填不发（先跑这个）\n"
+USAGE = (u"用法：python publish.py --job job.json --dry       仅本地检查，不上传\n"
          u"      python publish.py --job job.json --execute   真的发布（必须显式写 --execute）\n"
          u"选项：--profile DIR（默认 ./_profile，要和 login.py 用同一个） --dry-wait 秒（默认 15）")
 
@@ -361,6 +361,8 @@ def run_publish(platform, here, doc, validate, fill, argv=None):
     except Abort as e:
         log(u"任务文件有问题：%s" % e)
         return 1
+    if dry:
+        return jobfile.local_preflight(job)
     s = SITES[platform]
     logs = os.path.join(here, "_logs")
     profile = opt.get("--profile") or os.path.join(here, "_profile")

@@ -25,3 +25,10 @@ reminders.txt
 *.dpapi.tmp
 *.receipt.json
 *.receipt.json.tmp
+
+# OS secure-store markers and local publication audit
+*.keychain
+*.keychain.tmp
+publication_history.json
+publication_history.json.tmp
+publication_attempts/

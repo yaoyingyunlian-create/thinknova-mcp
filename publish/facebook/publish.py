@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Facebook 主页发 Reels 视频：通过 Meta Business Suite 网页版浏览器自动化。
 
-    python publish.py --job ../../job.example.json --dry       # 填到最终「Share / Schedule」按钮前停下（一律先跑这个）
+    python publish.py --job ../../job.example.json --dry       # 仅本地检查，不上传
     python publish.py --job ../../job.example.json --execute   # 真的发布 / 定时
 
 选项：
@@ -200,7 +200,12 @@ def fill(pg, job, logs):
     if not SHARE_STAGE.search(pg.inner_text("body")):
         raise Abort(u"没走到「分享 / 定时」那一步；不发。")
 
-    if job.get("aigc", True):
+    rule = ((job.get('platform_rule_snapshot') or {}).get('facebook') or {})
+    hard = rule.get('hard_constraints') or {}
+    exemption = hard.get('ai_disclosure') == 'not_required' and rule.get('status') == 'published' and rule.get('source') and rule.get('owner') and isinstance(rule.get('version'), int)
+    if job.get('aigc', True) and exemption:
+        log('AI disclosure not required by the supplied published rule snapshot; version=%s' % rule['version'])
+    if job.get("aigc", True) and not exemption:
         st = social.ensure_toggle_on(pg, AI_NAME, AI_LABEL, u"AI 标签")
         if st is not True:
             raise Abort(u"aigc=true，但没能确认 Facebook 的 AI 标签已打开；不发布。")

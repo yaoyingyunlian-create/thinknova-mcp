@@ -2,6 +2,7 @@
 from __future__ import annotations
 import argparse
 import json
+import re
 import os
 import subprocess
 import sys
@@ -42,6 +43,8 @@ def install_missing(name):
         command = prefix + ['apt-get', 'install', '-y', {'git': 'git', 'node': 'nodejs', 'ffmpeg': 'ffmpeg'}[name]]
     elif system == 'Linux' and shutil.which('dnf'):
         command = ([] if os.geteuid() == 0 else ['sudo', '-n']) + ['dnf', 'install', '-y', name if name != 'node' else 'nodejs']
+    elif system == 'Darwin':
+        raise RuntimeError('DEPENDENCY_REPAIR_UNAVAILABLE: missing %s; first install Homebrew from https://brew.sh, then rerun python3 bootstrap.py setup / 请先按 Homebrew 官网说明安装，再重新运行 setup。' % name)
     else:
         raise RuntimeError('DEPENDENCY_REPAIR_UNAVAILABLE: missing %s; no supported package manager (winget, brew, apt-get, dnf). Install a package manager or grant installation permission, then rerun setup.' % name)
     result = subprocess.run(command, capture_output=True, text=True, errors='replace', timeout=600)
@@ -60,7 +63,11 @@ def repair_runtime():
             missing = int(version.lstrip('v').split('.')[0]) < 18
         if missing:
             print('Repairing missing or outdated dependency: ' + name)
-            install_missing(name)
+            try: install_missing(name)
+            except (RuntimeError, OSError, subprocess.SubprocessError):
+                if name != 'node': raise
+                print('OPTIONAL_DEPENDENCY_PENDING: node; core media workflows do not require Node.js. Install it before workflows that do.', file=sys.stderr)
+                continue
         if shutil.which(name) is None or (name == 'ffmpeg' and shutil.which('ffprobe') is None):
             raise RuntimeError('DEPENDENCY_REPAIR_NOT_EFFECTIVE: %s still unavailable after installation; check package-manager output and PATH.' % name)
 
@@ -129,7 +136,15 @@ def setup(json_output=False):
     run('memory_migration', [str(python), str(ROOT / 'toolkit.py'), 'migrate-memory'])
     SETUP_PHASE = 'ego_browser'; refresh_path()
     import ego_runtime
-    ego_runtime.prepare()
+    if platform.system() == 'Windows':
+        try: ego_runtime.prepare()
+        except RuntimeError as exc:
+            print('AI_BROWSER_PENDING: ego lite requires installation/onboarding; core preparation continues. ' + str(exc), file=sys.stderr)
+    elif shutil.which('ego-browser'):
+        try: ego_runtime.prepare()
+        except RuntimeError: print('AI_BROWSER_PENDING: complete ego lite onboarding separately.', file=sys.stderr)
+    else:
+        print('AI_BROWSER_NOT_CONFIGURED: optional for API/script workflows; required for ego browser work. / 非 ego 工作流不受阻塞。', file=sys.stderr)
     run('local_runtime_check', [str(python), str(ROOT / 'toolkit.py'), 'doctor'])
     SETUP_PHASE = 'complete'
     print('Local setup completed; verify MCP account, rules and platform authorization separately. 本机准备完成，账户、规则和平台授权仍需核实。')
@@ -148,7 +163,7 @@ def main():
                 with contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext(): setup(json_output=args.json)
             except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
                 if not args.json: raise
-                print(json.dumps({'schema_version': 1, 'overall': 'blocked', 'local_ready': False, 'failed_stage': SETUP_PHASE, 'failure': type(exc).__name__, 'remedy': 'Resolve the failed stage shown in stderr; rerun setup. 请修复失败阶段后重试。'}))
+                print(json.dumps({'schema_version': 1, 'overall': 'blocked', 'local_ready': False, 'failed_stage': SETUP_PHASE, 'failure': type(exc).__name__, 'error_code': str(exc).split(':',1)[0] if re.fullmatch('[A-Z0-9_]{1,64}',str(exc).split(':',1)[0]) else 'LOCAL_SETUP_FAILED', 'remedy': 'Resolve the failed stage shown in stderr; rerun setup. 请修复失败阶段后重试。'}))
                 return 2
             if args.json:
                 python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')

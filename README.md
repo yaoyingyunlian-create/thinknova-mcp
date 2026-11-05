@@ -196,7 +196,7 @@ Then run `loudnorm.py` and `check.py` on the rendered MP4.
 
 ## 5. Publish
 
-Run `--dry` first. YouTube dry-run performs LOCAL validation only and never accesses an account or uploads. Other platform dry-runs may upload assets/fill forms and leave drafts, so explain those effects within the user's authorization before running them.
+All `--dry` commands perform local checks only; no login, upload or remote drafts. A mandatory upload rehearsal is not required. Use `--execute` only after explicit authorization.
 
 ```bash
 # YouTube (official API)
@@ -300,7 +300,7 @@ Delete it to log out.
 
 **job.json**：一条视频一个文件。公共字段写在最外层，某个平台要不一样就写在 `platforms.<平台名>` 里覆盖。相对路径按 job 文件所在目录算。字段含义见第 3 节的表。
 
-**常用命令**：见第 4、5 节。YouTube 的 `--dry` 仅本地检查，`--execute` 才实际上传，不再允许绕过检查。其他平台的 `--dry` 可能上传素材、填写表单或产生草稿，并非零副作用；先说明影响，真实上传/发布仍须对应确认。
+**常用命令**：见第 4、5 节。YouTube 的 `--dry` 仅本地检查，`--execute` 才实际上传，不再允许绕过检查。所有平台 `--dry` 只做本地检查，不上传、不创建草稿；真实上传/发布仍须对应确认。
 
 **首次登录**：
 - YouTube：用你自己的 Google Cloud 项目，开 YouTube Data API v3，建「桌面应用」OAuth 客户端，下载的 JSON 改名为 `oauth_client.json` 放进 `publish/youtube/`，再跑 `auth.py`，用拥有频道的 Google 账号点「允许」。同意屏幕处于「测试」状态时，授权大约 7 天过期，到时重跑一次 `auth.py` 即可。
@@ -325,3 +325,12 @@ Delete it to log out.
 AI 助手默认使用 ego lite；浏览器操作前运行 `ego-browser skill`。Windows x64 的 `bootstrap.py setup` 会在缺少时自动下载官方安装器，验证 Windows 签名并启动；用户仍需完成安装和首次引导，然后重新运行 setup。未完成时返回 `EGO_ONBOARDING_REQUIRED`，不会显示全就绪。已启动标记位于 `%LOCALAPPDATA%/ThinkNova/installers/ego-install-started`，安装失败检查后才删除该标记并重试。其他系统暂需从官网安装对应版本。
 
 AI browser work defaults to ego lite. Windows x64 setup downloads and verifies the official installer; complete GUI installation/onboarding and rerun setup. Existing browser versions are not silently upgraded. Other platforms currently require the matching official installer. Legacy Python publishers still require Playwright Chromium; their profiles are preserved and are not automatically imported into ego lite.
+
+
+## 分期可靠性升级 / Reliability upgrade
+
+详见 AGENTS.md 与 AUTOMATION.md。拼片：`.venv` Python 执行 `render/assemble.py job.json --json`；显式 SRT 或估算字幕、静音作品、独立临时目录、禁止末帧补长。现有输出默认不覆盖。
+
+普通发布：`publish/dispatch.py job.json --platform youtube --dry` 生成平台清单；明确确认后 `--execute --user-confirmed`。`--dry` 不上传/不产生草稿。浏览器脚本返回0但缺少可信回执时仍标为待核验，不能重复运行碰运气。
+
+Readiness is capability-specific. Missing ego does not block API-only production. Mac without Homebrew receives the official https://brew.sh next action; system package managers are never silently installed. Existing customers approve updates, retain local data and reinstall schedules only after confirmation. Mac/unattended/browser-platform acceptance is tracked separately from local tests.

@@ -29,7 +29,7 @@
 - `job.json.receipt.json` 在上传前写入。出现 uploading/uploaded 而未 verified，可能已经产生素材或作品；必须核对频道和 video_id，不得删除标记来重试。
 - 私有暂存与公共发布都会操作真实 YouTube 账户；初次端到端验收不得用真实发布试错。
 - 本地状态位于 `%LOCALAPPDATA%/ThinkNova/automation`，不进入 Git 或下载 ZIP。运行及发布记录应写入本地 memory；服务器只收脱敏状态、ID和摘要。
-- 无网络/电脑关闭时服务器标记离线，而不是授权过期。心跳每15分钟、完整本机体检每天一次；恢复网络后上报真实状态，不能编造离线期间的成功记录。
+- 无网络/电脑关闭时服务器标记离线，而不是授权过期。心跳每15分钟、完整本机体检每小时一次；恢复网络后上报真实状态，不能编造离线期间的成功记录。
 
 ## 尚需外部验收
 
@@ -38,3 +38,14 @@
 ## English summary
 
 This opt-in pilot requires a logged-on Windows user, network access, authenticated Codex and company-provisioned Google desktop OAuth configuration. Bind the device and grant an explicit channel/rules/daily-budget authorization in ThinkNova, then pair through hidden local prompts. Tokens stay in current-user DPAPI storage. Run youtube-auth, complete an authorized real-account acceptance test, then install --user-confirmed. Monitoring and execution are separate controls. Code-generated content plans cannot supply commands. Upload attempts are durable and stage privately before authorization/readback checks and public release; unknown outcomes require reconciliation, not re-upload. No cross-day backlog or automatic paid terminal retries. Real deployment and 30-day authorization remain external acceptance gates.
+
+
+## 2026-11-05 分期升级 / Staged upgrade
+
+- Mac 增加 LaunchAgent 与 Keychain 实现；Windows 保留任务计划与 DPAPI。Mac 的 marker 文件不含秘密；Keychain 授权可能需要用户在本机确认。实现不等于实机验收通过，默认不开启。
+- 独立 monitoring.py pair / install --user-confirmed 不需要无人值守授权，只允许设备心跳；账户页可关闭监控和撤销设备。所有命令使用 .venv Python。
+- YouTube 公司 OAuth 下载入口不再依赖自动化开关。公司配置尚未部署时显示具体错误，不指挥客户自行建立 Cloud 项目；令牌仍留本机。
+- 无人值守仍仅开放已通过实测的 YouTube 灰度账户，浏览器平台待独立验收；不得让本机预授权绕过服务端开关、规则版本或预算。
+- Mac 开机、用户已登录、网络和本机授权有效是执行前提。与 maintenance/monitoring 分开安装；旧任务需卸载后经确认重装，不由更新源码偷偷更改。
+
+macOS uses a GUI-session LaunchAgent and Keychain-backed markers; Windows uses the existing interactive-user task and DPAPI. Real Mac, account authorization, publication and recovery acceptance remain pending. Monitoring is independent, read-only, every 15 minutes with hourly full local checks. Company YouTube configuration delivery does not require enabling unattended execution. Platform rollout remains gated by real acceptance.

@@ -57,13 +57,14 @@ def log(m):
     print(u"[%s] %s" % (time.strftime("%H:%M:%S"), m), flush=True)
 
 
-def run_check(video, srt):
+def run_check(video, srt, allow_silent=False):
     if not os.path.isfile(CHECK):
         log("render/check.py not found; repair the toolkit before uploading.")
         return 2
     cmd = [sys.executable, CHECK, video]
     if srt:
         cmd += ["--srt", srt]
+    if allow_silent: cmd += ["--allow-silent"]
     env = dict(os.environ, PYTHONIOENCODING="utf-8")
     p = subprocess.run(cmd, env=env, capture_output=True)
     print((p.stdout or b"").decode("utf-8", "replace"))
@@ -104,7 +105,7 @@ def main():
 
     # 1. pre-upload check
     log("Running render/check.py ...")
-    rc = run_check(video, job.get("srt"))
+    rc = run_check(video, job.get("srt"), job.get("allow_silent") is True)
     if rc != 0:
         log("Check FAILED (exit code %s). Not uploading. Fix the video first." % rc)
         return 2
@@ -152,11 +153,12 @@ def main():
     if expected_channel and ch['id'] != expected_channel:
         log('Channel does not match the authorized channel. Not uploading.')
         return 2
-    receipt_path = job['_job_path'] + '.receipt.json' if job.get('automation_run_id') else None
+    receipt_path = job['_job_path'] + '.receipt.json'
     if receipt_path:
-        if not expected_channel:
+        if not expected_channel and job.get('automation_run_id'):
             log('Controlled automation requires an explicit channel.')
             return 2
+        expected_channel = expected_channel or ch['id']
         # Exclusive marker before any upload. Unknown outcomes require reconciliation.
         try:
             with open(receipt_path, 'x', encoding='utf-8') as marker:
@@ -230,6 +232,9 @@ def main():
     if got_title != job["title"]:
         log("Title does not match the job. Check it in Studio.")
         return 3
+    if it['snippet'].get('description','') != snippet.get('description','') or it['snippet'].get('tags',[]) != snippet.get('tags',[]):
+        log('Description/tags read-back mismatch. Reconcile the existing video; do not re-upload.')
+        return 3
     if got_priv != status['privacyStatus'] or got_at != status.get('publishAt', ''):
         log('Privacy/schedule read-back mismatch. Content may already exist; inspect Studio before any retry.')
         return 3
@@ -241,10 +246,10 @@ def main():
         if intended_privacy != status['privacyStatus']:
             from pathlib import Path
             sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
-            from automation import STATE
+            from automation import CREDENTIALS
             from automation_client import Client
             import secure_state
-            control = Client(secure_state.load(STATE / 'credentials.dpapi'))
+            control = Client(secure_state.load(CREDENTIALS))
             control.lease = os.environ.get('THINKNOVA_RUN_LEASE', '')
             control.receipt(job['automation_run_id'], job.get('automation_steps', {}))
             yt.videos().update(part='status', body={'id':vid, 'status':{'privacyStatus':intended_privacy,'selfDeclaredMadeForKids':bool(job.get('made_for_kids',False)),'containsSyntheticMedia':bool(job.get('aigc',True))}}).execute()
@@ -253,7 +258,7 @@ def main():
                 log('Final publication not verified; do not re-upload.')
                 return 3
         with open(receipt_path + '.tmp', 'w', encoding='utf-8') as marker:
-            json.dump({'state':'verified','video_id':vid,'channel_id':expected_channel}, marker)
+            json.dump({'state':'verified','video_id':vid,'channel_id':expected_channel,'title':it.get('snippet',{}).get('title',''),'description':it.get('snippet',{}).get('description',''),'tags':it.get('snippet',{}).get('tags',[])}, marker)
         os.replace(receipt_path + '.tmp', receipt_path)
     print("\nLink: https://youtube.com/shorts/%s" % vid)
     append_log([time.strftime("%Y-%m-%d %H:%M"), job["title"], vid, got_priv,

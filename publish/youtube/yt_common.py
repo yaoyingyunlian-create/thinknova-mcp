@@ -42,10 +42,28 @@ def _client_config():
     if not os.path.isfile(CLIENT):
         raise SystemExit(
             "OAuth client file not found: %s\n"
-            "  Create one in Google Cloud Console (OAuth client ID -> Desktop app),\n"
-            "  download the JSON and save it as oauth_client.json in this folder." % CLIENT)
-    with io.open(CLIENT, encoding="utf-8") as f:
-        return json.load(f)
+            "  Download the company configuration from your ThinkNova account MCP page,\n"
+            "  save the company JSON as oauth_client.json here, then run auth.py." % CLIENT)
+    try:
+        with io.open(CLIENT, encoding="utf-8-sig") as f:
+            value=json.load(f)
+        client=value.get('installed') or {}
+        if not isinstance(client,dict) or not str(client.get('client_id','')).endswith('.apps.googleusercontent.com') or client.get('auth_uri') not in ('https://accounts.google.com/o/oauth2/auth','https://accounts.google.com/o/oauth2/v2/auth') or client.get('token_uri')!='https://oauth2.googleapis.com/token':
+            raise ValueError('Invalid desktop configuration')
+        return value
+    except (OSError, ValueError, TypeError, AttributeError):
+        raise SystemExit('YOUTUBE_COMPANY_CLIENT_INVALID: download the company Desktop OAuth configuration from your ThinkNova account MCP page again / 请重新下载公司桌面版授权配置。') from None
+
+
+def oauth_failure(exc):
+    text=str(exc).lower()
+    if 'access_denied' in text:
+        return 'YOUTUBE_ACCESS_DENIED: check test-user access, organization policy and user consent; Advanced cannot bypass a real denial / 检查测试用户、组织限制及用户是否拒绝。'
+    if 'invalid_grant' in text:
+        return 'YOUTUBE_AUTH_EXPIRED: token expired or revoked; sign in again / 授权失效，请重新登录。'
+    if 'insufficient' in text:
+        return 'YOUTUBE_SCOPE_REQUIRED: authorize the required channel permissions again / 请重新授予所需权限。'
+    return 'YOUTUBE_AUTH_FAILED: check network and authorization status locally / 请检查网络与授权状态。'
 
 
 def get_creds(interactive=False):
@@ -56,7 +74,7 @@ def get_creds(interactive=False):
     creds = None
     if os.path.isfile(TOKEN):
         try:
-            if TOKEN.endswith('.dpapi'):
+            if TOKEN.endswith(('.dpapi', '.keychain')):
                 from pathlib import Path
                 sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
                 import secure_state
@@ -64,7 +82,7 @@ def get_creds(interactive=False):
             else:
                 creds = Credentials.from_authorized_user_file(TOKEN, SCOPES)
         except Exception as e:
-            print("Saved token could not be read (%s); you need to authorise again." % str(e)[:60])
+            print("YOUTUBE_TOKEN_UNREADABLE: authorize again locally / 请在本机重新授权。")
             creds = None
 
     if creds and creds.valid:
@@ -76,7 +94,7 @@ def get_creds(interactive=False):
             _save(creds)
             return creds
         except Exception as e:
-            print("Token refresh failed (%s); you need to authorise again." % str(e)[:80])
+            print(oauth_failure(e))
 
     if not interactive:
         raise SystemExit("No usable authorisation. Run once:  python auth.py")
@@ -85,19 +103,22 @@ def get_creds(interactive=False):
     flow = InstalledAppFlow.from_client_config(_client_config(), SCOPES)
     print("\nA browser window will open. Sign in with the Google account that owns "
           "your YouTube channel and click Allow.")
-    creds = flow.run_local_server(port=0, prompt="consent",
-                                  authorization_prompt_message="If it does not open, visit: {url}")
+    try:
+        creds = flow.run_local_server(port=0, prompt="consent",
+                                      authorization_prompt_message="If it does not open, visit: {url}")
+    except Exception as exc:
+        raise SystemExit(oauth_failure(exc)) from None
     _save(creds)
     return creds
 
 
 def _save(creds):
-    if TOKEN.endswith('.dpapi'):
+    if TOKEN.endswith(('.dpapi', '.keychain')):
         from pathlib import Path
         sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
         import secure_state
         secure_state.save(Path(TOKEN), json.loads(creds.to_json()))
-        print('YouTube credentials protected with Windows DPAPI.')
+        print('YouTube credentials protected with OS secure storage.')
         return
     with io.open(TOKEN, "wb") as f:
         f.write(creds.to_json().encode("utf-8"))

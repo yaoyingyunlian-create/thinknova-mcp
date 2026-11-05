@@ -27,6 +27,8 @@ import io
 import json
 import os
 import sys
+import subprocess
+from pathlib import Path
 
 PATH_KEYS = ("video", "srt", "cover")
 PATH_LIST_KEYS = ("images",)
@@ -97,3 +99,30 @@ def parse_args(argv, flags=(), options=()):
             pos.append(a)
         i += 1
     return pos, on, opt
+
+
+def local_preflight(job):
+    """No browser, authentication, network, upload or platform draft creation."""
+    files = [job[k] for k in PATH_KEYS if job.get(k)] + list(job.get('images') or [])
+    missing = [str(p) for p in files if not os.path.isfile(p)]
+    if missing:
+        print(json.dumps({'status':'failed','error':'LOCAL_FILE_MISSING','files':missing},ensure_ascii=False))
+        return 2
+    video=job.get('video')
+    if video:
+        checker=Path(__file__).resolve().parents[2]/'render/check.py'
+        if not checker.is_file():
+            print('CHECKER_MISSING');return 2
+        command=[sys.executable,str(checker),video]
+        if job.get('srt'):command += ['--srt',job['srt']]
+        if job.get('allow_silent') is True:command += ['--allow-silent']
+        result=subprocess.run(command,capture_output=True,timeout=180)
+        if result.returncode:
+            print('LOCAL_MEDIA_CHECK_FAILED');return 2
+    for image in list(job.get('images') or []) + ([job['cover']] if job.get('cover') else []):
+        result=subprocess.run([os.environ.get('FFPROBE','ffprobe'),'-v','error','-show_entries','stream=codec_type','-of','json',image],capture_output=True,timeout=30)
+        if result.returncode or not any(x.get('codec_type')=='video' for x in json.loads(result.stdout).get('streams',[])):
+            print('INVALID_IMAGE_MEDIA');return 2
+    print(json.dumps({'status':'local_preflight_pass','platform_authorization':'unknown',
+                      'remote_changes':False,'visual_review':'pending'},ensure_ascii=False))
+    return 0

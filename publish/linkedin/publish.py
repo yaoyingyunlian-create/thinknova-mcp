@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """LinkedIn 发帖（个人主页动态，纯文字）：网页版浏览器自动化。
 
-    python publish.py --job ../../job.example.json --dry       # 填到「Post」按钮前停下（一律先跑这个）
+    python publish.py --job ../../job.example.json --dry       # 仅本地检查，不上传
     python publish.py --job ../../job.example.json --execute   # 真的发布 / 定时
 
 选项：

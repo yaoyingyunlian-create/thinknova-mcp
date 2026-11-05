@@ -1,0 +1,29 @@
+{
+ "out": "final.mp4",
+ "clips": [
+  {
+   "file": "shot1.mp4",
+   "text": "第一句台词。第二句台词。"
+  },
+  {
+   "file": "shot2.mp4",
+   "subs": [
+    "一屏一句",
+    "每屏一行"
+   ]
+  },
+  {
+   "file": "photo.jpg",
+   "dur": 3,
+   "voice": "line3.mp3",
+   "text": "没有声音的镜头可以配 voice"
+  }
+ ],
+ "music": "music.mp3",
+ "end_card": {
+  "lines": [
+   "店名"
+  ],
+  "dur": 2
+ }
+}

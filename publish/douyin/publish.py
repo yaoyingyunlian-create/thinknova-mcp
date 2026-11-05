@@ -95,13 +95,16 @@ def set_ai_declaration(pg):
 
 
 def main():
-    pos, flags, opt = jobfile.parse_args(sys.argv[1:], flags=("--dry",),
+    pos, flags, opt = jobfile.parse_args(sys.argv[1:], flags=("--dry", "--execute"),
                                          options=("--profile", "--dry-wait"))
     if not pos:
         print(__doc__)
         return 1
     dry = "--dry" in flags
     profile = opt.get("--profile") or os.path.join(HERE, "_profile")
+    if ('--dry' in flags) == ('--execute' in flags):
+        print('Choose exactly one mode: --dry (local only) or --execute / 必须明确选择执行模式')
+        return 1
     job = jobfile.load_job(pos[0], "douyin")
     if not job.get("desc"):
         job["desc"] = job.get("caption", "")
@@ -110,6 +113,8 @@ def main():
     if not os.path.isfile(video):
         log("Video file not found: %s" % video)
         return 2
+    if '--dry' in flags:
+        return jobfile.local_preflight(job)
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:

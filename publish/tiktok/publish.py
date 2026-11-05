@@ -328,13 +328,16 @@ def wait_content_check(pg):
 
 
 def main():
-    pos, flags, opt = jobfile.parse_args(sys.argv[1:], flags=("--dry", "--no-dupcheck"),
+    pos, flags, opt = jobfile.parse_args(sys.argv[1:], flags=("--dry", "--execute", "--no-dupcheck"),
                                          options=("--profile", "--dry-wait"))
     if not pos:
         print(__doc__)
         return 1
     dry = "--dry" in flags
     profile = opt.get("--profile") or os.path.join(HERE, "_profile")
+    if ('--dry' in flags) == ('--execute' in flags):
+        print('Choose exactly one mode: --dry (local only) or --execute / 必须明确选择执行模式')
+        return 1
     job = jobfile.load_job(pos[0], "tiktok")
     jobfile.require(job, "video", "caption")
     video = job["video"]
@@ -351,6 +354,8 @@ def main():
             log(str(e))
             return 1
 
+    if '--dry' in flags:
+        return jobfile.local_preflight(job)
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:

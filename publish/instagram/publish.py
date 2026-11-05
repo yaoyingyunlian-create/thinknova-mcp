@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Instagram 发帖（Reels 视频 / 图片帖）：网页版浏览器自动化。
 
-    python publish.py --job ../../job.example.json --dry       # 填到「Share」按钮前停下（一律先跑这个）
+    python publish.py --job ../../job.example.json --dry       # 仅本地检查，不上传
     python publish.py --job ../../job.example.json --execute   # 真的发布
 
 选项：

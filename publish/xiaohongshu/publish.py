@@ -493,10 +493,13 @@ def run(job, dry, profile, urls, dry_wait):
 
 
 def main():
-    pos, flags, opt = jobfile.parse_args(sys.argv[1:], flags=("--dry",),
+    pos, flags, opt = jobfile.parse_args(sys.argv[1:], flags=("--dry", "--execute"),
                                          options=("--profile", "--base", "--dry-wait"))
     if not pos:
         print(__doc__)
+        return 1
+    if ('--dry' in flags) == ('--execute' in flags):
+        print('Choose exactly one mode: --dry (local only) or --execute / 必须明确选择执行模式')
         return 1
     job = jobfile.load_job(pos[0], "xiaohongshu")
     job.setdefault("type", "video" if job.get("video") else "image")
@@ -505,6 +508,8 @@ def main():
     if isinstance(job["body"], str):
         job["body"] = [x.strip() for x in job["body"].split("\n") if x.strip()]
     jobfile.require(job, "title", "body")
+    if '--dry' in flags:
+        return jobfile.local_preflight(job)
     log(u"Job: %s (%s, %d paragraph(s), %d topic(s), schedule %s)"
         % (job["title"], job["type"], len(job["body"]), len(job.get("tags") or []),
            job.get("schedule") or "none"))
