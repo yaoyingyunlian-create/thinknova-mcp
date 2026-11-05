@@ -1,4 +1,4 @@
-"""First installation is automatic. Existing installations update only after confirmation."""
+"""First installation and safe fast-forward toolkit updates are automatic."""
 from __future__ import annotations
 import argparse
 import json
@@ -117,13 +117,12 @@ def prepare_legacy_update():
         exclude.parent.mkdir(parents=True, exist_ok=True)
         with exclude.open('a', encoding='utf-8', newline='\n') as stream:
             stream.write(('\n' if previous and not previous.endswith('\n') else '') + '/AGENTS.local.md\n')
-    print('Local instructions preserved. Ask before running update --user-confirmed. 本地规矩已保留，确认后再更新。')
+    print('Local instructions preserved. Run update to apply available changes automatically. 本地规矩已保留，运行update自动更新。')
 
 
 def update(confirmed=False):
     status = check()
     if not status['update_available']: return
-    if not confirmed: raise RuntimeError('Update available. Ask the user, then rerun update --user-confirmed.')
     changes = update_blockers()
     if changes: raise RuntimeError('Local source changes detected; preserve these files before updating / 请先保留以下文件修改:\n' + '\n'.join(changes))
     git('fetch', 'origin', 'main')

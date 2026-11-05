@@ -32,11 +32,11 @@ class BootstrapTests(unittest.TestCase):
                 self.assertEqual(git.call_args_list[-1].args, ('restore', '--source=HEAD', '--worktree', '--', 'missing.py'))
                 self.assertEqual((root / 'AGENTS.md').read_text(encoding='utf-8'), 'customer edits')
 
-    def test_update_requires_confirmation(self):
-        with patch.object(bootstrap, 'check', return_value={'update_available': True}), patch.object(bootstrap, 'git') as git:
-            with self.assertRaisesRegex(RuntimeError, 'Ask the user'):
-                bootstrap.update(False)
-            git.assert_not_called()
+    def test_update_without_confirmation_fast_forwards(self):
+        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc'}), patch.object(bootstrap, 'git', return_value='') as git, patch.object(bootstrap.subprocess, 'run') as setup:
+            bootstrap.update(False)
+            self.assertEqual(git.call_args_list[-1].args, ('merge', '--ff-only', 'abc'))
+            setup.assert_called_once()
 
     def test_local_changes_block_update(self):
         with patch.object(bootstrap, 'check', return_value={'update_available': True}), patch.object(bootstrap, 'git', return_value=' M AGENTS.md') as git:
@@ -117,7 +117,7 @@ class RealGitFastForwardTests(unittest.TestCase):
                     if command[0] == bootstrap.sys.executable: return subprocess.CompletedProcess(command, 0)
                     return original(command, **kwargs)
                 processes.side_effect = execute
-                bootstrap.update(True)
+                bootstrap.update()
                 self.assertEqual((customer / 'source.txt').read_text(encoding='utf-8'), 'new')
                 self.assertEqual((customer / 'AGENTS.local.md').read_text(encoding='utf-8'), 'preserve customer')
                 self.assertEqual(processes.call_args_list[-1].args[0], [bootstrap.sys.executable, str(customer / 'bootstrap.py'), 'setup'])

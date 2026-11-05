@@ -1,6 +1,6 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.1",
-  "revision": "201cf6342b0b87178563abd8d42d019b2ae2845cd115efc5519d13210919613c",
+  "version": "thinknova-automation-toolkit-v3.1.2",
+  "revision": "abb7f43e378d9ffdc358bd9ea29299b52c975cffb9c0a97b16f57f9ef50ddae8",
   "files": [
     {
       "path": ".gitignore",
@@ -8,7 +8,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "9ed6e8b75e731c65d21889fd066e6352a24f5e1ce498cef09f907037cf694953"
+      "sha256": "e7b9a15b27cd453fbf8e97e55ee849203f98879bfdcc89b7da6f5024b4f17f4a"
     },
     {
       "path": "AUTOMATION.md",
@@ -16,7 +16,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "cb483382e3a75098f5cffb33258014ea763e9c97bbcf564b22881f332ba729a9"
+      "sha256": "00e967ab501fe1db8c1ca8c9fd1f60170bf463ad6b644f92773828ad1a0dc180"
     },
     {
       "path": "analytics.py",
@@ -36,11 +36,11 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "238503379342c095d247e3150fc156efdb8c1a4005301b41b14cd56bb899649f"
+      "sha256": "969a95f796c734bbf0058c56a2e4122722316958ec57b55c8cac871b71b11746"
     },
     {
       "path": "build_manifest.py",
-      "sha256": "baff34328280b3bc24ad2c554bf73f62c65eb37316d32a392b095e6ebf90cd5a"
+      "sha256": "67e8d880b7c6e6649cb21b2524c7ad05f7113c8ba7a7eca76cc2e3ff4c7db69e"
     },
     {
       "path": "drafts.py",
@@ -276,7 +276,7 @@
     },
     {
       "path": "test_bootstrap.py",
-      "sha256": "5a75cb39a847f8a28e09f52cd2476961fe6c029050a813294a24e69777fae19c"
+      "sha256": "230d5e05e688d868fe9343b17057732c8fd718b0636ca3adf2bb5280bff79205"
     },
     {
       "path": "test_controlled_youtube.py",
