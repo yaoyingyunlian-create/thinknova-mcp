@@ -86,7 +86,7 @@ def git(*args):
     result = subprocess.run(['git', '-c', 'core.autocrlf=false', *args], cwd=ROOT,
                             env=env, capture_output=True, text=True, encoding='utf-8', timeout=60)
     if result.returncode: raise RuntimeError(result.stderr.strip() or 'Git command failed; update status unknown.')
-    return result.stdout.strip()
+    return result.stdout.rstrip('\r\n')
 
 
 def check():
@@ -101,11 +101,31 @@ def check():
     return result
 
 
+def update_blockers():
+    # NUL-separated status keeps whitespace and Unicode filenames intact.
+    return [entry for entry in git('status', '--porcelain', '-z', '--untracked-files=all').split('\0')
+            if entry and entry != '?? AGENTS.local.md']
+
+
+def prepare_legacy_update():
+    if git('ls-files', '--', 'AGENTS.local.md'):
+        raise RuntimeError('AGENTS.local.md is tracked; preserve the source change manually before updating.')
+    exclude = Path(git('rev-parse', '--git-path', 'info/exclude'))
+    if not exclude.is_absolute(): exclude = ROOT / exclude
+    previous = exclude.read_text(encoding='utf-8') if exclude.exists() else ''
+    if '/AGENTS.local.md' not in previous.splitlines():
+        exclude.parent.mkdir(parents=True, exist_ok=True)
+        with exclude.open('a', encoding='utf-8', newline='\n') as stream:
+            stream.write(('\n' if previous and not previous.endswith('\n') else '') + '/AGENTS.local.md\n')
+    print('Local instructions preserved. Ask before running update --user-confirmed. 本地规矩已保留，确认后再更新。')
+
+
 def update(confirmed=False):
     status = check()
     if not status['update_available']: return
     if not confirmed: raise RuntimeError('Update available. Ask the user, then rerun update --user-confirmed.')
-    if git('status', '--porcelain'): raise RuntimeError('Local source changes detected; preserve them before updating.')
+    changes = update_blockers()
+    if changes: raise RuntimeError('Local source changes detected; preserve these files before updating / 请先保留以下文件修改:\n' + '\n'.join(changes))
     git('fetch', 'origin', 'main')
     git('merge', '--ff-only', status['latest_commit'])
     # The running module still contains OLD code after merge. Start the updated entrypoint.
@@ -152,7 +172,7 @@ def setup(json_output=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['setup', 'repair', 'check', 'update'])
+    parser.add_argument('command', choices=['setup', 'repair', 'check', 'update', 'prepare-update'])
     parser.add_argument('--user-confirmed', action='store_true')
     parser.add_argument('--json', action='store_true', help='Emit a structured setup result; installation logs go to stderr')
     args = parser.parse_args()
@@ -169,6 +189,7 @@ def main():
                 python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
                 subprocess.run([str(python), str(ROOT / 'health.py'), '--json'], check=True)
         elif args.command == 'check': check()
+        elif args.command == 'prepare-update': prepare_legacy_update()
         else: update(args.user_confirmed)
         return 0
     except (RuntimeError, OSError, subprocess.SubprocessError) as exc:

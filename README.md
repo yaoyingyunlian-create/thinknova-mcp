@@ -334,3 +334,15 @@ AI browser work defaults to ego lite. Windows x64 setup downloads and verifies t
 普通发布：`publish/dispatch.py job.json --platform youtube --dry` 生成平台清单；明确确认后 `--execute --user-confirmed`。`--dry` 不上传/不产生草稿。浏览器脚本返回0但缺少可信回执时仍标为待核验，不能重复运行碰运气。
 
 Readiness is capability-specific. Missing ego does not block API-only production. Mac without Homebrew receives the official https://brew.sh next action; system package managers are never silently installed. Existing customers approve updates, retain local data and reinstall schedules only after confirmation. Mac/unattended/browser-platform acceptance is tracked separately from local tests.
+
+
+### 报价与建单 / Quotes and creation
+先核实服务端余额响应 quote_mode_supported=true 及工具schema；然后 get_balance 传 quote_request={tool:目标生成工具名,arguments:完整生成参数}，在 generation_quote 中只读返回预计积分和默认规格，不创建任务。禁止向生成工具试探 quote_only。实际创建携带 max_credits，涨价会在冻结前拒绝。旧服务端没有报价能力时必须停止，不试探未知参数。规则 platform 支持旧字符串和最多九个平台的列表，服务器仍保留旧字符串读取形式并额外返回 platforms。保存成功后回读版本；失败不视为服务器已保存。
+
+Require explicit server quote capability before previewing. Validate no-task/no-reservation response, preserve identical creation inputs and pass the quoted amount as max_credits. Transport retries retain both request ID and cap. Null billing amounts mean unknown, not free.
+
+
+### 旧安装更新 / Existing installation updates
+AGENTS.local.md 是本地私有规则。新版自动忽略根目录未跟踪文件；其他变更会列出并阻止更新，不覆盖源码。新版可先运行 `py -3 bootstrap.py prepare-update`（Mac 使用 `python3`），再确认执行 `bootstrap.py update --user-confirmed`。旧版没有 prepare-update：先 `git ls-files -- AGENTS.local.md`，若有输出则停止；否则仅将 `/AGENTS.local.md` 追加至 `git rev-parse --git-path info/exclude` 返回的本机文件，保留已有内容，然后确认更新。不得删除文件或忽略其他源码。
+Untracked root AGENTS.local.md stays private. For old bootstrap versions, verify it is untracked, append the exact root ignore entry to the local Git info/exclude without replacing its contents, then confirm the update. Tracked changes and other untracked files remain protected and are listed. Never discard local source changes.
+Maintenance installation must be explained beforehand: read-only collection, archives and reminders; no creation, spending or publication. 安装维护前需主动说明：只采集、归档、提醒，不制作、不扣费、不发布。

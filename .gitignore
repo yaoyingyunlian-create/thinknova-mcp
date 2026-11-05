@@ -32,3 +32,6 @@ reminders.txt
 publication_history.json
 publication_history.json.tmp
 publication_attempts/
+
+# Customer local instructions are never shipped or overwritten.
+/AGENTS.local.md

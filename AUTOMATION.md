@@ -49,3 +49,10 @@ This opt-in pilot requires a logged-on Windows user, network access, authenticat
 - Mac 开机、用户已登录、网络和本机授权有效是执行前提。与 maintenance/monitoring 分开安装；旧任务需卸载后经确认重装，不由更新源码偷偷更改。
 
 macOS uses a GUI-session LaunchAgent and Keychain-backed markers; Windows uses the existing interactive-user task and DPAPI. Real Mac, account authorization, publication and recovery acceptance remain pending. Monitoring is independent, read-only, every 15 minutes with hourly full local checks. Company YouTube configuration delivery does not require enabling unattended execution. Platform rollout remains gated by real acceptance.
+
+
+## v3.1.1 报价握手 / Pricing handshake
+
+受控执行先核实余额接口声明 quote_mode_supported=true，再通过只读 get_balance.quote_request 查询每镜报价。没有能力声明时，doctor标为待处理；不得通过生成工具试探报价。将每镜报价写入持久化步骤后才用同一请求号和max_credits创建，网络重试不改预算。报价不会建任务、冻结积分或迁移参考素材。旧API或滚动发布节点漏掉报价时停止；不能把余额当报价。
+
+Preview only through get_balance with quote_request={tool,arguments}. Check the capability and explicit generation_quote no-task/no-reservation response. Persist each cap before creating and keep it during retries. A price above the cap is rejected before freezing. Deployment and new tool discovery are required; do not test unknown quote flags on paid tools.

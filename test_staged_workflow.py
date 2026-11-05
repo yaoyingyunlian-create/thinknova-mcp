@@ -93,6 +93,25 @@ class Contracts(unittest.TestCase):
                 path.write_text(json.dumps(value),encoding='utf-8')
                 with self.assertRaisesRegex(SystemExit,'YOUTUBE_COMPANY_CLIENT_INVALID'):yt_common._client_config()
 
+    def test_old_server_never_receives_a_quote_generation_call(self):
+        from unittest.mock import Mock
+        client=Mock()
+        with self.assertRaisesRegex(RuntimeError,'MCP_QUOTE_NOT_SUPPORTED'):
+            automation.quoted_generation_args(client,'generate_video',{}, {})
+        client.tool.assert_not_called()
+
+    def test_quote_cap_is_added_only_after_no_task_response(self):
+        from unittest.mock import Mock
+        client=Mock();client.tool.return_value={'generation_quote':{'quote_only':True,'creates_task':False,'reserves_credits':False,'estimated_credits':60}}
+        args={'prompt':'Synthetic','client_request_id':'stable'}
+        result=automation.quoted_generation_args(client,'generate_video',args,{'quote_mode_supported':True})
+        self.assertEqual(result,{**args,'max_credits':60})
+        self.assertNotIn('max_credits',args)
+        self.assertEqual(client.tool.call_args.args[0],'get_balance')
+        client.tool.return_value={'task_id':'task_existing'}
+        with self.assertRaisesRegex(RuntimeError,'MCP_QUOTE_INVALID_RESPONSE'):
+            automation.quoted_generation_args(client,'generate_video',args,{'quote_mode_supported':True})
+
     def test_codex_only_consumes_plan_not_shell(self):
         with self.assertRaises(RuntimeError):automation.validate_plan({'title':'A','description':'B','shots':[{'prompt':'test'}],'command':'publish'})
 

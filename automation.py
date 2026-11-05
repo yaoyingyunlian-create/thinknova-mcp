@@ -90,6 +90,17 @@ def compose(directory: Path, count: int, progress=lambda: None) -> Path:
     return output
 
 
+def quoted_generation_args(client, tool, args, balance):
+    # Quotes always use a read-only tool. Old/mixed deployments can omit the quote, but cannot create paid work.
+    if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
+    response=client.tool('get_balance',{'quote_request':{'tool':tool,'arguments':args}})
+    quote=response.get('generation_quote') or {}
+    credits=quote.get('estimated_credits')
+    if quote.get('quote_only') is not True or quote.get('creates_task') is not False or quote.get('reserves_credits') is not False or type(credits) is not int or credits<0:
+        raise RuntimeError('MCP_QUOTE_INVALID_RESPONSE')
+    return {**args,'max_credits':credits}
+
+
 def execute(client: Client, claim: dict):
     run_no=claim['run_no'];grant=claim['grant']
     if not re.fullmatch(r'run_[a-f0-9]{24}',run_no):raise RuntimeError('INVALID_RUN_ID')
@@ -104,6 +115,7 @@ def execute(client: Client, claim: dict):
         if rules['version']!=grant['rules_version'] or rules.get('needs_onboarding'):raise RuntimeError('RULES_CHANGED')
         balance=client.tool('get_balance')
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
+        if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
         plan_path=directory/'content.json'
         steps['stage']='planning';checkpoint()
         if plan_path.exists():plan=validate_plan(json.loads(plan_path.read_text(encoding='utf-8')))
@@ -113,7 +125,14 @@ def execute(client: Client, claim: dict):
             key=f'task_{index}'
             if key not in steps:
                 checkpoint()
-                created=client.tool('generate_video',{'prompt':shot['prompt'],'client_request_id':f'{run_no}:shot:{index}','automation_run_id':run_no})
+                arguments={'prompt':shot['prompt'],'client_request_id':f'{run_no}:shot:{index}','automation_run_id':run_no}
+                quote_key=f'quote_credits_{index}'
+                if quote_key in steps:
+                    arguments['max_credits']=int(steps[quote_key])
+                else:
+                    arguments=quoted_generation_args(client,'generate_video',arguments,balance)
+                    steps[quote_key]=str(arguments['max_credits']);checkpoint()
+                created=client.tool('generate_video',arguments)
                 steps[key]=created['task_id'];checkpoint()
             deadline=time.monotonic()+900
             while True:
@@ -196,6 +215,7 @@ def connected_report(check_local: bool = True) -> dict:
         config,_=client.post('/mcp/device/configuration',{})
         balance=client.tool('get_balance')
         result['available_credits']=int(balance.get('available_credits',0))
+        status('server_quote','pass' if balance.get('quote_mode_supported') is True else 'waiting_user','Update ThinkNova API before enabling paid execution / 请先更新支持只读报价的 API')
         status('account','pass' if balance.get('generation_available') and balance.get('available_credits',0)>0 else 'waiting_user','Check plan and credits / 检查套餐和积分')
         rules=client.tool('get_content_rules')
         status('rules','pass' if not rules.get('needs_onboarding') and rules.get('version')==config['data']['rules_version'] else 'waiting_user','Confirm current account rules / 确认当前账户规则')
@@ -205,7 +225,7 @@ def connected_report(check_local: bool = True) -> dict:
         try:status('platform_authorization','pass' if yt_common.my_channel(yt_common.youtube())['id']==config['data']['channel_id'] else 'fail','YOUTUBE_CHANNEL_MISMATCH')
         except (Exception,SystemExit):status('platform_authorization','waiting_user','Run automation.py youtube-auth / 完成平台授权')
     except (Exception,SystemExit):status('account','waiting_user','Pair an active device/grant; no secrets in chat / 配对有效设备与授权')
-    required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','account','rules','platform_authorization')]
+    required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','account','rules','platform_authorization','server_quote')]
     result['automation_ready']=all(c['status']=='pass' for c in required)
     result['overall']='partial' if result['automation_ready'] else 'blocked'
     return result

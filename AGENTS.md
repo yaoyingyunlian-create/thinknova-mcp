@@ -28,6 +28,11 @@
 - 回读 applied_reference_asset_ids 和 reference_handling。first_only 表示仅首图生效，不能宣称其他图已锁定；调整方案前说明影响。
 
 ## 4 生成 进度与收费重做
+- 先检查 get_balance.quote_mode_supported 严格为 true，且当前 tools/list 的 get_balance 声明 quote_request；不满足时报告 API 待更新。禁止向生成接口试传 quote_only（旧服务可能忽略参数而收费建单）。
+- 报价：调用 get_balance，传 quote_request={tool:目标生成工具名,arguments:完整生成参数}。核实 generation_quote 内 quote_only=true、creates_task=false、reserves_credits=false 和整数 estimated_credits，说明真实规格、积分与总预算后才创建。
+- 升级前已发起、结果不明的请求仍使用原参数和原请求号；不要补入新的预算参数改变既有幂等意图，先查询原任务。
+- 正式建单调用目标生成工具，传 max_credits=generation_quote.estimated_credits；先记录金额和原参数，网络重试不得改 max_credits 或请求号。MCP_PRICE_CHANGED 时重新报价并按审核/预算规则确认，不扩大预算。读取 reserved_credits、frozen_credits、billing_status；billing_verified=false 或 null 金额为未知，不能当免费，也不能因此重建任务。
+
 - 用 skills/ 撰写脚本和镜头表；固定角色方法见 rules/固定角色系列短片.md。镜头时长、声音和输出规格服从真实能力，不能仅靠提示词许诺。
 - 文生图/图生图要求特定比例时，显式传 ratio（例如 9:16），不能仅写在提示词。视频规格仍以服务端默认能力为准，不假造未开放参数。
 - 创建前在 memory.md 记录作品/镜头、client_request_id、预计费用及已授权预算；创建成功立即记录 ThinkNova task_id。
@@ -86,3 +91,19 @@ Controlled automation is a separate opt-in Windows/Codex/YouTube pilot, not ordi
 When the user says stop, run automation.py pause (or revoke), verify server acknowledgment, then record it. Do not claim to undo existing charges or already published content.
 
 For ordinary MCP failures after monitoring pairing, immediately report a safe platform/stage/error code through monitoring.py event. Recover only the verified platform/stage; never transmit raw prompts, account names or tokens, and never clear unrelated faults.
+
+Quote safety: require get_balance.quote_mode_supported=true AND its live quote_request schema. Request previews only through the read-only get_balance tool, with quote_request={tool,arguments}; never send quote_only to a generation tool. Old or mixed servers may omit generation_quote but cannot turn a balance request into paid work. Validate the explicit no-task/no-reservation quote response, then pass estimated_credits as max_credits with the same inputs. Persist the cap before creation and preserve it during transport retries. Unknown billing is not zero; never recreate a committed task to repair receipt lookup.
+
+For pre-upgrade requests with unknown outcomes, preserve the original parameters and request ID; do not retrofit a new cap into an existing paid intent. Query/reconcile that task first.
+
+
+## 本地规矩、升级与维护告知 / Local instructions and maintenance consent
+- characters、prohibitions 可传文字或最多50项文字列表，去空去重后合并最多4000字；style 必须为文字，结构化风格用 style_profile。保存完整规则前先读取并合并，携带 expected_version；按返回 field 和 reason_code 修正，成功后回读。
+- 安装维护任务前主动告诉客户：维护仅采集、归档、提醒，不制作视频、不调用收费生成、不扣积分、不发布。监控和收费自动化分别说明并取得各自授权。
+- 旧 API 不支持只读报价或预算硬限制时停止收费创建；客户口头预算不是服务端硬限制。
+- 根目录未跟踪 AGENTS.local.md 为客户私有规矩，不上传、不覆盖；其他源码或未跟踪文件阻止更新时列出具体路径，不自动 stash、提交或丢弃。
+- 老安装被 AGENTS.local.md 挡住时，先运行 git ls-files -- AGENTS.local.md；有输出则停止，手工保留源码。无输出时只将 /AGENTS.local.md 追加到 git rev-parse --git-path info/exclude 指向的本机文件，保留原内容，不修改客户规矩。然后询问更新确认，再执行 bootstrap.py update --user-confirmed。新版也可用 bootstrap.py prepare-update 准备该兼容项。
+- Characters/prohibitions accept text or up to 50 text items, normalized to at most 4000 characters. style is text; structured style belongs in style_profile. Read, merge and save complete rules with expected_version, then verify by reading back.
+- Before installing maintenance, explicitly explain: collection, archiving and reminders only; no video making, paid generation, credits or publication. Monitoring and paid execution need separate explanations and consent.
+- Stop paid creation if the server lacks read-only quotes or an enforced budget cap. A verbal budget alone is insufficient.
+- Preserve untracked root AGENTS.local.md. List all other blocking changes; never auto-stash, commit or discard. For an old updater, verify this file is untracked with git ls-files, then append only /AGENTS.local.md to the local Git info/exclude, preserving existing contents. Ask before updating. The new bootstrap prepare-update command performs this preparation without applying an update.

@@ -1,5 +1,6 @@
 """Offline installation/update regressions. No installs, accounts or publishing."""
 import tempfile
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -61,6 +62,65 @@ class BootstrapTests(unittest.TestCase):
                 memory.write_text('Customer memory', encoding='utf-8')
                 toolkit.init()
                 self.assertEqual(memory.read_text(encoding='utf-8'), 'Customer memory')
+
+
+class RealGitUpdateTests(unittest.TestCase):
+    def test_local_instructions_and_source_protection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def run(*args):
+                return subprocess.check_output(['git', *args], cwd=root).decode('utf-8').strip()
+            run('init', '-q'); run('config', 'user.name', 'Fixture'); run('config', 'user.email', 'fixture@example.invalid')
+            (root / 'source.txt').write_text('original', encoding='utf-8')
+            run('add', 'source.txt'); run('commit', '-qm', 'fixture')
+            local = root / 'AGENTS.local.md'; local.write_text('客户规矩', encoding='utf-8')
+            exclude = root / '.git/info/exclude'
+            before = exclude.read_text(encoding='utf-8')
+            with patch.object(bootstrap, 'ROOT', root):
+                self.assertEqual(bootstrap.update_blockers(), [])
+                self.assertIn('?? AGENTS.local.md', run('status', '--porcelain'))
+                bootstrap.prepare_legacy_update(); bootstrap.prepare_legacy_update()
+                self.assertEqual(run('status', '--porcelain'), '')
+                self.assertTrue(exclude.read_text(encoding='utf-8').startswith(before))
+                self.assertEqual(exclude.read_text(encoding='utf-8').count('/AGENTS.local.md'), 1)
+                self.assertEqual(local.read_text(encoding='utf-8'), '客户规矩')
+                (root / 'source.txt').write_text('customer change', encoding='utf-8')
+                (root / '客户 文件.txt').write_text('keep', encoding='utf-8')
+                blockers = bootstrap.update_blockers()
+                self.assertTrue(any('source.txt' in entry for entry in blockers))
+                self.assertTrue(any('客户 文件.txt' in entry for entry in blockers))
+                with patch.object(bootstrap, 'check', return_value={'update_available': True}):
+                    with self.assertRaisesRegex(RuntimeError, 'source.txt'): bootstrap.update(True)
+                run('add', '-f', 'AGENTS.local.md'); run('commit', '-qm', 'tracked-local')
+                with self.assertRaisesRegex(RuntimeError, 'tracked'): bootstrap.prepare_legacy_update()
+                local.write_text('tracked change', encoding='utf-8')
+                self.assertTrue(any('AGENTS.local.md' in entry for entry in bootstrap.update_blockers()))
+
+
+class RealGitFastForwardTests(unittest.TestCase):
+    def test_update_preserves_customer_state_and_restarts_setup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            parent = Path(directory); upstream = parent / 'upstream'; upstream.mkdir()
+            def run(cwd, *args):
+                return subprocess.check_output(['git', *args], cwd=cwd, stderr=subprocess.DEVNULL).decode('utf-8').strip()
+            run(upstream, 'init', '-q', '-b', 'main'); run(upstream, 'config', 'user.name', 'Fixture'); run(upstream, 'config', 'user.email', 'fixture@example.invalid')
+            (upstream / 'source.txt').write_text('old', encoding='utf-8')
+            run(upstream, 'add', '.'); run(upstream, 'commit', '-qm', 'initial')
+            customer = parent / 'customer'; run(parent, 'clone', '-q', str(upstream), str(customer))
+            (customer / 'AGENTS.local.md').write_text('preserve customer', encoding='utf-8')
+            (upstream / 'source.txt').write_text('new', encoding='utf-8'); run(upstream, 'add', 'source.txt'); run(upstream, 'commit', '-qm', 'update')
+            latest = run(upstream, 'rev-parse', 'HEAD')
+            original = subprocess.run
+            with patch.object(bootstrap, 'ROOT', customer), patch.object(bootstrap, 'check', return_value={'update_available':True, 'latest_commit':latest}), patch.object(bootstrap.subprocess, 'run', wraps=subprocess.run) as processes:
+                # Mock only setup, leaving every Git operation real.
+                def execute(command, **kwargs):
+                    if command[0] == bootstrap.sys.executable: return subprocess.CompletedProcess(command, 0)
+                    return original(command, **kwargs)
+                processes.side_effect = execute
+                bootstrap.update(True)
+                self.assertEqual((customer / 'source.txt').read_text(encoding='utf-8'), 'new')
+                self.assertEqual((customer / 'AGENTS.local.md').read_text(encoding='utf-8'), 'preserve customer')
+                self.assertEqual(processes.call_args_list[-1].args[0], [bootstrap.sys.executable, str(customer / 'bootstrap.py'), 'setup'])
 
 
 if __name__ == '__main__': unittest.main()
