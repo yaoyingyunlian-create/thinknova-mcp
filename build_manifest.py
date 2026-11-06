@@ -14,5 +14,5 @@ for name in sorted(set(filter(None, paths))):
         files.append({'path': name, 'sha256': hashlib.sha256(path.read_bytes()).hexdigest()})
 hashes = {item['path']: item['sha256'] for item in files}
 revision = hashlib.sha256(json.dumps(hashes, separators=(',', ':'), ensure_ascii=True).encode('utf-8')).hexdigest()
-(root / 'manifest.json').write_text(json.dumps({'version': 'thinknova-automation-toolkit-v3.1.2', 'revision': revision, 'files': files}, ensure_ascii=True, indent=2) + '\n', encoding='utf-8')
+(root / 'manifest.json').write_text(json.dumps({'version': 'thinknova-automation-toolkit-v3.1.3', 'revision': revision, 'files': files}, ensure_ascii=True, indent=2) + '\n', encoding='utf-8')
 print(revision)

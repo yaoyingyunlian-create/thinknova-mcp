@@ -56,7 +56,7 @@ def emit(value):
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from captions import ass_time, write_srt, parse_srt  # noqa: E402
+from captions import ass_time, write_srt, parse_srt, safe_subtitle_text  # noqa: E402
 
 W, H, FPS, SR = 1080, 1920, 30, 48000
 IMAGE_EXT = (".jpg", ".jpeg", ".png", ".webp", ".bmp")
@@ -250,12 +250,12 @@ def write_ass(path, job, cues, card_span, font):
     fmt = ("Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, "
            "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding")
     style = u"Style: %s,{f},%d,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,1,%d,0,%d,60,60,%d,1\n"
-    head = u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\n\n[V4+ Styles]\nFormat: Name, %s\n" % (W, H, fmt)
+    head = u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, %s\n" % (W, H, fmt)
     head += (style % ("Sub", size, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 7, 2, bottom)).replace("{f}", font)
     head += (style % ("Badge", 30, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 3, 7, 60)).replace("{f}", font)
     head += (style % ("Card", 110, "&H00232D3C", "&H00232D3C", "&H00FFFFFF", 0, 5, 0)).replace("{f}", font)
     head += u"\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-    rows = [u"Dialogue: 0,%s,%s,Sub,,0,0,0,,%s" % (ass_time(c["start"]), ass_time(c["end"]), ass_escape(c["text"])) for c in cues]
+    rows = [u"Dialogue: 0,%s,%s,Sub,,0,0,0,,%s" % (ass_time(c["start"]), ass_time(c["end"]), safe_subtitle_text(c["text"], W, H, size, bottom, 7)) for c in cues]
     if job.get("badge"):
         rows.append(u"Dialogue: 0,%s,%s,Badge,,0,0,0,,%s" % (ass_time(0), ass_time(card_span[0] if card_span else job["_total"]), ass_escape(job["badge"])))
     if card_span:

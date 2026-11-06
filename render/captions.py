@@ -151,6 +151,31 @@ def ass_time(t):
     return "%d:%02d:%02d.%02d" % (h, m, s, cs)
 
 
+def safe_subtitle_text(text, width, height, size, bottom, outline=8):
+    """Conservative two-line ASS layout; never silently crop unreadable cues."""
+    import math
+    values = [width, height, size, bottom, outline]
+    if not all(math.isfinite(float(value)) for value in values) or width <= 120 or size < 24 or outline < 0 or not 0 <= bottom < height:
+        raise ValueError('SUBTITLE_LAYOUT_INVALID: invalid canvas, size or margins')
+    # One em per character is intentionally conservative for Latin and CJK fonts.
+    clean = text.replace('\\', ' ').replace('{', '(').replace('}', ')')
+    for fitted in range(min(int(size), int(height / 8)), 23, -1):
+        capacity = int((width - 120 - 2 * outline) / (fitted * 1.15))
+        if capacity < 1: continue
+        lines = []
+        for paragraph in clean.splitlines() or ['']:
+            paragraph = paragraph.strip()
+            while len(paragraph) > capacity:
+                cut = paragraph.rfind(' ', 0, capacity + 1)
+                if cut < capacity // 2: cut = capacity
+                lines.append(paragraph[:cut].strip())
+                paragraph = paragraph[cut:].strip()
+            if paragraph: lines.append(paragraph)
+        if len(lines) <= 2 and len(lines) * fitted * 1.4 + outline * 2 < height - bottom - 60:
+            return '{\\fs%d}' % fitted + r'\N'.join(lines)
+    raise ValueError('SUBTITLE_TOO_LONG: split this cue into shorter timed cues; text does not fit two readable lines')
+
+
 def cmd_burn(argv):
     pos, o = opts(argv, {"--font": "Arial", "--size": "72", "--bottom": "28",
                          "--outline": "8", "--ffmpeg": None})
@@ -160,7 +185,7 @@ def cmd_burn(argv):
     video, srt, out = [os.path.abspath(x) for x in pos]
     w, h = probe_size(video)
     margin_v = int(h * float(o["--bottom"]) / 100.0)
-    head = (u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 2\n\n"
+    head = (u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\n\n"
             u"[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
             u"BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, "
             u"Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n"
@@ -168,7 +193,7 @@ def cmd_burn(argv):
             u"[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
             % (w, h, o["--font"], o["--size"], o["--outline"], margin_v))
     lines = [u"Dialogue: 0,%s,%s,Default,,0,0,0,,%s" % (ass_time(c["start"]), ass_time(c["end"]),
-                                                        c["text"].replace("\n", " "))
+                                                        safe_subtitle_text(c["text"], w, h, float(o["--size"]), margin_v, float(o["--outline"])))
              for c in parse_srt(srt)]
     ass_dir = os.path.dirname(out) or "."
     ass_name = os.path.splitext(os.path.basename(out))[0] + "_subs.ass"
