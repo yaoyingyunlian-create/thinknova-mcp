@@ -120,3 +120,14 @@ Automatic update policy / 自动更新：每次开工检查官方GitHub仓库，
 
 - 人物图片交付或用于图生视频前，逐张目视检查手部、手指数、肢体及五官。六指、多肢等异常标记不合格并暂停使用；遮挡或模糊无法判断时标记待人工确认。此为AI/人工审核要求，不代表已有自动解剖检测器。修图/重生成按实际积分与授权执行，不自动收费重抽。
 - Before delivering a person image or using it for video, visually review hands, finger counts, limbs and facial structure. Reject visible anatomy defects; mark occluded or ambiguous areas for human review. This is a review requirement, not an automated anatomy detector. Never initiate paid corrections or retries outside the authorized budget.
+
+
+## 生成质量执行 / Executable quality checks
+- 新生成意图先把原提示词写到UTF-8文件，运行 `.venv` Python `generation_quality.py --kind image|video --prompt-file draft.txt`，将输出的prompt原样用于报价和建单。不要把整段JSON当提示词。自动化仅在新内容计划上附加这些约束；已保存计划/结果不明请求保持原参数与请求号，不补写新约束。
+- 视频有“小程序”台词时，生成约束显式注明 xiǎo chéng xù；字幕仍保留正确中文。自然人体提示降低异常概率，不承诺保证无六指；生成后仍需检查图片/视频手部。
+- 含关键术语的成片运行 `.venv` Python `render/speech_review.py 成片.mp4 --required 小程序`，可重复--required。使用本机缓存small模型，不自动下载，不扣ThinkNova积分。退出2表示术语未匹配，退出3表示未完成检查；两者都暂停交付/发布，回听确认。退出0也只是ASR匹配，仍需回听，报告始终不标记发音已验收。
+- 已发现手部或其他结构异常的图片暂停用于图生视频，手部修正并目视复验前不能当作合格素材。不能以继续生成视频掩盖问题。此为具体样本处置和审核规则，未新增自动解剖检测器。
+- For new intents, run generation_quality.py on the UTF-8 draft and use its prompt unchanged for quote and creation. Never alter persisted/ambiguous earlier intents. Run speech_review.py with each required spoken term; mismatch/unavailable pauses delivery and publication. Even ASR agreement requires listening. This checker is a local diagnostic, not an automatic publication approval or anatomy detector. Correct defective source images before animation; no unapproved paid retries.
+
+自动化当前仅对计划中出现“小程序”的镜头启用术语拦截：收费前检查本机ASR缓存，下载后输出绑定文件SHA-256的本地报告。缺环境或术语不匹配转待处理，不进入发布、不收费重抽。ASR匹配不是发音保证；其他词须主动用--required配置检查。手部结构目前由AI/人工目视审核，未实现自动检测。
+The runner currently gates only shots whose plan contains 小程序: local ASR readiness is checked before paid creation, then a file-hash-bound transcript report is saved after download. Missing runtime or a term mismatch pauses publication without paid retries. ASR agreement is not pronunciation verification. Other terms require explicit --required checks; anatomy still requires visual review, not an automatic detector.

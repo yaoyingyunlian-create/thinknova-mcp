@@ -1,6 +1,6 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.3",
-  "revision": "0dd6764623b59ddb29685ad09a6662497d71d3487039c4440c779d5925baaa99",
+  "version": "thinknova-automation-toolkit-v3.1.4",
+  "revision": "ce418200fccd58c919d32159115a76cb5ecd06223071951bc5efcb67b2cc59c1",
   "files": [
     {
       "path": ".gitignore",
@@ -8,7 +8,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "4cbc94e64ebc84bc1d08992fd5b89cc6e247865435563208f542646d42d53b5d"
+      "sha256": "37fd52f4009b26806f73b6dee2ebd7cc7f41b1a2d599fb55af0f54d5699ac52d"
     },
     {
       "path": "AUTOMATION.md",
@@ -16,7 +16,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "00e967ab501fe1db8c1ca8c9fd1f60170bf463ad6b644f92773828ad1a0dc180"
+      "sha256": "80e81d404a342a00ba2d04bcf8916c24e87dc620a6e3abfe8e85012a0fa1acb1"
     },
     {
       "path": "analytics.py",
@@ -24,7 +24,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "0b15021bafd1f6ee022cab47248b4bb92f232e78c2a694d9485bb03c393f0a12"
+      "sha256": "ccb722b10d5a4a6b499a9aa1fb0619aa9847629b7c7fc17bfc8ff1aea5aff24a"
     },
     {
       "path": "automation_client.py",
@@ -40,7 +40,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "3591a7c04da87b06b790a5bc46ea972371960d4757d4a69b07b51a58fff6d07e"
+      "sha256": "e8d85e2a17f427b2e58c43e30064208422dcdf574863e3449cb4732587cb9ebe"
     },
     {
       "path": "drafts.py",
@@ -49,6 +49,10 @@
     {
       "path": "ego_runtime.py",
       "sha256": "384f5a4941f38bd0a4a9e0ffd16bf387a4b305b15835fa7c41aabf5ee52b3982"
+    },
+    {
+      "path": "generation_quality.py",
+      "sha256": "f1b5261a5ff85be0209df6eddc713096269b9129f234f74f4aea28afe028b0b5"
     },
     {
       "path": "health.py",
@@ -239,6 +243,10 @@
       "sha256": "cdc58c72f0cd36927246e70e7ea30d37aa7372b9714ae5f4940cac9936922af3"
     },
     {
+      "path": "render/speech_review.py",
+      "sha256": "7e01f28ec57731afbadd3af47f7d7a28d7ca21413f562aa07ee16d90362c4b3e"
+    },
+    {
       "path": "requirements.txt",
       "sha256": "c7e862ff1105496fbfc293613b8e1ea12850ccfe4269cc41a8605535225282a3"
     },
@@ -293,6 +301,10 @@
     {
       "path": "test_render_pipeline.py",
       "sha256": "9b52a62bd1f0dd5204dff7ee55e0fc1c2668dda911e738df1e4080bfd4da1837"
+    },
+    {
+      "path": "test_speech_review.py",
+      "sha256": "dd7839b0dcf6cc5db7ece400a5471327a806da31d95aa2b8818b70cce1021df9"
     },
     {
       "path": "test_staged_workflow.py",

@@ -19,6 +19,7 @@ import urllib.request
 from local_state import state_lock, LocalStateBusy
 from automation_client import Client, NoRedirect
 import secure_state
+from generation_quality import prepare_prompt
 
 ROOT=Path(__file__).resolve().parent
 STATE=(Path.home() / 'Library/Application Support' if platform.system()=='Darwin' else Path(os.environ.get('LOCALAPPDATA', str(Path.home())))) / 'ThinkNova' / 'automation'
@@ -51,7 +52,7 @@ def make_plan(directory: Path, rules: dict) -> dict:
     if not codex:raise RuntimeError('CODEX_UNAVAILABLE')
     output=directory/'plan.json'
     # Only a constrained content plan is consumed. No model-provided commands or paths.
-    prompt='Create one YouTube video content plan matching these account rules. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
+    prompt='Create one YouTube video content plan matching these account rules. For ordinary human characters require anatomically natural hands, five fingers per fully visible hand, no extra or fused digits/limbs, and simple stable gestures. This does not certify generated anatomy. If the spoken script contains 小程序, add the pronunciation instruction 小程序 = xiǎo chéng xù; keep displayed text unchanged, do not speak the pinyin. Require listening and visual review for suspected defects before release. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
     command=[codex,'exec','--ignore-user-config','--ephemeral','--sandbox','read-only','--skip-git-repo-check','-C',str(directory),'--output-schema',str(ROOT/'automation_plan.schema.json'),'--output-last-message',str(output),'-']
     # Do not inherit device/platform tokens through subprocess environment.
     env={k:v for k,v in os.environ.items() if not any(s in k.upper() for s in ('TOKEN','SECRET','PASSWORD','YT_','THINKNOVA_'))}
@@ -59,7 +60,12 @@ def make_plan(directory: Path, rules: dict) -> dict:
     result=subprocess.run(command,input=prompt,cwd=directory,env=env,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=300)
     atomic(directory/'client_usage.json',{'client':'codex','elapsed_seconds':round(time.monotonic()-started,3),'model_tokens':'unknown','tool_calls':'unknown','note':'No client quota or subscription consumption is inferred.'})
     if result.returncode or not output.is_file():raise RuntimeError('CODEX_PLAN_FAILED')
-    return validate_plan(json.loads(output.read_text(encoding='utf-8')))
+    plan = validate_plan(json.loads(output.read_text(encoding='utf-8')))
+    for shot in plan['shots']:
+        prepared = prepare_prompt(shot['prompt'], 'video')
+        if len(prepared) > 3500: raise RuntimeError('QUALITY_PROMPT_TOO_LONG')
+        shot['prompt'] = prepared
+    return validate_plan(plan)
 
 
 def download(url: str, path: Path):
@@ -88,6 +94,19 @@ def compose(directory: Path, count: int, progress=lambda: None) -> Path:
     run_command([sys.executable,str(ROOT/'render/assemble.py'),str(job),'--json'],directory)
     progress()
     return output
+
+
+def review_spoken_terms(path, prompt):
+    if '小程序' not in prompt: return
+    from render.speech_review import transcribe, evaluate
+    try:
+        review = evaluate(transcribe(path), ['小程序'])
+        review['source_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+        atomic(path.with_suffix('.speech-review.json'), review)
+    except Exception:
+        raise RuntimeError('SPEECH_REVIEW_UNAVAILABLE') from None
+    if review['missing_terms']: raise RuntimeError('SPEECH_CONTENT_MISMATCH')
+    # ASR agreement is evidence only, never a pronunciation certificate.
 
 
 def quoted_generation_args(client, tool, args, balance):
@@ -121,6 +140,12 @@ def execute(client: Client, claim: dict):
         if plan_path.exists():plan=validate_plan(json.loads(plan_path.read_text(encoding='utf-8')))
         else:plan=make_plan(directory,rules['effective_rules']);atomic(plan_path,plan)
         steps['stage']='generation'
+        if any('小程序' in shot['prompt'] for shot in plan['shots']):
+            try:
+                from render.speech_review import ensure_runtime
+                ensure_runtime()
+            except Exception:
+                raise RuntimeError('SPEECH_REVIEW_UNAVAILABLE') from None
         for index,shot in enumerate(plan['shots']):
             key=f'task_{index}'
             if key not in steps:
@@ -147,6 +172,8 @@ def execute(client: Client, claim: dict):
                 assets=[a for a in result.get('assets',[]) if a.get('type')=='video']
                 if not assets:raise RuntimeError('VIDEO_DELIVERY_MISSING')
                 download(assets[0]['download_url'],path)
+            steps['stage']='speech_review';checkpoint()
+            review_spoken_terms(path, shot['prompt'])
         steps['stage']='render';checkpoint()
         output=compose(directory,len(plan['shots']),checkpoint)
         # The publisher persists an upload-attempt marker before calling YouTube.
