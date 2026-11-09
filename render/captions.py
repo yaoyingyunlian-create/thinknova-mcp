@@ -85,23 +85,22 @@ def write_srt(cues, path):
 
 # transcribe ---------------------------------------------------------------------
 def cmd_transcribe(argv):
-    pos, o = opts(argv, {"--lang": None, "--max-chars": None, "--model": "small", "--pause": "0.6"})
+    pos, o = opts(argv, {"--lang": None, "--max-chars": None, "--model": "small", "--pause": "0.6", "--ffmpeg": None})
     if len(pos) < 2:
         print(__doc__)
         return 1
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError:
-        print("Needs: pip install faster-whisper")
-        return 1
+    from speech_review import recognize
     src, out = pos
     lang = o["--lang"]
     cjk = (lang or "").split("-")[0] in CJK
     max_chars = int(o["--max-chars"] or (14 if cjk else 32))
     pause = float(o["--pause"])
     joiner = u"" if cjk else u" "
-    model = WhisperModel(o["--model"], device="cpu", compute_type="int8")
-    segs, info = model.transcribe(src, language=lang, word_timestamps=True, vad_filter=True)
+    try:
+        segs, info = recognize(src, o["--model"], lang, o["--ffmpeg"], word_timestamps=True, vad_filter=True)
+    except (RuntimeError, ImportError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     words = [w for s in segs for w in (s.words or [])]
     print("language %s, %d words" % (getattr(info, "language", lang), len(words)))
     cues, cur = [], []

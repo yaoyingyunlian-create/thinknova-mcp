@@ -1,0 +1,78 @@
+{
+  "film": true,
+  "out": "门店成片.mp4",
+  "speech_language": "zh",
+  "font_size": 90,
+  "clips": [
+    {
+      "beat": "开场",
+      "file": "素材/镜头1.mp4",
+      "start": 0,
+      "dur": 4,
+      "subs": [
+        "开场钩子"
+      ]
+    },
+    {
+      "beat": "问题",
+      "file": "素材/镜头2.mp4",
+      "start": 0,
+      "dur": 5,
+      "subs": [
+        "客户的难题"
+      ]
+    },
+    {
+      "beat": "过程",
+      "file": "素材/镜头3.mp4",
+      "start": 0,
+      "dur": 4,
+      "subs": [
+        "看看怎么做"
+      ]
+    },
+    {
+      "beat": "过程",
+      "file": "素材/镜头4.mp4",
+      "start": 0,
+      "dur": 4,
+      "subs": [
+        "关键步骤"
+      ]
+    },
+    {
+      "beat": "卖点",
+      "file": "素材/镜头5.mp4",
+      "start": 0,
+      "dur": 5,
+      "subs": [
+        "这点很重要"
+      ]
+    },
+    {
+      "beat": "证据",
+      "file": "素材/镜头6.mp4",
+      "start": 0,
+      "dur": 4,
+      "subs": [
+        "真实的证据"
+      ]
+    },
+    {
+      "beat": "收尾",
+      "file": "素材/镜头7.mp4",
+      "start": 0,
+      "dur": 4,
+      "subs": [
+        "下一步怎么做"
+      ]
+    }
+  ],
+  "end_card": {
+    "dur": 2,
+    "lines": [
+      "门店名称",
+      "下一步行动"
+    ]
+  }
+}

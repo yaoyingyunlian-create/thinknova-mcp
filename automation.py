@@ -14,10 +14,9 @@ import shutil
 import subprocess
 import sys
 import time
-import urllib.parse
-import urllib.request
 from local_state import state_lock, LocalStateBusy
-from automation_client import Client, NoRedirect
+from automation_client import Client
+from media_download import download, validate_media
 import secure_state
 from generation_quality import prepare_prompt
 
@@ -89,23 +88,6 @@ def make_plan(directory: Path, rules: dict) -> dict:
         if len(prepared) > 3500: raise RuntimeError('QUALITY_PROMPT_TOO_LONG')
         shot['prompt'] = prepared
     return validate_plan(plan)
-
-
-def download(url: str, path: Path):
-    parsed=urllib.parse.urlsplit(url)
-    if parsed.scheme!='https' or parsed.hostname!='api.thinknova.top' or parsed.username or parsed.password:raise RuntimeError('UNSAFE_DELIVERY_URL')
-    if not re.fullmatch(r'/api/v1/assets/asset_[A-Za-z0-9]+/media',parsed.path):raise RuntimeError('UNSAFE_DELIVERY_URL')
-    query=[(k,v) for k,v in urllib.parse.parse_qsl(parsed.query,keep_blank_values=True) if k!='download']+[('download','1')]
-    url=urllib.parse.urlunsplit((parsed.scheme,parsed.netloc,parsed.path,urllib.parse.urlencode(query),''))
-    request=urllib.request.Request(url,headers={'User-Agent':'ThinkNova-Controlled-Runner/1.0'})
-    with urllib.request.build_opener(NoRedirect()).open(request,timeout=60) as response, path.with_suffix('.tmp').open('wb') as stream:
-        if not response.headers.get('Content-Type','').lower().startswith(('video/','application/octet-stream')):raise RuntimeError('INVALID_DELIVERY_TYPE')
-        total=0
-        while chunk:=response.read(1024*1024):
-            total+=len(chunk)
-            if total>256*1024*1024:raise RuntimeError('DELIVERY_TOO_LARGE')
-            stream.write(chunk)
-    os.replace(path.with_suffix('.tmp'),path)
 
 
 def compose(directory: Path, count: int, progress=lambda: None) -> Path:
@@ -192,11 +174,17 @@ def execute(client: Client, claim: dict):
                 if time.monotonic()>deadline:raise RuntimeError('GENERATION_STILL_RUNNING')
                 checkpoint();time.sleep(20)
             path=directory/f'shot{index}.mp4'
-            if not path.exists():
+            cached = path.is_file()
+            if cached:
+                try:
+                    validate_media(path)
+                except RuntimeError:
+                    cached = False
+            if not cached:
                 result=client.tool('get_result',{'task_id':steps[key]})
                 assets=[a for a in result.get('assets',[]) if a.get('type')=='video']
                 if not assets:raise RuntimeError('VIDEO_DELIVERY_MISSING')
-                download(assets[0]['download_url'],path)
+                download(assets[0]['download_url'], path, task_id=steps[key])
             steps['stage']='speech_review';checkpoint()
             review_spoken_terms(path, shot['prompt'])
         steps['stage']='render';checkpoint()

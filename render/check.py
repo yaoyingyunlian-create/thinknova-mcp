@@ -5,6 +5,7 @@
     python check.py final.mp4 --srt final.srt               # also check subtitle lines
     python check.py final.mp4 --sheet out_dir                # also write a 1-frame-per-second contact sheet
     python check.py final.mp4 --speech --lang en             # also transcribe and find long gaps without speech
+    python check.py final.mp4 --film --outro-start 29 --lang zh
 
 Options (defaults suit vertical short video):
     --width 1080 --height 1920   expected resolution (other vertical sizes = WARN, landscape = FAIL)
@@ -79,8 +80,8 @@ def get_opts(argv):
          "--lufs": "-14", "--lufs-tol": "2", "--max-tp": "-1", "--max-silence-pct": "10",
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
-         "--sheet": None, "--lang": None, "--model": "small"}
-    flags = {"--speech", "--allow-silent"}
+         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None}
+    flags = {"--speech", "--allow-silent", "--film"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -197,14 +198,19 @@ def s3_audio(ff, path, dur, o):
 
 # S4 ---------------------------------------------------------------------------
 def s4_cuts(ff, path, dur, o):
-    need = int(o["--min-cuts"])
+    need = 6 if o.get("film") else int(o["--min-cuts"])
     if need <= 0:
         return
-    _, err = run([ff, "-v", "info", "-i", path, "-vf", "select='gt(scene,0.3)',showinfo", "-f", "null", "-"])
+    result = subprocess.run([ff, "-v", "info", "-i", path, "-vf", "select='gt(scene,0.3)',showinfo",
+                             "-f", "null", "-"], capture_output=True)
+    if result.returncode and o.get("film"):
+        fail("FILM_CUT_CHECK_FAILED", "could not detect cuts")
+        return
+    err = result.stderr.decode("utf-8", "replace")
     cuts = err.count("pts_time:")
     INFO.append("scene changes detected: %d (threshold scene>0.3)" % cuts)
     if cuts < need:
-        warn("S4", "only %d scene change(s); a single static shot rarely holds attention (min %d)" % (cuts, need))
+        (fail if o.get("film") else warn)("S4", "only %d scene change(s); a single static shot rarely holds attention (min %d)" % (cuts, need))
     elif dur and cuts / dur < 0.12:
         warn("S4b", "low cut density %.2f per second" % (cuts / dur))
 
@@ -242,38 +248,49 @@ def s5_subs(srt, o):
 
 
 # S6 ---------------------------------------------------------------------------
-def s6_speech(ff, path, dur, o, tmp_dir):
+def speech_gaps(words, end):
+    cursor = 0.0
+    gaps = []
+    for word in sorted(words, key=lambda word: word.start):
+        if word.start >= end:
+            break
+        if word.end <= 0:
+            continue
+        if word.start > cursor:
+            gaps.append((cursor, word.start))
+        cursor = max(cursor, min(end, word.end))
+    if end > cursor:
+        gaps.append((cursor, end))
+    return gaps
+
+
+def s6_speech(ff, path, dur, o):
+    from speech_review import recognize
+    film = o.get("film")
     try:
-        from faster_whisper import WhisperModel
-    except ImportError:
-        warn("S6", "--speech needs: pip install faster-whisper")
+        segments, _ = recognize(path, o["--model"], o["--lang"], ff,
+                                word_timestamps=True, vad_filter=True)
+    except (RuntimeError, ImportError) as exc:
+        (fail if film else warn)("SPEECH_CHECK_PENDING", str(exc))
         return
-    os.makedirs(tmp_dir, exist_ok=True)
-    wav = os.path.join(tmp_dir, "_speech.wav")
-    subprocess.run([ff, "-v", "error", "-y", "-i", path, "-vn", "-ac", "1", "-ar", "16000", wav], check=True)
-    model = WhisperModel(o["--model"], device="cpu", compute_type="int8")
-    segs, _ = model.transcribe(wav, language=o["--lang"], word_timestamps=True, vad_filter=True)
-    words = [w for s in segs for w in (s.words or [])]
+    words = [word for segment in segments for word in (segment.words or []) if word.word.strip()]
     INFO.append("speech: %d words transcribed" % len(words))
+    if film:
+        worst = max(speech_gaps(words, o["outro_start"]), key=lambda gap: gap[1] - gap[0], default=(0, 0))
+        if not words or worst[1] - worst[0] > 2:
+            fail("FILM_SPEECH_GAP", "no recognized speech for %.2fs before outro (%.2f–%.2fs)" %
+                 (worst[1] - worst[0], *worst))
+        return
     if not words:
         warn("S6", "no speech detected")
         return
-    gaps, prev = [], 0.0
-    for w in words:
-        if w.start - prev > 0:
-            gaps.append((prev, w.start, w.start - prev))
-        prev = max(prev, w.end)
-    tail = dur - prev
-    worst = max(gaps, key=lambda g: g[2]) if gaps else (0, 0, 0)
-    INFO.append("longest gap without speech %.2fs (%.1f-%.1f) | after last word %.2fs" % (worst[2], worst[0], worst[1], tail))
-    if worst[2] > float(o["--max-gap"]):
-        warn("S6a", "%.2fs without speech at %.1f-%.1fs (limit %ss)" % (worst[2], worst[0], worst[1], o["--max-gap"]))
-    if tail > float(o["--max-tail"]):
-        warn("S6b", "%.2fs after the last spoken word (limit %ss)" % (tail, o["--max-tail"]))
-    try:
-        os.remove(wav)
-    except Exception:
-        pass
+    spoken_end = max(word.end for word in words)
+    worst = max(speech_gaps(words, spoken_end), key=lambda gap: gap[1] - gap[0], default=(0, 0))
+    if worst[1] - worst[0] > float(o["--max-gap"]):
+        warn("S6a", "%.2fs without speech at %.1f-%.1fs (limit %ss)" %
+             (worst[1] - worst[0], *worst, o["--max-gap"]))
+    if dur - spoken_end > float(o["--max-tail"]):
+        warn("S6b", "%.2fs after the last spoken word (limit %ss)" % (dur - spoken_end, o["--max-tail"]))
 
 
 def contact_sheet(ff, path, dur, out_dir):
@@ -322,14 +339,25 @@ def main():
         print("ffprobe could not read the file.")
         return 1
     dur = s1_spec(meta, o)
+    o["film"] = "--film" in on
+    if o["film"]:
+        if not 30 <= dur <= 40:
+            fail("FILM_DURATION", "duration %.2fs is outside 30–40s" % dur)
+        try:
+            o["outro_start"] = float(o["--outro-start"])
+        except (TypeError, ValueError):
+            o["outro_start"] = 0
+        if not 0 < o["outro_start"] < dur:
+            fail("FILM_OUTRO_REQUIRED", "pass the actual outro start in seconds")
+            o["outro_start"] = dur
     s2_opening(ff, path)
     o["allow_silent"] = "--allow-silent" in on
     s3_audio(ff, path, dur, o)
     s4_cuts(ff, path, dur, o)
     if o["--srt"]:
         s5_subs(o["--srt"], o)
-    if "--speech" in on:
-        s6_speech(ff, path, dur, o, o["--sheet"] or os.path.dirname(os.path.abspath(path)))
+    if "--speech" in on or o["film"]:
+        s6_speech(ff, path, dur, o)
     if o["--sheet"]:
         os.makedirs(o["--sheet"], exist_ok=True)
         contact_sheet(ff, path, dur, o["--sheet"])

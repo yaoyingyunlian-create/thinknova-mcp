@@ -140,3 +140,10 @@ The runner currently gates only shots whose plan contains 小程序: local ASR r
 - 自动化的新计划必须显式记录 first_frame_asset_id。存在已授权素材或正向参考、但未选定本镜头首帧时，停止并报告 REFERENCE_FIRST_FRAME_REQUIRED。由用户确定首帧后再安排新计划。已有计划继续按原工具和请求参数处理。
 - For a new image guided by authorized references, use edit_image with selected reference_asset_ids. Use animate_image with the actual intended first frame first. A character sheet or style sample only guides first-frame creation. An allowlist grants permission, not a first-frame assignment.
 - New unattended plans record first_frame_asset_id. With references configured and no designated frame, report REFERENCE_FIRST_FRAME_REQUIRED and pause before quoting or creating tasks. Keep the chosen tool and arguments identical for the quote and creation, and retain legacy saved plans for idempotent retries.
+
+## 门店成片默认流程 / Store film workflow
+
+- 制作客户门店视频前先读 skills/门店成片/SKILL.md，复制六拍拼片模板到客户工作目录，按已有素材、规则和授权填写。门店样片使用 film 模式完成 30–40 秒成片后再送审。只把通过机器检查的成片列入待审核清单。
+- 生成后提醒客户检查完整视频和各平台的标题、正文、标签、封面、账号、发布时间。用 publish/dispatch.py 的 --dry 获取各平台清单和哈希。只有客户确认该版本后才用 --approve-review HASH --user-confirmed 登记。每次开工先检查上次待审清单并提醒，修改内容后重新审核。自动发布需要单独授权。
+- Mac 转写由 FFmpeg 解码后交给本机 Whisper。需要本地语音模型缓存。模型缺失或音频解码失败时记录待处理。
+- For store videos read the store-film skill and use the six-beat template. Run the film gate, then present the complete video and per-platform dispatch manifests for customer review. Remind customers of outstanding reviews at the next session. Record explicit approval of each manifest hash. A changed artifact or publishing payload requires review again. Automatic publication requires a separate authorization.

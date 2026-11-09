@@ -27,14 +27,36 @@ def ensure_runtime(model_name='small'):
     return WhisperModel(model_name, device='cpu', compute_type='int8', local_files_only=True)
 
 
-def transcribe(path, model_name='small', language='zh'):
-    # Decode through FFmpeg: avoids incompatible PyAV metadata_errors APIs.
+def decode_audio(path, ffmpeg=None):
     import numpy as np
-    data = subprocess.run(['ffmpeg','-v','error','-i',str(path),'-vn','-ac','1','-ar','16000','-f','f32le','pipe:1'],
-                          check=True, capture_output=True, timeout=120).stdout
-    if not data: raise RuntimeError('SPEECH_AUDIO_MISSING')
-    model = ensure_runtime(model_name)
-    segments, _ = model.transcribe(np.frombuffer(data,dtype=np.float32).copy(),language=language,beam_size=5)
+    import os
+    ffmpeg = ffmpeg or os.getenv('FFMPEG') or 'ffmpeg'
+    try:
+        result = subprocess.run([ffmpeg, '-v', 'error', '-i', str(path), '-vn', '-ac', '1',
+                                 '-ar', '16000', '-f', 'f32le', 'pipe:1'],
+                                check=True, capture_output=True, timeout=120)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError('SPEECH_DECODE_FAILED') from exc
+    if not result.stdout:
+        raise RuntimeError('SPEECH_AUDIO_MISSING')
+    return np.frombuffer(result.stdout, dtype=np.float32).copy()
+
+
+def recognize(path, model_name, language, ffmpeg=None, **options):
+    try:
+        model = ensure_runtime(model_name)
+    except Exception as exc:
+        raise RuntimeError('SPEECH_MODEL_UNAVAILABLE: prepare faster-whisper and the local model cache') from exc
+    audio = decode_audio(path, ffmpeg)
+    try:
+        segments, info = model.transcribe(audio, language=language, **options)
+        return list(segments), info
+    except Exception as exc:
+        raise RuntimeError('SPEECH_TRANSCRIPTION_FAILED: inspect audio and language settings') from exc
+
+
+def transcribe(path, model_name='small', language='zh'):
+    segments, _ = recognize(path, model_name, language, beam_size=5)
     return [{'start':round(segment.start,2),'end':round(segment.end,2),'text':segment.text} for segment in segments]
 
 

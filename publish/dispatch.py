@@ -81,9 +81,45 @@ def duplicate(candidate, history, clock=None):
     return False
 
 
-def dispatch(path, platform, execute=False, confirmed=False):
+def film_review(path, value, approval=None, confirmed=False):
+    video = next((item for item in value['artifacts'] if item['role'] == 'video'), None)
+    receipt = Path(video['file'] + '.film.json') if video else None
+    if not value['job'].get('film') and not (receipt and receipt.exists()):
+        if approval:
+            raise RuntimeError('FILM_REVIEW_NOT_REQUIRED')
+        return None
+    if not receipt or not receipt.is_file():
+        raise RuntimeError('FILM_CHECK_REQUIRED')
+    proof = json.loads(receipt.read_text(encoding='utf-8'))
+    if proof.get('machine_check') != 'pass' or proof.get('sha256') != video['sha256']:
+        raise RuntimeError('FILM_CHECK_REQUIRED')
+    record = path.with_name(f'{path.name}.{value["platform"]}.review.json')
+    signature = value['manifest_sha256']
+    previous = json.loads(record.read_text(encoding='utf-8')) if record.exists() else {}
+    if approval:
+        if not confirmed or approval != signature:
+            raise RuntimeError('FILM_REVIEW_CONFIRMATION_REQUIRED')
+        atomic(record, {'manifest_sha256': signature, 'state': 'approved',
+                        'approved_at': datetime.now(timezone.utc).isoformat()})
+        return 'approved'
+    if previous.get('manifest_sha256') == signature and previous.get('state') == 'approved':
+        return 'approved'
+    atomic(record, {'manifest_sha256': signature, 'state': 'awaiting_review',
+                    'job_path': str(path.resolve()), 'platform': value['platform'],
+                    'target_account': value.get('target_account')})
+    return 'awaiting_review'
+
+
+def dispatch(path, platform, execute=False, confirmed=False, approval=None):
     if platform not in PLATFORMS:raise RuntimeError('PLATFORM_NOT_SUPPORTED')
     value=snapshot(path,platform)
+    review = film_review(path, value, approval, confirmed)
+    if review:
+        value['review_state'] = review
+        if execute and review != 'approved':
+            raise RuntimeError('FILM_REVIEW_REQUIRED')
+    if approval:
+        return value
     script=ROOT/'publish'/platform/('upload.py' if platform=='youtube' else 'publish.py')
     preflight=subprocess.run([sys.executable,str(script),str(path.resolve()),'--dry'],capture_output=True,timeout=120)
     if preflight.returncode:raise RuntimeError('PUBLISHER_LOCAL_PREFLIGHT_FAILED')
@@ -124,9 +160,9 @@ def dispatch(path, platform, execute=False, confirmed=False):
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('job',type=Path);p.add_argument('--platform',choices=PLATFORMS,required=True);m=p.add_mutually_exclusive_group(required=True);m.add_argument('--dry',action='store_true');m.add_argument('--execute',action='store_true');p.add_argument('--user-confirmed',action='store_true');a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('job',type=Path);p.add_argument('--platform',choices=PLATFORMS,required=True);m=p.add_mutually_exclusive_group(required=True);m.add_argument('--dry',action='store_true');m.add_argument('--execute',action='store_true');m.add_argument('--approve-review', metavar='MANIFEST_SHA256');p.add_argument('--user-confirmed',action='store_true');a=p.parse_args()
     try:
-        value=dispatch(a.job,a.platform,a.execute,a.user_confirmed);print(json.dumps(value,ensure_ascii=False));return 0 if value.get('state') in (None,'verified') else 2
+        value=dispatch(a.job,a.platform,a.execute,a.user_confirmed,a.approve_review);print(json.dumps(value,ensure_ascii=False));return 0 if value.get('state') in (None,'verified') else 2
     except Exception as exc:
         code=str(exc) if re.fullmatch('[A-Z0-9_]{1,64}',str(exc)) else 'PUBLICATION_PREFLIGHT_FAILED'
         print(json.dumps({'status':'failed','error':code}));return 2

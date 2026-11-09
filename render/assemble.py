@@ -307,6 +307,12 @@ def validate_job(job):
     def number(value, field, minimum=0):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < minimum:
             raise Stop('INVALID_JOB: %s must be a finite number >= %s' % (field, minimum))
+    if 'film' in job and not isinstance(job['film'], bool):
+        raise Stop('INVALID_JOB: film must be boolean')
+    if job.get('film') and (not isinstance(job.get('end_card'), dict) or not job['end_card'].get('lines')):
+        raise Stop('FILM_OUTRO_REQUIRED: supply a closing card with text')
+    if 'speech_language' in job and not isinstance(job['speech_language'], str):
+        raise Stop('INVALID_JOB: speech_language must be text')
     for index, clip in enumerate(job['clips']):
         prefix = 'clips[%d]' % index
         if not isinstance(clip, dict) or not isinstance(clip.get('file'), str) or not clip['file']:
@@ -345,7 +351,8 @@ def main():
     ff, fp = tool("ffmpeg"), tool("ffprobe")
     out = resolve(base, job["out"])
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    targets = [out, os.path.splitext(out)[0] + '.srt', os.path.splitext(out)[0] + '_sheet.jpg']
+    film_receipt = out + '.film.json'
+    targets = [out, os.path.splitext(out)[0] + '.srt', os.path.splitext(out)[0] + '_sheet.jpg', film_receipt]
     if not overwrite and any(os.path.exists(p) for p in targets): raise Stop('OUTPUT_EXISTS: use --overwrite to replace existing artifacts')
     for clip in job['clips']:
         for key in ('file', 'voice'):
@@ -378,6 +385,11 @@ def main():
             if not cues or any(not (0 <= c['start'] < c['end'] <= t + 0.05) for c in cues):
                 raise Stop('INVALID_SUBTITLE_TIMELINE: cues must fit the finished video')
 
+        if job.get('film') and job.get('font_size') == 90:
+            for index, cue in enumerate(cues, 1):
+                if len(re.sub(r'\s+', '', cue['text'])) > 9:
+                    raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds 9 characters', 2)
+
         print("Joining %d parts, %.1f s ..." % (len(parts), t))
         lst = os.path.join(wk, "list.txt")
         with io.open(lst, "w", encoding="utf-8") as f:
@@ -408,22 +420,44 @@ def main():
         STAGE = "check"
         print("Checking ...")
         cmd = [sys.executable, os.path.join(HERE, 'check.py'), out, '--sheet', wk, '--ffmpeg', ff, '--ffprobe', fp, '--allow-silent']
+        if job.get('film'):
+            cmd += ['--film', '--outro-start', str(card_span[0])]
+            if job.get('speech_language'):
+                cmd += ['--lang', job['speech_language']]
         if srt: cmd += ['--srt', srt]
         if job.get('max_dur'): cmd += ['--max-dur', str(job['max_dur'])]
         checked=subprocess.run(cmd,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
         print(checked.stdout,file=sys.stderr)
         if checked.stderr: print(checked.stderr,file=sys.stderr)
-        if checked.returncode != 0: raise Stop('CHECK_FAILED: do not publish this file', 2)
+        if checked.returncode != 0:
+            if 'SPEECH_CHECK_PENDING' in checked.stdout:
+                raise Stop('SPEECH_CHECK_PENDING: prepare the local speech model and recheck', 2)
+            raise Stop('CHECK_FAILED: do not publish this file', 2)
         warnings=[{'code':code,'message':message} for code,message in re.findall(r'^  \[([^]]+)\] (.+)$',checked.stdout,re.M)]
         sheet = os.path.splitext(out)[0] + '_sheet.jpg'
         if not os.path.isfile(sheet): raise Stop('CONTACT_SHEET_FAILED: no visual review artifact', 2)
+        receipt = None
+        if job.get('film'):
+            import hashlib
+            receipt = os.path.join(wk, 'film.json')
+            with open(out, 'rb') as stream:
+                digest = hashlib.sha256(stream.read()).hexdigest()
+            with open(receipt, 'w', encoding='utf-8') as stream:
+                json.dump({'sha256': digest, 'state': 'awaiting_review', 'machine_check': 'pass',
+                           'outro_start': card_span[0]}, stream)
         os.replace(out, final_out)
+        if receipt:
+            os.replace(receipt, film_receipt)
+        elif overwrite and os.path.isfile(film_receipt):
+            os.remove(film_receipt)
         if srt: os.replace(srt, os.path.splitext(final_out)[0] + '.srt')
         elif overwrite and os.path.isfile(os.path.splitext(final_out)[0]+'.srt'): os.remove(os.path.splitext(final_out)[0]+'.srt')
         os.replace(sheet, os.path.splitext(final_out)[0] + '_sheet.jpg')
         result = {'status': 'succeeded', 'output': final_out, 'duration_seconds': t,
                   'width': W, 'height': H, 'fps': FPS, 'machine_check': 'pass',
                   'visual_review': 'pending', 'warnings':warnings, 'contact_sheet':os.path.splitext(final_out)[0]+'_sheet.jpg', 'subtitle_timing': 'provided' if job.get('srt') else ('estimated' if cues else 'not_applicable')}
+        if receipt:
+            result.update(delivery_state='awaiting_review', film_receipt=film_receipt)
         emit(result)
         return 0
     finally:
