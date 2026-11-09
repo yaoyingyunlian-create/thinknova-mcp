@@ -131,3 +131,12 @@ Automatic update policy / 自动更新：每次开工检查官方GitHub仓库，
 
 自动化当前仅对计划中出现“小程序”的镜头启用术语拦截：收费前检查本机ASR缓存，下载后输出绑定文件SHA-256的本地报告。缺环境或术语不匹配转待处理，不进入发布、不收费重抽。ASR匹配不是发音保证；其他词须主动用--required配置检查。手部结构目前由AI/人工目视审核，未实现自动检测。
 The runner currently gates only shots whose plan contains 小程序: local ASR readiness is checked before paid creation, then a file-hash-bound transcript report is saved after download. Missing runtime or a term mismatch pauses publication without paid retries. ASR agreement is not pronunciation verification. Other terms require explicit --required checks; anatomy still requires visual review, not an automatic detector.
+
+
+### 参考图参与生成 / Route reference images into generation
+
+- 先确认素材在本镜头的用途。指定角色、产品或场景参考且需要生成新画面时，调用 edit_image，并通过 reference_asset_ids 传入选中的授权图片。不要只把图片内容写成文字后走 generate_image。纯文本出图适用于无需参考的画面。
+- 生成首帧并核对后，用 animate_image 生成视频，实际首帧放在首位。如果规则限制了素材白名单，请先让用户确认授权这张新首帧，再更新规则。只有设定图或风格样例时先做首帧，不能把它们直接当首帧。
+- 自动化的新计划必须显式记录 first_frame_asset_id。存在已授权素材或正向参考、但未选定本镜头首帧时，停止并报告 REFERENCE_FIRST_FRAME_REQUIRED。由用户确定首帧后再安排新计划。已有计划继续按原工具和请求参数处理。
+- For a new image guided by authorized references, use edit_image with selected reference_asset_ids. Use animate_image with the actual intended first frame first. A character sheet or style sample only guides first-frame creation. An allowlist grants permission, not a first-frame assignment.
+- New unattended plans record first_frame_asset_id. With references configured and no designated frame, report REFERENCE_FIRST_FRAME_REQUIRED and pause before quoting or creating tasks. Keep the chosen tool and arguments identical for the quote and creation, and retain legacy saved plans for idempotent retries.

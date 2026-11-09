@@ -5,7 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import automation
 import health
 import secure_state
@@ -61,6 +61,33 @@ class ControlledPlanTests(unittest.TestCase):
     def test_plan_requires_bounded_shots(self):
         for shots in ([],[{'prompt':'A'}]*5,[{'prompt':''}]):
             with self.assertRaises(RuntimeError):automation.validate_plan({'title':'A','description':'B','shots':shots})
+
+    def test_reference_route_preserves_legacy_and_rejects_unselected_frame(self):
+        rules = {'authorized_asset_ids': ['asset_A']}
+        self.assertEqual(automation.shot_tool({'prompt': 'old'}, rules), ('generate_video', {}))
+        self.assertEqual(automation.shot_tool({'prompt': 'new', 'first_frame_asset_id': None}, {}), ('generate_video', {}))
+        with self.assertRaisesRegex(RuntimeError, 'REFERENCE_FIRST_FRAME_REQUIRED'):
+            automation.shot_tool({'first_frame_asset_id': None}, rules)
+        with self.assertRaisesRegex(RuntimeError, 'FIRST_FRAME_NOT_AUTHORIZED'):
+            automation.shot_tool({'first_frame_asset_id': 'asset_B'}, rules)
+
+    def test_first_frame_used_by_quote_and_creation(self):
+        run_no = 'run_' + 'a' * 24
+        rules = {'version': 1, 'effective_rules': {'authorized_asset_ids': ['asset_A']}}
+        plan = {'title': 'A', 'description': 'B', 'shots': [{'prompt': 'Pan right', 'first_frame_asset_id': 'asset_A'}]}
+        balance = {'generation_available': True, 'available_credits': 100, 'quote_mode_supported': True}
+        quote = {'generation_quote': {'quote_only': True, 'creates_task': False, 'reserves_credits': False, 'estimated_credits': 8}}
+        client = Mock()
+        client.tool.side_effect = [rules, balance, quote, RuntimeError('TEST_STOP')]
+        with tempfile.TemporaryDirectory() as folder, patch.object(automation, 'STATE', Path(folder)), patch.object(
+            automation, 'connected_report', return_value={'automation_ready': True}
+        ), patch.object(automation, 'make_plan', return_value=plan):
+            with self.assertRaisesRegex(RuntimeError, 'TEST_STOP'):
+                automation.execute(client, {'run_no': run_no, 'grant': {'rules_version': 1}})
+        request = client.tool.call_args_list[2].args[1]['quote_request']
+        self.assertEqual(request['tool'], 'animate_image')
+        self.assertEqual(request['arguments']['reference_asset_ids'], ['asset_A'])
+        self.assertEqual(client.tool.call_args_list[3].args, ('animate_image', {**request['arguments'], 'max_credits': 8}))
 
     def test_delivery_refuses_untrusted_urls(self):
         for url in ('http://api.thinknova.top/video','https://evil.example/video','https://secret@api.thinknova.top/file'):

@@ -37,8 +37,27 @@ def validate_plan(value: dict) -> dict:
     if not isinstance(value['title'],str) or not 1<=len(value['title'])<=100 or not isinstance(value['description'],str) or len(value['description'])>4000:raise RuntimeError('INVALID_CONTENT_PLAN')
     if not isinstance(value['shots'],list) or not 1<=len(value['shots'])<=4:raise RuntimeError('INVALID_CONTENT_PLAN')
     for shot in value['shots']:
-        if not isinstance(shot,dict) or set(shot)!={'prompt'} or not isinstance(shot['prompt'],str) or not 1<=len(shot['prompt'])<=3500:raise RuntimeError('INVALID_CONTENT_PLAN')
+        if not isinstance(shot,dict) or set(shot) not in ({'prompt'}, {'prompt', 'first_frame_asset_id'}) or not isinstance(shot['prompt'],str) or not 1<=len(shot['prompt'])<=3500:raise RuntimeError('INVALID_CONTENT_PLAN')
+        first_frame = shot.get('first_frame_asset_id')
+        if first_frame is not None and (not isinstance(first_frame, str) or not re.fullmatch(r'asset_[A-Za-z0-9]+', first_frame) or len(first_frame) > 64):
+            raise RuntimeError('INVALID_FIRST_FRAME_ASSET')
     return value
+
+
+def shot_tool(shot, rules):
+    first_frame = shot.get('first_frame_asset_id')
+    authorized = set(rules.get('authorized_asset_ids') or [])
+    style = rules.get('style_profile') or {}
+    positive = style.get('positive_references') or []
+    negative = {reference.get('asset_id') for reference in (style.get('negative_references') or [])}
+    candidates = authorized or {reference.get('asset_id') for reference in positive}
+    if first_frame:
+        if first_frame not in candidates or first_frame in negative:
+            raise RuntimeError('FIRST_FRAME_NOT_AUTHORIZED')
+        return 'animate_image', {'reference_asset_ids': [first_frame]}
+    if 'first_frame_asset_id' in shot and (authorized or positive):
+        raise RuntimeError('REFERENCE_FIRST_FRAME_REQUIRED')
+    return 'generate_video', {}
 
 
 def run_command(args: list[str], cwd: Path, timeout=300, stdout=None):
@@ -53,6 +72,9 @@ def make_plan(directory: Path, rules: dict) -> dict:
     output=directory/'plan.json'
     # Only a constrained content plan is consumed. No model-provided commands or paths.
     prompt='Create one YouTube video content plan matching these account rules. For ordinary human characters require anatomically natural hands, five fingers per fully visible hand, no extra or fused digits/limbs, and simple stable gestures. This does not certify generated anatomy. If the spoken script contains 小程序, add the pronunciation instruction 小程序 = xiǎo chéng xù; keep displayed text unchanged, do not speak the pinyin. Require listening and visual review for suspected defects before release. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
+    prompt += (' For each shot set first_frame_asset_id to the exact ThinkNova asset ID only when the account rules explicitly identify '
+               'that image as the intended starting frame for the shot. Authorization alone is insufficient. '
+               'Never substitute a character sheet, style sample, negative reference or external URL. Use null if no such frame is designated.')
     command=[codex,'exec','--ignore-user-config','--ephemeral','--sandbox','read-only','--skip-git-repo-check','-C',str(directory),'--output-schema',str(ROOT/'automation_plan.schema.json'),'--output-last-message',str(output),'-']
     # Do not inherit device/platform tokens through subprocess environment.
     env={k:v for k,v in os.environ.items() if not any(s in k.upper() for s in ('TOKEN','SECRET','PASSWORD','YT_','THINKNOVA_'))}
@@ -62,6 +84,7 @@ def make_plan(directory: Path, rules: dict) -> dict:
     if result.returncode or not output.is_file():raise RuntimeError('CODEX_PLAN_FAILED')
     plan = validate_plan(json.loads(output.read_text(encoding='utf-8')))
     for shot in plan['shots']:
+        shot.setdefault('first_frame_asset_id', None)
         prepared = prepare_prompt(shot['prompt'], 'video')
         if len(prepared) > 3500: raise RuntimeError('QUALITY_PROMPT_TOO_LONG')
         shot['prompt'] = prepared
@@ -139,6 +162,7 @@ def execute(client: Client, claim: dict):
         steps['stage']='planning';checkpoint()
         if plan_path.exists():plan=validate_plan(json.loads(plan_path.read_text(encoding='utf-8')))
         else:plan=make_plan(directory,rules['effective_rules']);atomic(plan_path,plan)
+        routes = [shot_tool(shot, rules['effective_rules']) for shot in plan['shots']]
         steps['stage']='generation'
         if any('小程序' in shot['prompt'] for shot in plan['shots']):
             try:
@@ -150,14 +174,15 @@ def execute(client: Client, claim: dict):
             key=f'task_{index}'
             if key not in steps:
                 checkpoint()
-                arguments={'prompt':shot['prompt'],'client_request_id':f'{run_no}:shot:{index}','automation_run_id':run_no}
+                tool, reference_args = routes[index]
+                arguments={**reference_args,'prompt':shot['prompt'],'client_request_id':f'{run_no}:shot:{index}','automation_run_id':run_no}
                 quote_key=f'quote_credits_{index}'
                 if quote_key in steps:
                     arguments['max_credits']=int(steps[quote_key])
                 else:
-                    arguments=quoted_generation_args(client,'generate_video',arguments,balance)
+                    arguments=quoted_generation_args(client,tool,arguments,balance)
                     steps[quote_key]=str(arguments['max_credits']);checkpoint()
-                created=client.tool('generate_video',arguments)
+                created=client.tool(tool,arguments)
                 steps[key]=created['task_id'];checkpoint()
             deadline=time.monotonic()+900
             while True:

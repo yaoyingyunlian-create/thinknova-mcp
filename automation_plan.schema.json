@@ -3,6 +3,6 @@
   "properties":{
     "title":{"type":"string","minLength":1,"maxLength":100},
     "description":{"type":"string","maxLength":4000},
-    "shots":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"object","additionalProperties":false,"required":["prompt"],"properties":{"prompt":{"type":"string","minLength":1,"maxLength":3500}}}}
+    "shots":{"type":"array","minItems":1,"maxItems":4,"items":{"type":"object","additionalProperties":false,"required":["prompt","first_frame_asset_id"],"properties":{"prompt":{"type":"string","minLength":1,"maxLength":3500},"first_frame_asset_id":{"type":["string","null"],"pattern":"^asset_[A-Za-z0-9]+$","maxLength":64}}}}
   }
 }
