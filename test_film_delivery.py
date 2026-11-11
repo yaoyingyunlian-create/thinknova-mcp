@@ -49,6 +49,14 @@ class DownloadTests(unittest.TestCase):
         self.run_download([Response(b'abcd', 4)])
         self.run_download([HTTPError(self.url, 500, '', {}, None), Response(b'abcd', 4)])
 
+    def test_managed_redirect_and_500_fallback(self):
+        target = 'https://thinknova-previews.oss-ap-southeast-1.aliyuncs.com/generated-assets/fixture.mp4?Signature=hidden'
+        redirect = HTTPError(self.url, 302, '', {'Location': target}, io.BytesIO())
+        opener = self.run_download([HTTPError(self.url, 500, '', {}, None), redirect, Response(b'abcd', 4)])
+        self.assertNotIn('download=1', opener.open.call_args_list[1].args[0].full_url)
+        self.assertEqual(opener.open.call_args.args[0].full_url, target)
+        invalid = HTTPError(self.url, 302, '', {'Location': 'https://example.com/generated-assets/file.mp4?x=1'}, io.BytesIO())
+        self.run_download([invalid], 'UNSAFE_DELIVERY_REDIRECT')
     def test_short_response_resumes_and_checks_range(self):
         opener = self.run_download([Response(b'ab', 4), Response(b'cd', 2, 206, 'bytes 2-3/4')])
         self.assertEqual(opener.open.call_args.args[0].get_header('Range'), 'bytes=2-')

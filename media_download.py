@@ -9,7 +9,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from automation_client import NoRedirect
+class MediaRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
 
 MAX_BYTES = 256 * 1024 * 1024
 
@@ -23,6 +25,22 @@ def validate_media(path):
         raise RuntimeError('DELIVERY_DECODE_FAILED') from exc
 
 
+def open_media(opener, url, headers):
+    try:
+        return opener.open(urllib.request.Request(url, headers=headers), timeout=60)
+    except urllib.error.HTTPError as exc:
+        if exc.code not in (302, 303, 307, 308):
+            raise
+        target = exc.headers.get('Location', '')
+        exc.close()
+        destination = urllib.parse.urlsplit(target)
+        if (destination.scheme != 'https'
+                or destination.netloc != 'thinknova-previews.oss-ap-southeast-1.aliyuncs.com'
+                or not destination.path.startswith('/generated-assets/')
+                or not destination.query):
+            raise RuntimeError('UNSAFE_DELIVERY_REDIRECT') from None
+    return opener.open(urllib.request.Request(target, headers=headers), timeout=60)
+
 def download(url: str, path: Path, task_id=None):
     parsed = urllib.parse.urlsplit(url)
     asset = re.fullmatch(r'/api/v1/assets/(asset_[A-Za-z0-9]+)/media', parsed.path)
@@ -31,13 +49,14 @@ def download(url: str, path: Path, task_id=None):
         raise RuntimeError('UNSAFE_DELIVERY_URL')
     query = [(key, value) for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
              if key != 'download']
+    direct_url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path, urllib.parse.urlencode(query), ''))
     url = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, parsed.path,
                                   urllib.parse.urlencode(query + [('download', '1')]), ''))
     partial = path.with_suffix('.part')
     failure = path.with_suffix('.download-error.json')
     partial.unlink(missing_ok=True)
     total = None
-    opener = urllib.request.build_opener(NoRedirect())
+    opener = urllib.request.build_opener(MediaRedirectHandler())
     evidence = {'task_id': task_id, 'asset_id': asset.group(1), 'attempts': []}
     try:
         for attempt in range(3):
@@ -48,7 +67,7 @@ def download(url: str, path: Path, task_id=None):
             row = {'status': None, 'declared_bytes': total, 'received_bytes': start, 'request_id': None}
             evidence['attempts'].append(row)
             try:
-                with opener.open(urllib.request.Request(url, headers=headers), timeout=60) as response:
+                with open_media(opener, url, headers) as response:
                     row.update(status=response.status, request_id=response.headers.get('X-Request-ID'))
                     if not response.headers.get('Content-Type', '').lower().startswith(('video/', 'application/octet-stream')):
                         raise RuntimeError('INVALID_DELIVERY_TYPE')
@@ -99,10 +118,12 @@ def download(url: str, path: Path, task_id=None):
                 return
             except urllib.error.HTTPError as exc:
                 row.update(status=exc.code, request_id=exc.headers.get('X-Request-ID'))
-                exc.close()
+                if exc.fp is not None:
+                    exc.close()
                 if exc.code != 500:
                     raise RuntimeError(f'DELIVERY_HTTP_{exc.code}') from None
                 row['error'] = 'DELIVERY_HTTP_500'
+                url = direct_url
             except (OSError, http.client.HTTPException):
                 row['error'] = 'DELIVERY_INTERRUPTED'
         raise RuntimeError(evidence['attempts'][-1]['error'])

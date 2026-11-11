@@ -1,6 +1,6 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.6",
-  "revision": "b6346f37e391beba6fe75d41d01cd94d23db0e4f37c52205435c28f9c38a3c83",
+  "revision": "430d1d162715aaaf24a2a6d34f64418f5972908328e553e18368978a622afb01",
   "files": [
     {
       "path": ".gitignore",
@@ -76,7 +76,7 @@
     },
     {
       "path": "media_download.py",
-      "sha256": "e5ddc1c5fa431ec3c0990737aaae28c0915d72e1a886a23ab4a7f51ede5da7c9"
+      "sha256": "526ca035b65ad044e17f066077c5bc4e443724faf6a5a050d3161b2a626ffe55"
     },
     {
       "path": "memory.template.md",
@@ -308,7 +308,7 @@
     },
     {
       "path": "test_film_delivery.py",
-      "sha256": "0f28f4495cb215e37da3d864989777277c54ce746d9224d54f5f0ea8abbe8010"
+      "sha256": "207be51a72b1ea2440b5d7524786a1e7b7aa03605859b8371c1ba2e42261059b"
     },
     {
       "path": "test_local_workflow.py",
