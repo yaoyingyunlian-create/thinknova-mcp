@@ -24,7 +24,11 @@ MANIFEST = ROOT / "manifest.json"
 JOB_NAME = "thinknova-toolkit-metrics"
 
 
-def sha256(path: Path) -> str:
+def sha256(path: Path, normalize_text: bool = False) -> str:
+    if normalize_text and (path.name == ".gitignore" or path.suffix in {
+        ".html", ".json", ".md", ".ps1", ".py", ".sh", ".txt",
+    }):
+        return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
@@ -104,7 +108,7 @@ def verify() -> int:
     bad = []
     for entry in manifest.get("files", []):
         path = ROOT / entry.get("path", "")
-        if not path.is_file() or sha256(path) != entry.get("sha256"):
+        if not path.is_file() or sha256(path, normalize_text=manifest.get("text_line_endings") == "lf") != entry.get("sha256"):
             bad.append(str(entry.get("path", "")))
     if bad:
         print("Toolkit verification failed: " + ", ".join(bad), file=sys.stderr)
