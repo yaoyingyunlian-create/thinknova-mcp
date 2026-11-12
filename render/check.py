@@ -265,10 +265,10 @@ def speech_gaps(words, end):
 
 
 def s6_speech(ff, path, dur, o):
-    from speech_review import recognize
+    from speech_review import recognize, speech_pace
     film = o.get("film")
     try:
-        segments, _ = recognize(path, o["--model"], o["--lang"], ff,
+        segments, info = recognize(path, o["--model"], o["--lang"], ff,
                                 word_timestamps=True, vad_filter=True)
     except (RuntimeError, ImportError) as exc:
         (fail if film else warn)("SPEECH_CHECK_PENDING", str(exc))
@@ -276,6 +276,18 @@ def s6_speech(ff, path, dur, o):
     words = [word for segment in segments for word in (segment.words or []) if word.word.strip()]
     INFO.append("speech: %d words transcribed" % len(words))
     if o.get('store_film'):
+        language = (o["--lang"] or info.language).split('-')[0]
+        try:
+            rate = speech_pace(segments, language, o["outro_start"])
+            low, high = (4.0, 5.2) if language == 'zh' else (2.6, 3.0)
+            INFO.append(f"speech pace: {rate:.2f} {'chars/s' if language == 'zh' else 'words/s'}")
+            if not low <= rate <= high:
+                fail('FILM_PACE_OUTSIDE_LIMIT', f'{rate:.2f} outside {low:.1f}–{high:.1f}')
+        except RuntimeError as exc:
+            fail('FILM_PACE_UNAVAILABLE', str(exc))
+        for previous, following in zip(segments, segments[1:]):
+            if following.start < o["outro_start"] and following.start - previous.end > 0.5:
+                fail('FILM_SENTENCE_PAUSE', f'{previous.end:.2f}–{following.start:.2f}s exceeds 0.5s')
         for start, end in speech_gaps(words, o["outro_start"]):
             if end - start > 1:
                 fail('FILM_SPEECH_GAP', f'no recognized speech for {end - start:.2f}s ({start:.2f}–{end:.2f}s)')

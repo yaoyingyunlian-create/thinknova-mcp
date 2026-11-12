@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import unicodedata
 import uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
@@ -46,6 +47,13 @@ def snapshot(path, platform):
     raw=json.loads(Path(path).read_text(encoding='utf-8-sig'))
     validate_variants(raw)
     job=load_job(str(path),platform)
+    if raw.get('marketing_standard') == 'store_v2':
+        from store_editorial import validate_platform_copy
+        bodies = validate_platform_copy(raw.get('platforms') or {}, raw.get('copy_policies'))
+        if platform not in bodies:
+            raise ValueError(f'COPY_FIELDS_REQUIRED: {platform}')
+        job.update(description=bodies[platform], caption=bodies[platform], body=bodies[platform])
+        job.pop('copy_policies', None)
     account=job.get('target_account') or job.get('expected_channel_id') or job.get('page_name')
     if platform=='youtube':
         account=job.get('expected_channel_id') or job.get('target_account')
@@ -121,7 +129,11 @@ def dispatch(path, platform, execute=False, confirmed=False, approval=None):
     if approval:
         return value
     script=ROOT/'publish'/platform/('upload.py' if platform=='youtube' else 'publish.py')
-    preflight=subprocess.run([sys.executable,str(script),str(path.resolve()),'--dry'],capture_output=True,timeout=120)
+    with tempfile.TemporaryDirectory(prefix='thinknova-publish-check-') as directory:
+        validated = Path(directory) / 'job.json'
+        atomic(validated, value['job'])
+        preflight = subprocess.run([sys.executable, str(script), str(validated), '--dry'],
+                                   capture_output=True, timeout=120)
     if preflight.returncode:raise RuntimeError('PUBLISHER_LOCAL_PREFLIGHT_FAILED')
     if not execute:return value
     if not confirmed:raise RuntimeError('PUBLICATION_CONFIRMATION_REQUIRED')
@@ -163,6 +175,14 @@ def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('job',type=Path);p.add_argument('--platform',choices=PLATFORMS,required=True);m=p.add_mutually_exclusive_group(required=True);m.add_argument('--dry',action='store_true');m.add_argument('--execute',action='store_true');m.add_argument('--approve-review', metavar='MANIFEST_SHA256');p.add_argument('--user-confirmed',action='store_true');a=p.parse_args()
     try:
         value=dispatch(a.job,a.platform,a.execute,a.user_confirmed,a.approve_review);print(json.dumps(value,ensure_ascii=False));return 0 if value.get('state') in (None,'verified') else 2
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith('COPY_'):
+            code, _, detail = message.partition(': ')
+            print(json.dumps({'status': 'failed', 'error': code, 'detail': detail}, ensure_ascii=False))
+            return 2
+        print(json.dumps({'status': 'failed', 'error': 'PUBLICATION_PREFLIGHT_FAILED'}))
+        return 2
     except Exception as exc:
         code=str(exc) if re.fullmatch('[A-Z0-9_]{1,64}',str(exc)) else 'PUBLICATION_PREFLIGHT_FAILED'
         print(json.dumps({'status':'failed','error':code}));return 2

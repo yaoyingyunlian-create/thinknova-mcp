@@ -102,6 +102,32 @@ def worker():
 
 
 
+def speech_pace(segments, language, end=None):
+    spans = [segment for segment in segments if segment.text.strip() and (end is None or segment.start < end)]
+    if not spans:
+        raise RuntimeError('FILM_PACE_SPEECH_MISSING')
+    language = (language or '').split('-')[0]
+    if language not in ('zh', 'en'):
+        raise RuntimeError('FILM_PACE_LANGUAGE_UNSUPPORTED')
+    # With timestamps, exclude words belonging to any closing card.
+    words = [word for segment in spans for word in (segment.words or [])
+             if end is None or word.end <= end]
+    text = ' '.join(word.word for word in words) if words else ' '.join(segment.text for segment in spans)
+    count = (len(re.findall(r'[\u3400-\u9fff]', text)) if language == 'zh'
+             else len(re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)?", text)))
+    start = words[0].start if words else spans[0].start
+    stop = words[-1].end if words else spans[-1].end
+    if count == 0 or stop <= start:
+        raise RuntimeError('FILM_PACE_SPEECH_MISSING')
+    return count / (stop - start)
+
+
+def pace_factor(rate, language):
+    low, high, target = (4.2, 4.8, 4.5) if language == 'zh' else (2.6, 3.0, 2.8)
+    return max(0.8, min(1.25, target / rate)) if not low <= rate <= high else 1.0
+
+
+
 def transcribe(path, model_name='small', language='zh'):
     segments, _ = recognize(path, model_name, language, beam_size=5)
     return [{'start':round(segment.start,2),'end':round(segment.end,2),'text':segment.text} for segment in segments]

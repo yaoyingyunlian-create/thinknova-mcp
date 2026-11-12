@@ -52,8 +52,8 @@ class Client:
             raise RuntimeError(code if isinstance(code,str) and code.replace('_','').isalnum() else 'MCP_TOOL_FAILED')
         return result['structuredContent']
 
-    def claim(self) -> dict:
-        value, _ = self.post('/mcp/device/claim', {})
+    def claim(self, phase='legacy') -> dict:
+        value, _ = self.post('/mcp/device/claim', {'phase': phase})
         result = value['data']; self.lease = result.get('lease', ''); return result
 
     def receipt(self, run_no: str, steps: dict, status='running', error_code=None):

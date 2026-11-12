@@ -137,7 +137,8 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         preflight = connected_report() if day_plan is None else connected_report(require_codex=False)
         if not preflight['automation_ready']:
             raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
-        rules=client.tool('get_content_rules')
+        project = grant.get('project_key')
+        rules = client.tool('get_content_rules', {'project_key': project}) if project else client.tool('get_content_rules')
         if rules['version']!=grant['rules_version'] or rules.get('needs_onboarding'):raise RuntimeError('RULES_CHANGED')
         balance=client.tool('get_balance')
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
@@ -224,7 +225,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     from store_film import generation_arguments
 
     grant = claim['grant']
-    if plan['rules_version'] != rules['version'] or plan['date'] != claim.get('usage_date'):
+    if (plan['rules_version'] != rules['version'] or plan['date'] != claim.get('usage_date')
+            or plan.get('project_key') != grant.get('project_key')):
         raise RuntimeError('DAY_PLAN_STALE')
     digest = hashlib.sha256(json.dumps(plan, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()
     if steps.get('day_plan_sha256') not in (None, digest):
@@ -234,6 +236,28 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     shop_assets = shop.get('location_assets') or {}
     if shop.get('name') != plan['shop_name'] or shop.get('featured_service') != plan['featured_service']:
         raise RuntimeError('DAY_PLAN_SHOP_PROFILE_MISMATCH')
+    editorial_row = None
+    copy_policies = {}
+    if grant.get('project_key'):
+        from store_editorial import validate_platform_copy, validate_rotation
+        if set(plan['platforms']) != {'youtube'}:
+            raise RuntimeError('DAY_PLAN_PLATFORM_NOT_AUTHORIZED')
+        if plan['platforms']['youtube'].get('expected_channel_id') != grant['channel_id']:
+            raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
+        rows = plan.get('week_rows')
+        if not isinstance(rows, list):
+            raise RuntimeError('DAY_PLAN_WEEK_REQUIRED')
+        history_path = STATE / f"topics-{grant['channel_id']}-{grant['project_key']}.json"
+        history = json.loads(history_path.read_text(encoding='utf-8')) if history_path.is_file() else []
+        validate_rotation(rows, history, shop.get('editorial') or {})
+        editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
+        if not editorial_row or editorial_row['opening'] != plan['opening']:
+            raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
+        for platform, entry in (rules.get('platform_rules') or {}).items():
+            terms = (entry.get('hard_constraints') or {}).get('copy_forbidden_terms')
+            if terms:
+                copy_policies[platform] = {'forbidden_terms': json.loads(terms)}
+        validate_platform_copy(plan['platforms'], copy_policies)
     run_no = claim['run_no']
     if any(key.startswith('task_') for key in steps) and not steps.get('day_plan_sha256'):
         raise RuntimeError('DAY_PLAN_RUN_ALREADY_USED')
@@ -242,6 +266,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     for index, segment in enumerate(plan['segments']):
         args = generation_arguments(segment, shop_assets, authorized)
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
+        if grant.get('project_key'):
+            args['project_key'] = grant['project_key']
         price_key = f'quote_credits_{index}'
         if f'task_{index}' in steps and price_key in steps:
             args['max_credits'] = int(steps[price_key])
@@ -312,13 +338,39 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         {'role': 'video', 'file': str(output), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}],
         'platform': 'youtube', 'manifest_sha256': ''})
     publish_job = directory / 'publish.json'
-    atomic(publish_job, {'video': str(output), 'film': True, 'platforms': plan['platforms']})
+    publish_payload = {'video': str(output), 'film': True, 'platforms': plan['platforms']}
+    if editorial_row is not None:
+        publish_payload.update(marketing_standard='store_v2', copy_policies=copy_policies)
+        history = [row for row in history if row['date'] != plan['date']]
+        atomic(history_path, sorted([*history, editorial_row], key=lambda row: row['date'])[-120:])
+    atomic(publish_job, publish_payload)
     summary = {'status': 'awaiting_review', 'output': str(output), 'publish_job': str(publish_job),
                'run_no': run_no, 'quoted_credits': total}
     atomic(directory / 'review-ready.json', summary)
+    if grant.get('auto_publish'):
+        steps['stage'] = 'ready_to_publish'
+        steps['publish_job_hash'] = hashlib.sha256(publish_job.read_bytes()).hexdigest()
+        steps['film_sha256'] = hashlib.sha256(output.read_bytes()).hexdigest()
+        checkpoint('pending')
+        return {**summary, 'status': 'ready_to_publish'}
     steps['stage'] = 'review'
     checkpoint('waiting_user')
     return summary
+
+
+def authorization():
+    if not CREDENTIALS.is_file():
+        return {'status': 'unconfigured'}
+    client = Client(secure_state.load(CREDENTIALS))
+    config, _ = client.post('/mcp/device/configuration', {})
+    data = config.get('data', {})
+    grant = data.get('grant') or data
+    if not grant:
+        return {'status': 'unconfigured'}
+    fields = ('grant_no', 'channel_id', 'rules_version', 'daily_budget', 'publish_time',
+              'timezone', 'expires_at', 'project_key', 'weekly_budget', 'production_time')
+    return {'status': 'available', 'platform': 'youtube',
+            **{key: grant[key] for key in fields if key in grant}}
 
 
 def run_day(path, budget):
@@ -331,10 +383,121 @@ def run_day(path, budget):
         if (STATE / 'paused.json').exists():
             raise RuntimeError('AUTOMATION_PAUSED')
         client = Client(secure_state.load(CREDENTIALS))
-        claim = client.claim()
+        claim = client.claim('produce')
         if not claim.get('due'):
             raise RuntimeError('DAY_PLAN_RUN_NOT_DUE')
         return execute(client, claim, day_plan=plan, budget=budget)
+
+
+def scheduled_store_day(phase):
+    """Poll a due phase for the device; publishing consumes a verified handoff."""
+    from store_film import validate_day_plan
+
+    if not CREDENTIALS.is_file() or (STATE / 'paused.json').exists():
+        return
+    with state_lock(STATE / 'runner'):
+        client = Client(secure_state.load(CREDENTIALS))
+        payload, _ = client.post('/mcp/device/configuration', {})
+        grant = payload.get('data') or {}
+        if not grant.get('project_key'):
+            return
+        day = grant.get('local_date', '')
+        if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
+            raise RuntimeError('AUTOMATION_DATE_UNAVAILABLE')
+        if phase == 'produce':
+            if grant.get('local_time', '') < grant.get('production_time', '10:00'):
+                return
+            path = STATE / 'plans' / grant['project_key'] / f'{day}.json'
+            if not path.is_file():
+                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_MISSING'})
+                return
+            plan = validate_day_plan(json.loads(path.read_text(encoding='utf-8-sig')))
+            claim = client.claim('produce')
+            if claim.get('due'):
+                try:
+                    execute(client, claim, day_plan=plan, budget=int(grant['daily_budget']))
+                except RuntimeError as exc:
+                    atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': str(exc)})
+                    raise
+        elif grant.get('auto_publish'):
+            claim = client.claim('publish')
+            if claim.get('due'):
+                publish_store_day(client, claim)
+
+
+def publish_store_day(client, claim):
+    from publish.dispatch import dispatch
+
+    run_no = claim['run_no']
+    if not re.fullmatch(r'run_[a-f0-9]{24}', run_no):
+        raise RuntimeError('INVALID_RUN_ID')
+    directory = STATE / 'runs' / run_no
+    grant, steps = claim['grant'], dict(claim['steps'])
+    job_path = directory / 'publish.json'
+    frozen = directory / 'youtube-authorized.json'
+    receipt_path = Path(str(frozen) + '.receipt.json')
+    try:
+        if not grant.get('auto_publish') or not grant.get('project_key'):
+            raise RuntimeError('AUTOMATION_PUBLICATION_NOT_AUTHORIZED')
+        if hashlib.sha256(job_path.read_bytes()).hexdigest() != steps.get('publish_job_hash'):
+            raise RuntimeError('PUBLICATION_JOB_CHANGED')
+        if steps.get('publication_started') != 'yes':
+            os.environ['YT_TOKEN'] = str(YOUTUBE_TOKEN)
+            value = dispatch(job_path, 'youtube')
+            video = next(item for item in value['artifacts'] if item['role'] == 'video')
+            if video['sha256'] != steps.get('film_sha256'):
+                raise RuntimeError('PUBLICATION_VIDEO_CHANGED')
+            if value['target_account'] != grant['channel_id']:
+                raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
+            steps['publication_started'] = 'yes'
+            steps['stage'] = 'publication'
+            atomic(frozen, {**value['job'], 'privacy': 'public', 'schedule': None,
+                            'aigc': True, 'automation_run_id': run_no, 'automation_steps': steps})
+            client.receipt(run_no, steps)
+            os.environ['THINKNOVA_RUN_LEASE'] = client.lease
+            try:
+                run_command([sys.executable, str(ROOT / 'publish/youtube/upload.py'), str(frozen), '--execute'],
+                            directory, timeout=300)
+            finally:
+                os.environ.pop('THINKNOVA_RUN_LEASE', None)
+        if not receipt_path.is_file():
+            raise RuntimeError('PUBLICATION_OUTCOME_UNKNOWN')
+        evidence = json.loads(receipt_path.read_text(encoding='utf-8'))
+        video_id = evidence.get('video_id', '')
+        if evidence.get('state') != 'verified' or evidence.get('channel_id') != grant['channel_id'] or not re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id):
+            raise RuntimeError('PUBLICATION_OUTCOME_UNKNOWN')
+        steps.update(stage='complete', youtube_video_id=video_id)
+        client.receipt(run_no, steps, 'succeeded')
+        atomic(STATE / 'daily-reminder.json', {'date': claim['usage_date'], 'status': 'published',
+                'video_url': f'https://youtube.com/shorts/{video_id}'})
+    except Exception as exc:
+        code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'PUBLICATION_FAILED'
+        atomic(STATE / 'daily-reminder.json', {'date': claim['usage_date'], 'error_code': code})
+        client.receipt(run_no, steps, 'waiting_user', code)
+        raise RuntimeError(code) from exc
+
+
+def install_daily_schedules():
+    for phase in ('produce', 'publish'):
+        command = [sys.executable, str(ROOT / 'automation.py'), f'tick-{phase}']
+        if platform.system() == 'Windows':
+            subprocess.run(['schtasks', '/Create', '/F', '/TN', f'ThinkNova-Store-{phase}',
+                            '/SC', 'MINUTE', '/MO', '5', '/IT', '/TR', subprocess.list2cmdline(command)],
+                           check=True, capture_output=True)
+        elif platform.system() == 'Darwin':
+            label = f'top.thinknova.store-{phase}'
+            path = Path.home() / 'Library/LaunchAgents' / (label + '.plist')
+            path.parent.mkdir(parents=True, exist_ok=True)
+            scope = f'gui/{os.getuid()}'
+            if path.exists():
+                subprocess.run(['launchctl', 'bootout', scope, str(path)], capture_output=True)
+            path.write_bytes(plistlib.dumps({'Label': label, 'ProgramArguments': command,
+                                            'StartInterval': 300, 'WorkingDirectory': str(ROOT),
+                                            'LimitLoadToSessionType': 'Aqua',
+                                            'EnvironmentVariables': {'PATH': os.environ.get('PATH', '/usr/bin:/bin:/opt/homebrew/bin')}}))
+            path.chmod(0o600)
+            subprocess.run(['launchctl', 'bootstrap', scope, str(path)], check=True, capture_output=True)
+
 
 
 def tick():
@@ -378,7 +541,8 @@ def connected_report(check_local: bool = True, require_codex: bool = True) -> di
         result['available_credits']=int(balance.get('available_credits',0))
         status('server_quote','pass' if balance.get('quote_mode_supported') is True else 'waiting_user','Update ThinkNova API before enabling paid execution / 请先更新支持只读报价的 API')
         status('account','pass' if balance.get('generation_available') and balance.get('available_credits',0)>0 else 'waiting_user','Check plan and credits / 检查套餐和积分')
-        rules=client.tool('get_content_rules')
+        project = (config.get('data') or {}).get('project_key')
+        rules = client.tool('get_content_rules', {'project_key': project}) if project else client.tool('get_content_rules')
         status('rules','pass' if not rules.get('needs_onboarding') and rules.get('version')==config['data']['rules_version'] else 'waiting_user','Confirm current account rules / 确认当前账户规则')
         os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
         sys.path.insert(0,str(ROOT/'publish/youtube'))
@@ -417,7 +581,19 @@ def install_runner():
         subprocess.run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(path)],check=True,capture_output=True)
 
 
+def uninstall_daily_schedules():
+    for phase in ('produce', 'publish'):
+        if platform.system() == 'Windows':
+            subprocess.run(['schtasks', '/Delete', '/F', '/TN', f'ThinkNova-Store-{phase}'], capture_output=True)
+        elif platform.system() == 'Darwin':
+            path = Path.home() / 'Library/LaunchAgents' / f'top.thinknova.store-{phase}.plist'
+            if path.exists():
+                subprocess.run(['launchctl', 'bootout', f'gui/{os.getuid()}', str(path)], capture_output=True)
+                path.unlink()
+
+
 def uninstall_runner():
+    uninstall_daily_schedules()
     if platform.system()=='Windows':
         subprocess.run(['schtasks','/Delete','/F','/TN','ThinkNova-Controlled-Automation'],check=True,capture_output=True)
     else:
@@ -428,7 +604,7 @@ def uninstall_runner():
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('command',choices=['pair','youtube-auth','doctor','tick','install','uninstall','pause','revoke']);parser.add_argument('--user-confirmed',action='store_true');parser.add_argument('--json',action='store_true');args=parser.parse_args()
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('command',choices=['pair','youtube-auth','doctor','tick','tick-produce','tick-publish','install-daily-schedules','install','uninstall','pause','revoke']);parser.add_argument('--user-confirmed',action='store_true');parser.add_argument('--json',action='store_true');args=parser.parse_args()
     try:
         if platform.system() not in ('Windows','Darwin'):raise RuntimeError('AUTOMATION_OS_UNSUPPORTED')
         if args.command=='pair':
@@ -450,6 +626,10 @@ def main():
             result=connected_report();display(result,args.json)
             return 0 if result['automation_ready'] else 2
         elif args.command=='tick':tick()
+        elif args.command in ('tick-produce', 'tick-publish'):
+            scheduled_store_day(args.command.removeprefix('tick-'))
+        elif args.command == 'install-daily-schedules':
+            install_daily_schedules()
         elif args.command=='install':
             if not args.user_confirmed:raise RuntimeError('SCHEDULE_CONFIRMATION_REQUIRED')
             installation_preflight()

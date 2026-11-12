@@ -28,9 +28,11 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 | 6 | 适合谁 | 剧情 | 哪种人最该来、来了解决什么 |
 | 7 | 常见问题 | 剧情 | 顾客问得最多的一个问题 |
 
-## 二、今天做什么
+## 二、九宫格选题和每日计划
 
-店主可以提供本周主题。每天只准备一份当天的计划 JSON，列出角度、开场、生成段、时长、授权首帧和平台文案。优先轮换已确认的角度，读取近期记录，避免重复。计划经校验后由本机执行器处理报价、取件和拼片，客户 AI 不负责轮询。服务端日计划仅在账户明确开通后使用。
+店铺档案 editorial 保存至少三项人群、场景、痛点、特色和常见问题，问题含稳定 ID 与次数，另记录生意类型和活动日期。每周用三行（人群、痛点或问题）和三个特色列形成九宫格，挑七格。相邻两天换行、列和拍法，每周至少四种拍法、至少两条回答前三热门问题。同格查 28 天，开场句、开场画面和同格同拍法查 56 天。活动到期排除价格和过期主题。
+
+拍法可选顾客心里话、剧情、趣味剧情、探店、过程揭秘、前后对比、问答、产品特写、折扣和一天或一单。用 python toolkit.py validate-week 校验选题池，每天只准备一条可执行日计划。工具包负责报价、取件和拼片，异常写入运行诊断。
 
 ## 三、两种片型
 
@@ -76,5 +78,7 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 建档案和确认本周方向时各一次，每条成片发布前再确认一次。其余你自己按本规范做完，⛔ 把台词、镜头表、检查报告逐条推给店主审。
 
 ## English summary
+
+Use a three-by-three topic matrix and rotate ten formats. Validate seven rows before selecting one daily plan. Compare cells over 28 days and opening lines, opening visuals and cell-format pairs over 56 days.
 
 Build a confirmed shop profile and prepare one executable plan per day. Story films follow pain, process, change and service in order. Generate by scene with authorized portrait first frames, reuse approved clips when appropriate, and pass the explicit duration in quotes and creation. Confirm shop facts and the final publication package with the owner.

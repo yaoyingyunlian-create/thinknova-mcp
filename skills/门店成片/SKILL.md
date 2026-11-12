@@ -68,3 +68,9 @@ After clips are generated: quote every item first (with duration_seconds) and st
 新版门店任务使用 film_profile=store_v2，并填写 film_type、shop_name、featured_service。剧情片在 clips 中标注 pain、process、change、service 四拍，生成按场景分段。双语按句填写 subs 和 subs2，两个列表逐屏对应。报价与建单均带 duration_seconds；resolution 以实际报价为准；真实门店或产品使用 visual_subject=customer_identity。质检失败时向客户交付诊断，技术人员可以从本机待审记录复检。店主确认最终成片和发布清单后方可发布。
 
 For store_v2, declare the four story beats, keep bilingual sentence pairs aligned, use confirmed portrait first frames and check supported video options in the quote. Failed checks produce diagnostics for the customer. A passing film and the owner's approval are required before publishing.
+
+## 发布文案预检 / Publication copy check
+
+新版发布清单设置 marketing_standard=store_v2。每个平台的 marketing_copy 填 audience_or_pain、solution、verified_fact、next_step。标题直接对目标客户说话，正文用确认过的事实，按平台调整行动词和标签。发布前通过 dispatch.py --dry 核对；出现禁用词、缺字段或跨平台文案过于相似时，修正文案再核对。用 toolkit.py platform-capabilities 查询平台能力，用 toolkit.py authorization 查询已有授权。
+
+Use structured marketing copy and run the same preflight for review and execution. Use the capability and authorization commands to confirm which platform and account are available.

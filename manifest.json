@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.12",
+  "version": "thinknova-automation-toolkit-v3.1.13",
   "text_line_endings": "lf",
-  "revision": "631e8cf37c4c138f9ea1cb9eadf1630502726540d81feb6365e7556bca8b015d",
+  "revision": "20979aa94cc46bbd41927a6b9f0728a94f832007beeec24e368d949f249c4ba3",
   "files": [
     {
       "path": ".gitignore",
@@ -25,11 +25,11 @@
     },
     {
       "path": "automation.py",
-      "sha256": "9140d64eb5508a33495a4ef8fedae512303b33fc2684b49e7c926c563267e1bb"
+      "sha256": "9bba7768748f86268f354957cadc996a1c1b12e08c2a90da12206e7ab4c087fc"
     },
     {
       "path": "automation_client.py",
-      "sha256": "2317603e47713bdffb977532205516f57c50fde0188a622d801b5f20621113b3"
+      "sha256": "51c1efc939c36d6736005330b01718abc29dcd03dc3efb4b2b561f91163c095c"
     },
     {
       "path": "automation_plan.schema.json",
@@ -37,11 +37,11 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "969a95f796c734bbf0058c56a2e4122722316958ec57b55c8cac871b71b11746"
+      "sha256": "c60b80f96b561ea51b51df8e48eaccf0f672ab54e24d25bc6e395da623b177c4"
     },
     {
       "path": "build_manifest.py",
-      "sha256": "aa84e52b5fc03455b3a4f7d515706f15ee0667ce29fe305da5302174ce8a92df"
+      "sha256": "94b0e1858c94c1f49a55556b00226b758250bf0b26bea9932d3b1b22eb86076f"
     },
     {
       "path": "drafts.py",
@@ -109,7 +109,7 @@
     },
     {
       "path": "publish/dispatch.py",
-      "sha256": "c8f8245e9542714697cfde759caac1557fa0c8ea02c7d1324ba089995299d9ff"
+      "sha256": "54e1ce2e9397757ec83b9bdc7b63564f1355242331dc4aed9dc780d36ea66575"
     },
     {
       "path": "publish/douyin/check.py",
@@ -209,7 +209,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "e4ed35e358580f35e76c9f303524de7787e7460cfd05080cdb6a7995db7de793"
+      "sha256": "27d0517748e966a5a5b0d43007bb50acf7844b930f12f149ec1ac719d6d298a4"
     },
     {
       "path": "render/captions.py",
@@ -217,7 +217,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "108a0b26fa54578dd936b3c56db9099a7e8332730f9d2198b0205dbe537ae646"
+      "sha256": "fc0624dfc04828b60a997ab8f13020b005048c82697fd1721d2d0186f7fdb8fc"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -253,7 +253,7 @@
     },
     {
       "path": "render/speech_review.py",
-      "sha256": "54fe3f609f5a0287382d5c2b19c388761f87c29b9b71bccb16fe2bdf7a7ad5e7"
+      "sha256": "d155df6b2d183d97d740f9b9ebcac5d832253bc4b86f5c54a087f7840c499e50"
     },
     {
       "path": "render/templates/\u95e8\u5e97\u6210\u7247_6\u62cd.json",
@@ -297,19 +297,23 @@
     },
     {
       "path": "skills/\u6bcf\u65e5\u51fa\u7247\u89c4\u8303/SKILL.md",
-      "sha256": "79ce4a04cf046e569ed5b5727f9f5d88a12d241d3a5a90d12b14bb44b73ba1a9"
+      "sha256": "1fd39b01981c4030a0a0cc3b0ef357b9021168d8c4951382e60440fa4a7d0844"
     },
     {
       "path": "skills/\u955c\u5934\u63d0\u793a\u8bcd/SKILL.md",
-      "sha256": "8de9cb7f996e4476f7dce859b9a11e3b55904ffef9afe90ae81f0bce9daa6c2a"
+      "sha256": "26e7a9dc35d86298b3c9c74ae60710f4efda56f424edfd2a66bb2640fe21e1f3"
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "0893df75e8d4af14650e1ca278f2e3c9c97de3a6b9b21e6d7d11f603efd357f3"
+      "sha256": "91a107fdd9944c69f28560a9002a024ba30104c2150f755a4242652bce5d06f4"
+    },
+    {
+      "path": "store_editorial.py",
+      "sha256": "a0e17390274988053fcad3bbf42d9c13b2f8a9ad49a5e0070e89e9b6d34864d5"
     },
     {
       "path": "store_film.py",
-      "sha256": "a86dc3f9d020387de01753a6d63998214076a3f63671cdda30f6536ea3ea910b"
+      "sha256": "9e6114e239b96e53430cdbe5bdefb189f3ccea3f3dabccc614dc21b0a6fabc73"
     },
     {
       "path": "test_automation.py",
@@ -348,6 +352,10 @@
       "sha256": "3741c450fd553f519925d36fc2e2e3dc98c9d8e247072360eeb0bae9d25f11fa"
     },
     {
+      "path": "test_store_editorial.py",
+      "sha256": "8680e68abc3f1feb614546019aab53dad5980adf214cbac80bce2916d58099af"
+    },
+    {
       "path": "test_store_film.py",
       "sha256": "f5fa5647200eb0432bcf63d955f3d8ce39fbc2b011f5781647decde8ac100872"
     },
@@ -357,7 +365,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "8bc0de036b60534547527905e8859058d476df743f4cdd7638b3538d6eb9d7a4"
+      "sha256": "ff485b7fb6744c0e458c75d6540b3627da10fe5956b15bd7c867acf66175a537"
     },
     {
       "path": "update.py",

@@ -170,7 +170,38 @@ def main() -> int:
     run_day_parser = sub.add_parser("run-day")
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
+    sub.add_parser("authorization")
+    sub.add_parser("platform-capabilities")
+    week_parser = sub.add_parser("validate-week")
+    week_parser.add_argument("input", type=Path)
     args = parser.parse_args()
+    if args.command == "authorization":
+        from automation import authorization
+        try:
+            print(json.dumps(authorization(), ensure_ascii=False))
+            return 0
+        except (RuntimeError, OSError, KeyError):
+            print(json.dumps({'status': 'unavailable', 'error': 'AUTOMATION_AUTHORIZATION_UNAVAILABLE'}))
+            return 2
+    if args.command == "platform-capabilities":
+        from publish.dispatch import PLATFORMS
+        print(json.dumps({platform: {
+            'publisher_available': True,
+            'unattended': 'controlled_pilot' if platform == 'youtube' else 'unavailable',
+            'scheduled': 'controlled_pilot' if platform == 'youtube' else 'unverified',
+            'receipt_verification': 'supported' if platform == 'youtube' else 'requires_platform_validation'
+        } for platform in PLATFORMS}))
+        return 0
+    if args.command == "validate-week":
+        from store_editorial import validate_rotation
+        try:
+            value = json.loads(args.input.read_text(encoding='utf-8-sig'))
+            validate_rotation(value['rows'], value.get('history', []), value['shop_profile'])
+            print(json.dumps({'status': 'valid', 'days': len(value['rows'])}))
+            return 0
+        except (ValueError, KeyError, OSError, TypeError) as exc:
+            print(json.dumps({'status': 'invalid', 'error': str(exc)}, ensure_ascii=False))
+            return 2
     if args.command == "run-day":
         from automation import run_day
         try:

@@ -81,7 +81,8 @@ def validate_day_plan(plan):
     from publish.dispatch import validate_variants
     validate_variants({'platforms': platforms})
     for name, variant in platforms.items():
-        if not all(isinstance(variant.get(key), str) and variant[key].strip() for key in ('title', 'description')):
+        fields = ('title',) if plan.get('project_key') else ('title', 'description')
+        if not all(isinstance(variant.get(key), str) and variant[key].strip() for key in fields):
             raise ValueError(f'DAY_PLAN_PUBLICATION_COPY_REQUIRED: {name}')
     durations = [segment.get('duration_seconds') for segment in segments]
     if any(type(seconds) is not int or not 6 <= seconds <= 15 for seconds in durations):

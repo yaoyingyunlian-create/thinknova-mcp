@@ -239,6 +239,31 @@ def norm_shot(ff, fp, base, c, idx, wk):
     return out, dur
 
 
+def adjust_store_pace(ff, fp, shot, language, wk, index):
+    from speech_review import pace_factor, recognize, speech_pace
+
+    try:
+        segments, info = recognize(shot, 'small', language, ff, word_timestamps=True, vad_filter=True)
+        detected = (language or info.language).split('-')[0]
+        rate = speech_pace(segments, detected)
+    except (RuntimeError, ImportError) as exc:
+        raise Stop(f'FILM_PACE_UNAVAILABLE: clip {index + 1}: {exc}', 2) from exc
+    factor = pace_factor(rate, detected)
+    if factor == 1.0:
+        return shot, probe(fp, shot)[0], {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+    out = os.path.join(wk, f'paced_{index:03d}.mp4')
+    run_ff(ff, ['-i', shot, '-vf', f'setpts=PTS/{factor:.8f}', '-af', f'atempo={factor:.8f}',
+                '-r', str(FPS), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
+                '-c:a', 'aac', '-ar', str(SR), out], 'store speech pace')
+    # Measure the transformed audio rather than assuming the encoder achieved the target.
+    try:
+        checked, _ = recognize(out, 'small', detected, ff, word_timestamps=True, vad_filter=True)
+        measured = speech_pace(checked, detected)
+    except (RuntimeError, ImportError) as exc:
+        raise Stop(f'FILM_PACE_UNAVAILABLE: clip {index + 1}: {exc}', 2) from exc
+    return out, probe(fp, out)[0], {'clip': index + 1, 'before': round(rate, 3), 'after': round(measured, 3), 'factor': factor}
+
+
 def end_card(ff, card, idx, wk):
     color = str(card.get("color") or "F3ECDF").lstrip("#")
     dur = float(card.get("dur") or 2.2)
@@ -600,6 +625,7 @@ def main():
     out = os.path.join(wk, 'delivery.mp4')
     try:
         parts, cues, t = [], [], 0.0
+        pace_report = []
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
             if store_film:
@@ -608,6 +634,9 @@ def main():
                 source = resolve(base, c['file'])
                 check_store_source(ff, fp, source, i + 1)
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
+            if store_film:
+                shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i)
+                pace_report.append(pace)
             parts.append(shot)
             lines = c.get("subs") or (split_text(c["text"]) if c.get("text") else [])
             secondary = c.get('subs2')
@@ -679,6 +708,8 @@ def main():
             options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
                   'subtitle_timing': 'provided' if job.get('srt') else ('estimated' if cues else 'not_applicable')}
+        if store_film:
+            result['speech_pace'] = pace_report
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
         if not passed:
             if job.get('film'):
