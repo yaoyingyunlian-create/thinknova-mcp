@@ -239,7 +239,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     editorial_row = None
     copy_policies = {}
     if grant.get('project_key'):
-        from store_editorial import validate_platform_copy, validate_rotation
+        from store_editorial import validate_plan_copy, validate_rotation
         if set(plan['platforms']) != {'youtube'}:
             raise RuntimeError('DAY_PLAN_PLATFORM_NOT_AUTHORIZED')
         if plan['platforms']['youtube'].get('expected_channel_id') != grant['channel_id']:
@@ -257,7 +257,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             terms = (entry.get('hard_constraints') or {}).get('copy_forbidden_terms')
             if terms:
                 copy_policies[platform] = {'forbidden_terms': json.loads(terms)}
-        validate_platform_copy(plan['platforms'], copy_policies)
+        validate_plan_copy(plan, copy_policies)
     run_no = claim['run_no']
     if any(key.startswith('task_') for key in steps) and not steps.get('day_plan_sha256'):
         raise RuntimeError('DAY_PLAN_RUN_ALREADY_USED')
@@ -373,6 +373,24 @@ def authorization():
             **{key: grant[key] for key in fields if key in grant}}
 
 
+def preflight_plan_copy(client, plan):
+    from store_editorial import validate_plan_copy
+    project = plan.get('project_key')
+    if not project:
+        return
+    rules = client.tool('get_content_rules', {'project_key': project})
+    if rules.get('version') != plan['rules_version']:
+        raise RuntimeError('DAY_PLAN_STALE')
+    policies = {}
+    for platform, entry in (rules.get('platform_rules') or {}).items():
+        terms = (entry.get('hard_constraints') or {}).get('copy_forbidden_terms')
+        if terms:
+            policies[platform] = {'forbidden_terms': json.loads(terms)}
+    validate_plan_copy(plan, policies)
+    for row in plan.get('week_rows', ()):
+        validate_plan_copy(row, policies, plan['platforms'])
+
+
 def run_day(path, budget):
     from store_film import validate_day_plan
 
@@ -383,6 +401,7 @@ def run_day(path, budget):
         if (STATE / 'paused.json').exists():
             raise RuntimeError('AUTOMATION_PAUSED')
         client = Client(secure_state.load(CREDENTIALS))
+        preflight_plan_copy(client, plan)
         claim = client.claim('produce')
         if not claim.get('due'):
             raise RuntimeError('DAY_PLAN_RUN_NOT_DUE')
@@ -409,7 +428,11 @@ def scheduled_store_day(phase):
                 return
             path = STATE / 'plans' / grant['project_key'] / f'{day}.json'
             if path.is_file():
-                plan = validate_day_plan(json.loads(path.read_text(encoding='utf-8-sig')))
+                try:
+                    raw_plan = json.loads(path.read_text(encoding='utf-8-sig'))
+                except (OSError, ValueError):
+                    atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_FILE_INVALID'})
+                    return
             else:
                 try:
                     response, _ = client.post('/mcp/device/day-plan', {})
@@ -426,10 +449,20 @@ def scheduled_store_day(phase):
                             'missing_fields': result.get('missing_fields', []),
                         })
                     return
-                plan = validate_day_plan(result.get('plan'))
+                raw_plan = result.get('plan')
+            try:
+                plan = validate_day_plan(raw_plan)
+            except ValueError as exc:
+                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': str(exc)})
+                return
             if (plan['date'] != day or plan['rules_version'] != grant['rules_version']
                     or plan.get('project_key') != grant['project_key']):
                 atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_SCOPE_CHANGED'})
+                return
+            try:
+                preflight_plan_copy(client, plan)
+            except (ValueError, RuntimeError) as exc:
+                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': str(exc)})
                 return
             claim = client.claim('produce')
             if claim.get('due'):
@@ -505,7 +538,66 @@ def publish_store_day(client, claim):
     atomic(STATE / 'daily-reminder.json', published)
 
 
+def daily_schedule_status():
+    marker = STATE / 'schedule-install.json'
+    installed = 0
+    system = platform.system()
+    if system not in ('Windows', 'Darwin'):
+        return 'unsupported'
+    for phase in ('produce', 'publish'):
+        command = (['schtasks', '/Query', '/TN', f'ThinkNova-Store-{phase}'] if system == 'Windows'
+                   else ['launchctl', 'print', f'gui/{os.getuid()}/top.thinknova.store-{phase}'])
+        try:
+            installed += subprocess.run(command, capture_output=True, timeout=10).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            return 'unknown'
+    if not CREDENTIALS.is_file() or (STATE / 'paused.json').exists():
+        return 'awaiting_authorization'
+    if installed == 2:
+        return 'ready'
+    if installed:
+        return 'partial'
+    if marker.is_file():
+        return 'failed'
+    return 'not_installed'
+
+
+def schedule_error(exc):
+    import locale
+    raw = exc.stderr or exc.stdout or b''
+    for encoding in dict.fromkeys(['utf-8', locale.getpreferredencoding(False), 'oem' if os.name == 'nt' else 'utf-8']):
+        try:
+            details = raw.decode(encoding) if isinstance(raw, bytes) else raw
+            break
+        except (UnicodeError, LookupError):
+            details = raw.decode('utf-8', errors='replace')
+    details = re.sub(r'(?i)https?://\S+|\b[a-f0-9]{64}\b|Bearer\s+\S+', '[redacted]', details)
+    return f'SCHEDULE_INSTALL_FAILED ({exc.returncode}): {details.strip()[:600]}'
+
+
 def install_daily_schedules():
+    if (STATE / 'paused.json').exists():
+        raise RuntimeError('AUTOMATION_PAUSED')
+    grant = authorization()
+    if grant.get('status') != 'available' or not grant.get('project_key'):
+        raise RuntimeError('AUTOMATION_PROJECT_AUTHORIZATION_REQUIRED')
+    if platform.system() not in ('Windows', 'Darwin'):
+        raise RuntimeError('AUTOMATION_OS_UNSUPPORTED')
+    with state_lock(STATE / 'schedule-install'):
+        marker = STATE / 'schedule-install.json'
+        try:
+            _register_daily_schedules()
+        except subprocess.CalledProcessError as exc:
+            atomic(marker, {'status': 'failed'})
+            raise RuntimeError(schedule_error(exc)) from None
+        except OSError:
+            atomic(marker, {'status': 'failed'})
+            raise RuntimeError('SCHEDULE_INSTALL_OS_ERROR') from None
+        marker.unlink(missing_ok=True)
+    return {'status': 'ready'}
+
+
+def _register_daily_schedules():
     for phase in ('produce', 'publish'):
         command = [sys.executable, str(ROOT / 'automation.py'), f'tick-{phase}']
         if platform.system() == 'Windows':
@@ -674,7 +766,7 @@ def main():
             atomic(STATE/'health.json',{'state':'failed','error_code':code})
             try:Client(secure_state.load(CREDENTIALS)).post('/mcp/device/heartbeat',{'state':'failed','error_code':code},execution=False)
             except Exception:pass
-        print(code,file=sys.stderr);return 2
+        print(str(exc) if args.command == 'install-daily-schedules' and str(exc).startswith('SCHEDULE_INSTALL_FAILED (') else code, file=sys.stderr);return 2
 
 
 if __name__=='__main__':sys.exit(main())

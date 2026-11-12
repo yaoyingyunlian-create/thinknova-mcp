@@ -91,6 +91,27 @@ def prepare_copy(platform, variant, policy=None):
     return separator.join(fields[key].strip() for key in COPY_FIELDS)
 
 
+def validate_plan_copy(plan, policies=None, targets=()):
+    policies = policies or {}
+    variants = plan.get('platforms') or {}
+    if not isinstance(variants, dict):
+        raise ValueError('COPY_PLATFORMS_INVALID')
+    date_label = plan.get('date', 'week')
+    opening = plan.get('opening')
+    if opening is not None:
+        for platform in sorted(set(variants) | set(targets)) or ['general']:
+            deny = [*DEFAULT_DENY, *policies.get(platform, {}).get('forbidden_terms', [])]
+            if platform == 'xiaohongshu':
+                deny.extend(XHS_DENY)
+            if any(normalized(term) and normalized(term) in normalized(opening) for term in deny):
+                raise ValueError(f'COPY_FORBIDDEN_TERM: {date_label} {platform}.opening')
+    if variants:
+        try:
+            validate_platform_copy(variants, policies)
+        except ValueError as exc:
+            raise ValueError(f'{date_label}: {exc}') from exc
+
+
 def validate_platform_copy(variants, policies=None):
     bodies = {}
     for platform, variant in variants.items():

@@ -98,6 +98,11 @@ def report(root: Path = ROOT, online: bool = False) -> dict:
             version.update(status='pass', installed_commit=current, latest_commit=remote[0], update_available=current != remote[0], remedy='')
         except (Exception, SystemExit): pass
     checks.append(version)
+    from automation import daily_schedule_status
+    schedule = daily_schedule_status()
+    checks.append({'name': 'daily_schedules', 'status': schedule,
+                   'remedy': '' if schedule in ('ready', 'unsupported') else
+                   'Confirm the sample, authorize and pair the device, then run toolkit.py authorization --install-schedules / 确认样片、授权和配对后安装每日任务'})
     for name in ('account', 'rules', 'platform_authorization'):
         checks.append({'name': name, 'status': 'unknown', 'remedy': 'Check through authenticated MCP or platform flow / 通过授权接口核实'})
     readiness = capabilities(checks)

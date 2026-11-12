@@ -165,8 +165,6 @@ def setup(json_output=False):
     else:
         print('AI_BROWSER_NOT_CONFIGURED: optional for API/script workflows; required for ego browser work. / 非 ego 工作流不受阻塞。', file=sys.stderr)
     run('local_runtime_check', [str(python), str(ROOT / 'toolkit.py'), 'doctor'])
-    if platform.system() in ('Windows', 'Darwin'):
-        run('daily_schedules', [str(python), str(ROOT / 'automation.py'), 'install-daily-schedules'])
     SETUP_PHASE = 'complete'
     print('Local setup completed; verify MCP account, rules and platform authorization separately. 本机准备完成，账户、规则和平台授权仍需核实。')
 

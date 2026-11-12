@@ -80,6 +80,11 @@ def validate_day_plan(plan):
         raise ValueError('DAY_PLAN_PLATFORMS_REQUIRED')
     from publish.dispatch import validate_variants
     validate_variants({'platforms': platforms})
+    from store_editorial import validate_plan_copy
+    if plan.get('project_key'):
+        validate_plan_copy(plan)
+    else:
+        validate_plan_copy({'opening': plan['opening'], 'date': day}, targets=platforms)
     for name, variant in platforms.items():
         fields = ('title',) if plan.get('project_key') else ('title', 'description')
         if not all(isinstance(variant.get(key), str) and variant[key].strip() for key in fields):

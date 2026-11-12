@@ -10,6 +10,9 @@
 Options (defaults suit vertical short video):
     --width 1080 --height 1920   expected resolution (other vertical sizes = WARN, landscape = FAIL)
     --max-dur SEC                FAIL if longer (default: no limit; e.g. 60 / 180 for your platform)
+    --store-film                 check store film speech pace, sentence pauses and required terms
+    --shop-name NAME             required shop name for --store-film
+    --featured-service NAME      required featured service for --store-film
     --min-fps 24
     --lufs -14 --lufs-tol 2      target integrated loudness (WARN outside the tolerance)
     --max-tp -1                  max true peak in dBTP (WARN above)

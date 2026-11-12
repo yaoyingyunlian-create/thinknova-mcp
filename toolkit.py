@@ -167,21 +167,24 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
-    run_day_parser = sub.add_parser("run-day")
+    run_day_parser = sub.add_parser("run-day", description="Run an approved schema_version=1 day plan JSON with date, project_key, rules_version, opening, segments and platforms. Uses --max-credits as the budget cap. Exit 2 if blocked.")
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
-    sub.add_parser("authorization")
-    sub.add_parser("platform-capabilities")
-    week_parser = sub.add_parser("validate-week")
+    authorization_parser = sub.add_parser("authorization", description="Read the paired project grant. Exit 2 on authorization or installation failure.")
+    authorization_parser.add_argument("--install-schedules", action="store_true", help="Register both local jobs after confirming the sample, authorizing and pairing the device")
+    sub.add_parser("platform-capabilities", description="Print JSON showing ordinary publishing, unattended scheduling, and receipt verification by platform.")
+    week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
     args = parser.parse_args()
     if args.command == "authorization":
-        from automation import authorization
+        from automation import authorization, install_daily_schedules
         try:
-            print(json.dumps(authorization(), ensure_ascii=False))
+            result = install_daily_schedules() if args.install_schedules else authorization()
+            print(json.dumps(result, ensure_ascii=False))
             return 0
-        except (RuntimeError, OSError, KeyError):
-            print(json.dumps({'status': 'unavailable', 'error': 'AUTOMATION_AUTHORIZATION_UNAVAILABLE'}))
+        except (RuntimeError, OSError, KeyError) as exc:
+            error = str(exc) if args.install_schedules and isinstance(exc, RuntimeError) else 'AUTOMATION_AUTHORIZATION_UNAVAILABLE'
+            print(json.dumps({'status': 'unavailable', 'error': error}, ensure_ascii=False))
             return 2
     if args.command == "platform-capabilities":
         from publish.dispatch import PLATFORMS
@@ -193,10 +196,13 @@ def main() -> int:
         } for platform in PLATFORMS}))
         return 0
     if args.command == "validate-week":
-        from store_editorial import validate_rotation
+        from store_editorial import validate_rotation, validate_plan_copy
         try:
             value = json.loads(args.input.read_text(encoding='utf-8-sig'))
             validate_rotation(value['rows'], value.get('history', []), value['shop_profile'])
+            validate_plan_copy(value)
+            for row in value['rows']:
+                validate_plan_copy(row, targets=value.get('platforms', ()))
             print(json.dumps({'status': 'valid', 'days': len(value['rows'])}))
             return 0
         except (ValueError, KeyError, OSError, TypeError) as exc:

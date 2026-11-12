@@ -75,7 +75,7 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 - 超阈值执行 toolkit.py archive：先保存完整快照，只截短“历史事件”，保护其他章节。旧格式无此章节时仅备份，不自动删段；活动信息过长时人工整理并保留原始快照。
 - analytics.py register 登记 YouTube/TikTok 内容及带时区的实际发布时间；采集只记可取得的数据、内容 ID、采集时间和缺失原因。未采到的24h数据不能用48h数据冒充，不能自动重发。
 - 用户同意安装本机定时任务后运行 toolkit.py install-schedule；每天10点（本机时区）只运行 maintenance：采集、归档、输出 reminders.txt。不会唤醒 AI 会话，不自动生成/扣费/发布，也不保证关机或无人登录时执行；跨系统需实际验证。
-- 独立的 Codex + YouTube 受控试点使用 automation.py；Windows/Mac 实现均须通过对应实机验收后才启用，其他平台无人值守暂未开放。用户说停止时立即运行 automation.py pause，撤销用 automation.py revoke；必须确认服务端成功响应，不能只写 memory。已创建任务按既有结算/退款规则收尾。它默认不启用；客户在账户页单独授权设备、频道、规则版本、每日积分预算、时间和时区，授权30天、每天最多一条。规则变化暂停，终态失败不自动收费重做。不得由 AI 接收设备/平台凭据，客户通过本机隐藏输入配对；启用须 install --user-confirmed。电脑需开机、用户已登录，恢复后不追补历史批量发布。详见 AUTOMATION.md。
+- 独立的 Codex + YouTube 受控试点使用 automation.py；Windows/Mac 实现均须通过对应实机验收后才启用，其他平台无人值守暂未开放。用户说停止时立即运行 automation.py pause，撤销用 automation.py revoke；必须确认服务端成功响应，不能只写 memory。已创建任务按既有结算/退款规则收尾。它默认不启用；客户在账户页单独授权设备、频道、规则版本、每日积分预算、时间和时区，授权30天、每天最多一条。规则变化暂停，终态失败不自动收费重做。不得由 AI 接收设备/平台凭据，客户通过本机隐藏输入配对；确认样片、授权并配对后，运行 toolkit.py authorization --install-schedules 安装每日任务。安装和自动更新不会注册任务。电脑需开机、用户已登录，恢复后不追补历史批量发布。详见 AUTOMATION.md。
 - 已绑定监控时，普通 MCP 调用发现生成终态失败、积分不足、授权失效或本地脚本错误，立即运行 monitoring.py event --platform 目标平台 --stage generation/account/publication/render --code 安全错误码；不传原始提示词、账号或令牌。核实恢复后仅清理对应平台/阶段：monitoring.py recover --platform 平台 --stage 阶段，不能清掉其他平台故障。
 - 独立监控用 monitoring.py：客户在账户页绑定设备后通过本机隐藏输入 pair，仅遥测凭据，不需要执行授权。经同意 install --user-confirmed 后每15分钟轻量上报、每小时本机体检；不调用 AI、不扣积分。故障及发布结果即时上报，原始日志留本机，云端仅安全错误码。维护任务、监控任务和收费执行任务不是同一件事。
 - 旧版已安装的定时任务不会因更新源码自动改变命令；说明变化后先 uninstall-schedule，再经用户确认 install-schedule，核对系统任务指向当前工具包和 .venv。

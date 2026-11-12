@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.14",
+  "version": "thinknova-automation-toolkit-v3.1.15",
   "text_line_endings": "lf",
-  "revision": "6f73597078b3d0a1fc0d47d38a2415ea88846c864deba7ef1ebb513a18bf1774",
+  "revision": "45a651eeacf4cbd37c883b2c97c75308e67b1243d65aecf46eef456d3221184c",
   "files": [
     {
       "path": ".gitignore",
@@ -9,11 +9,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "95ce8f3662ece72b00901c3eed4ad3f855c5bbe9d3f068b0b8a9b114bd4631da"
+      "sha256": "88bfeefcaa8a81604edfd5d77c2861b5c21481b1954a07d0dbbdf477f4a7b3b4"
     },
     {
       "path": "AUTOMATION.md",
-      "sha256": "04818b96b38c838bedb6d9a21d104532ef98ca19fe209d2c8d0865461418b8e6"
+      "sha256": "1636d800cdcc17656f4f36f7aaa5e2581f9d6105196827805a7cae202fede38d"
     },
     {
       "path": "README.md",
@@ -25,7 +25,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "873dec3da8b7c1abe21cd42bfeb04bca40081478e341f36a7c56c4ee72b8d4bf"
+      "sha256": "3ad14b753e89c5d75e52b371a03041f049f9a2e53fa142160ba9ef7d58997e34"
     },
     {
       "path": "automation_client.py",
@@ -37,11 +37,11 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "c60b80f96b561ea51b51df8e48eaccf0f672ab54e24d25bc6e395da623b177c4"
+      "sha256": "969a95f796c734bbf0058c56a2e4122722316958ec57b55c8cac871b71b11746"
     },
     {
       "path": "build_manifest.py",
-      "sha256": "db55dc955610c2fd896f1750630001a0d4b6179359570c867bce19d5c5ad63d8"
+      "sha256": "5bcb5e39eb3987736564810b52f6b4129b21cd6fbd157f6ea1ab794318f89e04"
     },
     {
       "path": "drafts.py",
@@ -61,7 +61,7 @@
     },
     {
       "path": "health.py",
-      "sha256": "378b70041694e46aebc03580dada43f27e673058c2eba444df06c46cb3844557"
+      "sha256": "994dc96f8669f6e27d066fffc42499936cd294a8d3fd826a7e3a9fb01753e6a4"
     },
     {
       "path": "install.ps1",
@@ -217,7 +217,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "fc0624dfc04828b60a997ab8f13020b005048c82697fd1721d2d0186f7fdb8fc"
+      "sha256": "007194f849a598110927e17ceeaabc911886da26835aff42542de1e100b7b3da"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -309,11 +309,11 @@
     },
     {
       "path": "store_editorial.py",
-      "sha256": "a0e17390274988053fcad3bbf42d9c13b2f8a9ad49a5e0070e89e9b6d34864d5"
+      "sha256": "286bb80a6ebacad03b6b251189285741e16f218cfb5fc8ee2de906725d459d82"
     },
     {
       "path": "store_film.py",
-      "sha256": "9e6114e239b96e53430cdbe5bdefb189f3ccea3f3dabccc614dc21b0a6fabc73"
+      "sha256": "d12f404be6532420db492998fee1be5b1eeae67706d4bc9565f798476d9bbe75"
     },
     {
       "path": "test_automation.py",
@@ -365,7 +365,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "ff485b7fb6744c0e458c75d6540b3627da10fe5956b15bd7c867acf66175a537"
+      "sha256": "b955baf1a11c53e7039e25302781bc3802e8af88e55147ed55f984b4f283b84f"
     },
     {
       "path": "update.py",
