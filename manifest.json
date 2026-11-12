@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.10",
+  "version": "thinknova-automation-toolkit-v3.1.11",
   "text_line_endings": "lf",
-  "revision": "ed1a3ab7c4ce391b93fa060daa85f7a3d04dc292975725a73e95a8026033c3b7",
+  "revision": "6baf06778ed4e7a7c59bf570ddfc8aa10d19e87d65953c13b5c8564e4b566201",
   "files": [
     {
       "path": ".gitignore",
@@ -41,7 +41,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "8d16df2f72b24ec8a31d5be52f88f9e6ebaee3f17d591e6bb414e29e3c70a64e"
+      "sha256": "c4316a2d1bf68b640eef3a133cbb86d6df9cd26c238a556948b148651a7f9fb1"
     },
     {
       "path": "drafts.py",
