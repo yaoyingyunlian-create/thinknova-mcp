@@ -3,7 +3,7 @@ import hashlib
 import json
 import subprocess
 from pathlib import Path
-from toolkit import sha256
+from file_integrity import sha256
 
 root = Path(__file__).resolve().parent
 paths = subprocess.check_output(['git', 'ls-files', '-z', '--cached', '--others', '--exclude-standard'], cwd=root).decode('utf-8').split('\0')

@@ -2,7 +2,7 @@
 from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
-import hashlib
+from file_integrity import manifest_mismatches
 import importlib.util
 import json
 import os
@@ -61,12 +61,7 @@ def capabilities(checks):
 
 def verify_files(root: Path) -> bool:
     manifest = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))
-    if not manifest.get('files'): return False
-    for entry in manifest['files']:
-        path = (root / entry['path']).resolve()
-        if not path.is_relative_to(root.resolve()) or not path.is_file(): return False
-        if hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']: return False
-    return True
+    return not manifest_mismatches(root, manifest)
 
 
 def report(root: Path = ROOT, online: bool = False) -> dict:

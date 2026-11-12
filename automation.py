@@ -85,7 +85,7 @@ def make_plan(directory: Path, rules: dict) -> dict:
     for shot in plan['shots']:
         shot.setdefault('first_frame_asset_id', None)
         prepared = prepare_prompt(shot['prompt'], 'video')
-        if len(prepared) > 3500: raise RuntimeError('QUALITY_PROMPT_TOO_LONG')
+        if len(prepared.encode('utf-8')) > 3500: raise RuntimeError('QUALITY_PROMPT_TOO_LONG')
         shot['prompt'] = prepared
     return validate_plan(plan)
 
@@ -125,7 +125,7 @@ def quoted_generation_args(client, tool, args, balance):
     return {**args,'max_credits':credits}
 
 
-def execute(client: Client, claim: dict):
+def execute(client: Client, claim: dict, day_plan=None, budget=None):
     run_no=claim['run_no'];grant=claim['grant']
     if not re.fullmatch(r'run_[a-f0-9]{24}',run_no):raise RuntimeError('INVALID_RUN_ID')
     directory=STATE/'runs'/run_no;directory.mkdir(parents=True,exist_ok=True)
@@ -134,12 +134,16 @@ def execute(client: Client, claim: dict):
     def checkpoint(status='running',error=None):
         atomic(state_path,steps);client.receipt(run_no,steps,status,error)
     try:
-        if not connected_report()['automation_ready']:raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
+        preflight = connected_report() if day_plan is None else connected_report(require_codex=False)
+        if not preflight['automation_ready']:
+            raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
         rules=client.tool('get_content_rules')
         if rules['version']!=grant['rules_version'] or rules.get('needs_onboarding'):raise RuntimeError('RULES_CHANGED')
         balance=client.tool('get_balance')
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
         if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
+        if day_plan is not None:
+            return execute_store_day(client, claim, day_plan, budget, rules, balance, directory, steps, checkpoint)
         plan_path=directory/'content.json'
         steps['stage']='planning';checkpoint()
         if plan_path.exists():plan=validate_plan(json.loads(plan_path.read_text(encoding='utf-8')))
@@ -216,6 +220,123 @@ def execute(client: Client, claim: dict):
         raise RuntimeError(code) from None
 
 
+def execute_store_day(client, claim, plan, budget, rules, balance, directory, steps, checkpoint):
+    from store_film import generation_arguments
+
+    grant = claim['grant']
+    if plan['rules_version'] != rules['version'] or plan['date'] != claim.get('usage_date'):
+        raise RuntimeError('DAY_PLAN_STALE')
+    digest = hashlib.sha256(json.dumps(plan, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()
+    if steps.get('day_plan_sha256') not in (None, digest):
+        raise RuntimeError('DAY_PLAN_CHANGED')
+    authorized = set(rules['effective_rules'].get('authorized_asset_ids') or [])
+    shop = rules['effective_rules'].get('shop_profile') or {}
+    shop_assets = shop.get('location_assets') or {}
+    if shop.get('name') != plan['shop_name'] or shop.get('featured_service') != plan['featured_service']:
+        raise RuntimeError('DAY_PLAN_SHOP_PROFILE_MISMATCH')
+    run_no = claim['run_no']
+    if any(key.startswith('task_') for key in steps) and not steps.get('day_plan_sha256'):
+        raise RuntimeError('DAY_PLAN_RUN_ALREADY_USED')
+    steps['day_plan_sha256'] = digest
+    requests = []
+    for index, segment in enumerate(plan['segments']):
+        args = generation_arguments(segment, shop_assets, authorized)
+        args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
+        price_key = f'quote_credits_{index}'
+        if f'task_{index}' in steps and price_key in steps:
+            args['max_credits'] = int(steps[price_key])
+        else:
+            args = quoted_generation_args(client, 'animate_image', args, balance)
+        requests.append(args)
+    total = sum(args['max_credits'] for args in requests)
+    if total > min(budget, int(grant['daily_budget'])):
+        raise RuntimeError('DAY_PLAN_OVER_BUDGET')
+    new_total = sum(args['max_credits'] for index, args in enumerate(requests) if f'task_{index}' not in steps)
+    if new_total > int(balance.get('available_credits', 0)):
+        raise RuntimeError('DAY_PLAN_INSUFFICIENT_CREDITS')
+    steps['stage'] = 'generation'
+    checkpoint()
+    clips = []
+    for index, (segment, args) in enumerate(zip(plan['segments'], requests)):
+        key = f'task_{index}'
+        if key not in steps:
+            steps[f'quote_credits_{index}'] = str(args['max_credits'])
+            checkpoint()
+            steps[key] = client.tool('animate_image', args)['task_id']
+            checkpoint()
+        deadline = time.monotonic() + 900
+        while True:
+            task = client.tool('get_task', {'task_id': steps[key]})
+            if task['status'] == 'succeeded':
+                break
+            if task['status'] in ('failed', 'canceled', 'cancelled'):
+                raise RuntimeError('GENERATION_TERMINAL_FAILURE')
+            if time.monotonic() >= deadline:
+                checkpoint()
+                return {'status': 'running', 'stage': 'generation', 'run_no': run_no}
+            checkpoint()
+            time.sleep(20)
+        path = directory / f'shot{index}.mp4'
+        if path.is_file():
+            validate_media(path)
+        else:
+            result = client.tool('get_result', {'task_id': steps[key]})
+            assets = [asset for asset in result.get('assets', []) if asset.get('type') == 'video']
+            if not assets:
+                raise RuntimeError('VIDEO_DELIVERY_MISSING')
+            download(assets[0]['download_url'], path, task_id=steps[key])
+        clips.append({'file': path.name, 'fit': 'cover', **{
+            key: segment[key] for key in ('beats', 'subs', 'subs2') if key in segment}})
+    steps['stage'] = 'render'
+    checkpoint()
+    output = directory / 'final.mp4'
+    job_path = directory / 'assemble.json'
+    job = {'out': output.name, 'film_profile': 'store_v2', 'film_type': plan['film_type'],
+           'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips}
+    if plan.get('speech_language'):
+        job['speech_language'] = plan['speech_language']
+    if set(plan['platforms']) == {'xiaohongshu'}:
+        job['platform'] = 'xiaohongshu'
+    else:
+        job['end_card'] = plan['end_card']
+    atomic(job_path, job)
+    if not output.exists():
+        result = subprocess.run([sys.executable, str(ROOT / 'render/assemble.py'), str(job_path), '--json'],
+                                cwd=directory, capture_output=True, encoding='utf-8', errors='replace', timeout=900)
+        if result.returncode:
+            report = json.loads(result.stdout)
+            atomic(directory / 'film-check.json', report)
+            raise RuntimeError('FILM_CHECK_FAILED')
+    from publish.dispatch import film_review
+    film_review(job_path, {'job': {'film': True}, 'artifacts': [
+        {'role': 'video', 'file': str(output), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}],
+        'platform': 'youtube', 'manifest_sha256': ''})
+    publish_job = directory / 'publish.json'
+    atomic(publish_job, {'video': str(output), 'film': True, 'platforms': plan['platforms']})
+    summary = {'status': 'awaiting_review', 'output': str(output), 'publish_job': str(publish_job),
+               'run_no': run_no, 'quoted_credits': total}
+    atomic(directory / 'review-ready.json', summary)
+    steps['stage'] = 'review'
+    checkpoint('waiting_user')
+    return summary
+
+
+def run_day(path, budget):
+    from store_film import validate_day_plan
+
+    plan = validate_day_plan(json.loads(path.read_text(encoding='utf-8-sig')))
+    if budget < 0:
+        raise RuntimeError('DAY_PLAN_BUDGET_INVALID')
+    with state_lock(STATE / 'runner'):
+        if (STATE / 'paused.json').exists():
+            raise RuntimeError('AUTOMATION_PAUSED')
+        client = Client(secure_state.load(CREDENTIALS))
+        claim = client.claim()
+        if not claim.get('due'):
+            raise RuntimeError('DAY_PLAN_RUN_NOT_DUE')
+        return execute(client, claim, day_plan=plan, budget=budget)
+
+
 def tick():
     if platform.system() not in ('Windows','Darwin'):raise RuntimeError('AUTOMATION_OS_UNSUPPORTED')
     with state_lock(STATE/'runner'):
@@ -240,7 +361,7 @@ def tick():
             atomic(STATE/'health.json',{'state':'normal'})
 
 
-def connected_report(check_local: bool = True) -> dict:
+def connected_report(check_local: bool = True, require_codex: bool = True) -> dict:
     from health import report
     result=report() if check_local else {'schema_version':1,'checked_at':datetime.now(timezone.utc).isoformat(),'checks':[],'overall':'partial'}
     def status(name, state, remedy=''):
@@ -266,6 +387,8 @@ def connected_report(check_local: bool = True) -> dict:
         except (Exception,SystemExit):status('platform_authorization','waiting_user','Run automation.py youtube-auth / 完成平台授权')
     except (Exception,SystemExit):status('account','waiting_user','Pair an active device/grant; no secrets in chat / 配对有效设备与授权')
     required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','account','rules','platform_authorization','server_quote')]
+    if not require_codex:
+        required = [check for check in required if check['name'] != 'codex_login']
     result['automation_ready']=all(c['status']=='pass' for c in required)
     result['overall']='partial' if result['automation_ready'] else 'blocked'
     return result

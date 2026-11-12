@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import platform
@@ -15,6 +14,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from local_state import state_lock
+from file_integrity import manifest_mismatches
 
 ROOT = Path(__file__).resolve().parent
 MEMORY = ROOT / "memory.md"
@@ -22,18 +22,6 @@ TEMPLATE = ROOT / "memory.template.md"
 ARCHIVE = ROOT / "memory_archive"
 MANIFEST = ROOT / "manifest.json"
 JOB_NAME = "thinknova-toolkit-metrics"
-
-
-def sha256(path: Path, normalize_text: bool = False) -> str:
-    if normalize_text and (path.name == ".gitignore" or path.suffix in {
-        ".html", ".json", ".md", ".ps1", ".py", ".sh", ".txt",
-    }):
-        return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def init() -> int:
@@ -105,11 +93,7 @@ def verify() -> int:
         print("manifest.json is unavailable; download a fresh toolkit package through MCP.", file=sys.stderr)
         return 2
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
-    bad = []
-    for entry in manifest.get("files", []):
-        path = ROOT / entry.get("path", "")
-        if not path.is_file() or sha256(path, normalize_text=manifest.get("text_line_endings") == "lf") != entry.get("sha256"):
-            bad.append(str(entry.get("path", "")))
+    bad = manifest_mismatches(ROOT, manifest)
     if bad:
         print("Toolkit verification failed: " + ", ".join(bad), file=sys.stderr)
         return 2
@@ -183,7 +167,18 @@ def main() -> int:
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
+    run_day_parser = sub.add_parser("run-day")
+    run_day_parser.add_argument("plan", type=Path)
+    run_day_parser.add_argument("--max-credits", required=True, type=int)
     args = parser.parse_args()
+    if args.command == "run-day":
+        from automation import run_day
+        try:
+            print(json.dumps(run_day(args.plan, args.max_credits), ensure_ascii=False))
+            return 0
+        except (ValueError, RuntimeError, OSError, KeyError) as exc:
+            print(json.dumps({'status': 'failed', 'error': str(exc)}, ensure_ascii=False))
+            return 2
     if args.command == "init": return init()
     if args.command == "verify": return verify()
     if args.command == "doctor":

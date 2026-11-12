@@ -80,8 +80,8 @@ def get_opts(argv):
          "--lufs": "-14", "--lufs-tol": "2", "--max-tp": "-1", "--max-silence-pct": "10",
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
-         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None}
-    flags = {"--speech", "--allow-silent", "--film"}
+         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--shop-name": None, "--featured-service": None}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -198,7 +198,7 @@ def s3_audio(ff, path, dur, o):
 
 # S4 ---------------------------------------------------------------------------
 def s4_cuts(ff, path, dur, o):
-    need = 6 if o.get("film") else int(o["--min-cuts"])
+    need = 0 if o.get("store_film") else 6 if o.get("film") else int(o["--min-cuts"])
     if need <= 0:
         return
     result = subprocess.run([ff, "-v", "info", "-i", path, "-vf", "select='gt(scene,0.3)',showinfo",
@@ -275,6 +275,11 @@ def s6_speech(ff, path, dur, o):
         return
     words = [word for segment in segments for word in (segment.words or []) if word.word.strip()]
     INFO.append("speech: %d words transcribed" % len(words))
+    if o.get('store_film'):
+        for start, end in speech_gaps(words, o["outro_start"]):
+            if end - start > 1:
+                fail('FILM_SPEECH_GAP', f'no recognized speech for {end - start:.2f}s ({start:.2f}–{end:.2f}s)')
+        return
     if film:
         worst = max(speech_gaps(words, o["outro_start"]), key=lambda gap: gap[1] - gap[0], default=(0, 0))
         if not words or worst[1] - worst[0] > 2:
@@ -340,6 +345,7 @@ def main():
         return 1
     dur = s1_spec(meta, o)
     o["film"] = "--film" in on
+    o["store_film"] = "--store-film" in on
     if o["film"]:
         if not 30 <= dur <= 40:
             fail("FILM_DURATION", "duration %.2fs is outside 30–40s" % dur)
@@ -347,7 +353,7 @@ def main():
             o["outro_start"] = float(o["--outro-start"])
         except (TypeError, ValueError):
             o["outro_start"] = 0
-        if not 0 < o["outro_start"] < dur:
+        if not 0 < o["outro_start"] < dur and not (o["store_film"] and abs(o["outro_start"] - dur) <= 0.15):
             fail("FILM_OUTRO_REQUIRED", "pass the actual outro start in seconds")
             o["outro_start"] = dur
     s2_opening(ff, path)
@@ -356,6 +362,16 @@ def main():
     s4_cuts(ff, path, dur, o)
     if o["--srt"]:
         s5_subs(o["--srt"], o)
+    if o["store_film"]:
+        from captions import parse_srt
+        from speech_review import normalize
+        captions = parse_srt(o["--srt"]) if o["--srt"] else []
+        text = normalize(''.join(cue['text'] for cue in captions))
+        for flag, code in (('--shop-name', 'FILM_SHOP_NAME_MISSING'),
+                           ('--featured-service', 'FILM_FEATURED_SERVICE_MISSING')):
+            term = normalize(o[flag] or '')
+            if not term or term not in text:
+                fail(code, 'required confirmed term missing from subtitles')
     if "--speech" in on or o["film"]:
         s6_speech(ff, path, dur, o)
     if o["--sheet"]:

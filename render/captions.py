@@ -150,7 +150,7 @@ def ass_time(t):
     return "%d:%02d:%02d.%02d" % (h, m, s, cs)
 
 
-def safe_subtitle_text(text, width, height, size, bottom, outline=8):
+def safe_subtitle_text(text, width, height, size, bottom, outline=8, max_lines=2, allow_shrink=True):
     """Conservative two-line ASS layout; never silently crop unreadable cues."""
     import math
     values = [width, height, size, bottom, outline]
@@ -158,7 +158,8 @@ def safe_subtitle_text(text, width, height, size, bottom, outline=8):
         raise ValueError('SUBTITLE_LAYOUT_INVALID: invalid canvas, size or margins')
     # One em per character is intentionally conservative for Latin and CJK fonts.
     clean = text.replace('\\', ' ').replace('{', '(').replace('}', ')')
-    for fitted in range(min(int(size), int(height / 8)), 23, -1):
+    top = min(int(size), int(height / 8))
+    for fitted in range(top, 23 if allow_shrink else top - 1, -1):
         capacity = int((width - 120 - 2 * outline) / (fitted * 1.15))
         if capacity < 1: continue
         lines = []
@@ -170,7 +171,7 @@ def safe_subtitle_text(text, width, height, size, bottom, outline=8):
                 lines.append(paragraph[:cut].strip())
                 paragraph = paragraph[cut:].strip()
             if paragraph: lines.append(paragraph)
-        if len(lines) <= 2 and len(lines) * fitted * 1.4 + outline * 2 < height - bottom - 60:
+        if len(lines) <= max_lines and len(lines) * fitted * 1.4 + outline * 2 < height - bottom - 60:
             return '{\\fs%d}' % fitted + r'\N'.join(lines)
     raise ValueError('SUBTITLE_TOO_LONG: split this cue into shorter timed cues; text does not fit two readable lines')
 

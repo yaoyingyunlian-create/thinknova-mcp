@@ -102,16 +102,40 @@ def probe(fp, path):
         raise Stop("Cannot read this file (is it a real video, image or audio file?): %s" % path)
 
 
+def check_store_source(ff, fp, source, clip_number):
+    measured = subprocess.run([fp, '-v', 'error', '-select_streams', 'v:0',
+                               '-show_entries', 'stream=width,height', '-of', 'json', source],
+                              capture_output=True, check=True, timeout=30)
+    dimensions = (json.loads(measured.stdout).get('streams') or [{}])[0]
+    width, height = dimensions.get('width', 0), dimensions.get('height', 0)
+    if not height or abs(width / height - 9 / 16) > 0.003:
+        raise Stop(f'FILM_SOURCE_NOT_PORTRAIT: clip {clip_number} ({width}x{height})', 2)
+    if not source.lower().endswith(IMAGE_EXT):
+        sample = subprocess.run([ff, '-nostdin', '-v', 'info', '-i', source, '-t', '3',
+                                 '-vf', 'fps=2,cropdetect=limit=16:round=2', '-an', '-f', 'null', '-'],
+                                capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=30)
+        if sample.returncode:
+            raise Stop(f'FILM_SOURCE_CHECK_FAILED: clip {clip_number}', 2)
+        crops = re.findall(r'crop=(\d+):(\d+):(-?\d+):(-?\d+)', sample.stderr)
+        # Reject a stable dark border on two opposite edges. A single dark
+        # frame or one-sided shadow is not enough to classify padding.
+        if len(crops) >= 3 and len(set(crops[-3:])) == 1:
+            inner_w, inner_h, left, top = map(int, crops[-1])
+            if (min(left, width - left - inner_w) > width * 0.025
+                    or min(top, height - top - inner_h) > height * 0.025):
+                raise Stop(f'FILM_SOURCE_BLACK_BARS: clip {clip_number}', 2)
+
+
 def resolve(base, path):
     return path if os.path.isabs(path) else os.path.normpath(os.path.join(base, path))
 
 
-def split_text(text):
+def split_text(text, cjk_limit=MAX_CJK):
     """One string -> short one-line subtitles, cut at punctuation, then by length."""
     out = []
     for part in SPLIT.split(text.strip()):
         part = part.strip().rstrip(STRIP).strip()
-        limit = MAX_CJK if CJK.search(part) else MAX_LATIN
+        limit = cjk_limit if CJK.search(part) else MAX_LATIN
         while len(part) > limit:
             cut = part.rfind(" ", 0, limit + 1)
             cut = cut if cut > 0 else limit
@@ -252,11 +276,41 @@ def write_ass(path, job, cues, card_span, font):
            "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding")
     style = u"Style: %s,{f},%d,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,1,%d,0,%d,60,60,%d,1\n"
     head = u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, %s\n" % (W, H, fmt)
-    head += (style % ("Sub", size, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 7, 2, bottom)).replace("{f}", font)
+    boxed = job.get('film_profile') == 'store_v2' or job.get('subtitle_style') == 'box'
+    size2 = max(24, round(size * 0.72))
+    box = ("Style: %s,{f},%d,%s,%s,&H50141414,&H00000000,-1,0,0,0,100,100,0,0,"
+           "3,16,0,2,60,60,%d,1\n")
+    for label, pixels, colour, outline in [('Sub', size, '&H00FFFFFF', 7),
+                                           ('Sub2', size2, '&H008AE0F5', 6)]:
+        row = box % (label, pixels, colour, colour, bottom) if boxed else (
+            style % (label, pixels, colour, colour, '&H00141414', outline, 2, bottom))
+        head += row.replace("{f}", font)
     head += (style % ("Badge", 30, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 3, 7, 60)).replace("{f}", font)
     head += (style % ("Card", 110, "&H00232D3C", "&H00232D3C", "&H00FFFFFF", 0, 5, 0)).replace("{f}", font)
     head += u"\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-    rows = [u"Dialogue: 0,%s,%s,Sub,,0,0,0,,%s" % (ass_time(c["start"]), ass_time(c["end"]), safe_subtitle_text(c["text"], W, H, size, bottom, 7)) for c in cues]
+    rows = []
+    for index, cue in enumerate(cues, 1):
+        start, end = ass_time(cue['start']), ass_time(cue['end'])
+        upper = bottom
+        padding = 16 if boxed else 7
+        if cue.get('text2'):
+            second = cue['text2'].strip()
+            if len(re.sub(r'\s+', '', second)) > 26 or len(second.splitlines()) != 1:
+                raise Stop(f'SUBTITLE_SECONDARY_SPLIT_REQUIRED: cue {index} exceeds 26 characters or one line', 2)
+            try:
+                lower_text = safe_subtitle_text(second, W, H, size2, bottom, padding, max_lines=1)
+            except ValueError as exc:
+                raise Stop(f'SUBTITLE_SECONDARY_SPLIT_REQUIRED: cue {index} exceeds safe width', 2) from exc
+            rows.append(f'Dialogue: 0,{start},{end},Sub2,,0,0,{bottom},,{lower_text}')
+            upper += size2 + 56
+        if job.get('film_profile') == 'store_v2':
+            try:
+                primary = safe_subtitle_text(cue['text'], W, H, size, upper, padding, max_lines=1, allow_shrink=False)
+            except ValueError as exc:
+                raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds safe width', 2) from exc
+        else:
+            primary = safe_subtitle_text(cue['text'], W, H, size, upper, padding)
+        rows.append(f'Dialogue: 0,{start},{end},Sub,,0,0,{upper},,{primary}')
     if job.get("badge"):
         rows.append(u"Dialogue: 0,%s,%s,Badge,,0,0,0,,%s" % (ass_time(0), ass_time(card_span[0] if card_span else job["_total"]), ass_escape(job["badge"])))
     if card_span:
@@ -310,7 +364,7 @@ def validate_job(job):
             raise Stop('INVALID_JOB: %s must be a finite number >= %s' % (field, minimum))
     if 'film' in job and not isinstance(job['film'], bool):
         raise Stop('INVALID_JOB: film must be boolean')
-    if job.get('film') and (not isinstance(job.get('end_card'), dict) or not job['end_card'].get('lines')):
+    if job.get('film') and not (job.get('film_profile') == 'store_v2' and job.get('platform') == 'xiaohongshu') and (not isinstance(job.get('end_card'), dict) or not job['end_card'].get('lines')):
         raise Stop('FILM_OUTRO_REQUIRED: supply a closing card with text')
     if 'speech_language' in job and not isinstance(job['speech_language'], str):
         raise Stop('INVALID_JOB: speech_language must be text')
@@ -356,6 +410,8 @@ def run_delivery_check(ff, fp, video, srt, options):
            '--ffmpeg', ff, '--ffprobe', fp, '--allow-silent']
     if options['outro_start'] is not None:
         cmd += ['--film', '--outro-start', str(options['outro_start'])]
+        if options.get('film_profile') == 'store_v2':
+            cmd += ['--store-film', '--shop-name', options['shop_name'], '--featured-service', options['featured_service']]
         if options['speech_language']:
             cmd += ['--lang', options['speech_language']]
     if srt:
@@ -431,18 +487,23 @@ def save_pending(ff, video, srt, sheet, output, options, result, diagnostics, re
               'output': os.path.basename(output), 'options': options, 'result': result}
     with open(receipt, 'w', encoding='utf-8') as stream:
         json.dump(record, stream, ensure_ascii=False)
-    return report_pending(preview, receipt, diagnostics, report)
+    return report_pending(preview, receipt, diagnostics, report, options.get('film_profile') == 'store_v2')
 
 
-def report_pending(preview, receipt, diagnostics, report):
+def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False):
     log = os.path.join(os.path.dirname(preview), 'check.log')
     with open(log, 'w', encoding='utf-8') as stream:
         stream.write(report)
     sheet = os.path.splitext(preview)[0] + '_sheet.jpg'
-    emit({'status': 'failed', 'delivery_state': 'pending_check', 'machine_check': 'failed',
+    result = {'status': 'failed', 'delivery_state': 'pending_check', 'machine_check': 'failed',
           'exit_code': 2, 'error': 'CHECK_FAILED', 'preview': preview, 'pending_receipt': receipt,
           'diagnostic_log': log, 'diagnostics': diagnostics,
-          'contact_sheet': sheet if os.path.isfile(sheet) else None})
+                    'contact_sheet': sheet if os.path.isfile(sheet) else None}
+    if diagnostics_only:
+        for key in ('preview', 'pending_receipt', 'contact_sheet'):
+            result.pop(key)
+        result['next_action'] = 'Resolve the film check findings and ask support to recheck the local pending file.'
+    emit(result)
     return 2
 
 
@@ -489,7 +550,7 @@ def recheck(receipt, overwrite):
         if not passed:
             if os.path.isfile(sheet):
                 shutil.copyfile(sheet, os.path.splitext(preview)[0] + '_sheet.jpg')
-            return report_pending(preview, receipt, diagnostics, report)
+            return report_pending(preview, receipt, diagnostics, report, options.get('film_profile') == 'store_v2')
         return deliver(video, temp_srt, sheet, output, options, record['result'], diagnostics, overwrite)
 
 
@@ -505,6 +566,20 @@ def main():
             raise Stop('Usage: assemble.py --recheck <preview.mp4.film.json> [--json] [--overwrite]')
         return recheck(argv[1], overwrite)
     job, base = load_job(argv)
+    store_film = job.get('film_profile') == 'store_v2'
+    if store_film:
+        job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
+        sys.path.insert(0, os.path.dirname(HERE))
+        from store_film import validate_beats
+        try:
+            validate_beats(job.get('clips', []), job.get('film_type'))
+        except ValueError as exc:
+            raise Stop(str(exc), 2) from exc
+        for key in ('shop_name', 'featured_service'):
+            if not isinstance(job.get(key), str) or not job[key].strip():
+                raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
+        if job.get('srt'):
+            raise Stop('FILM_SUBTITLE_INPUT_INVALID: use sentence-aligned subs and subs2')
     validate_job(job)
     if not job.get("out") or not job.get("clips"):
         raise Stop("job needs \"out\" and at least one entry in \"clips\".")
@@ -527,11 +602,30 @@ def main():
         parts, cues, t = [], [], 0.0
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
+            if store_film:
+                if c.get('fit', 'cover') != 'cover':
+                    raise Stop(f'FILM_SOURCE_FILL_UNSUPPORTED: clip {i + 1}', 2)
+                source = resolve(base, c['file'])
+                check_store_source(ff, fp, source, i + 1)
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
             parts.append(shot)
             lines = c.get("subs") or (split_text(c["text"]) if c.get("text") else [])
+            secondary = c.get('subs2')
+            if secondary is not None and (
+                job.get('srt') or not isinstance(secondary, list) or len(secondary) != len(lines)
+                or any(not isinstance(line, str) or not line.strip() for line in secondary)
+            ):
+                raise Stop('SUBTITLE_SECONDARY_COUNT_MISMATCH: subs2 must match subs', 2)
+            if store_film and secondary is None:
+                lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=9)]
             if lines:
-                cues += time_subs(lines, speech_chunks(ff, shot, dur), t)
+                shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
+                if secondary is not None:
+                    if len(shot_cues) != len(secondary):
+                        raise Stop('SUBTITLE_SECONDARY_TIMELINE_MISMATCH', 2)
+                    for cue, translation in zip(shot_cues, secondary):
+                        cue['text2'] = translation
+                cues.extend(shot_cues)
             t += dur
         card_span = None
         if job.get("end_card"):
@@ -547,7 +641,7 @@ def main():
 
         if job.get('film') and job.get('font_size') == 90:
             for index, cue in enumerate(cues, 1):
-                if len(re.sub(r'\s+', '', cue['text'])) > 9:
+                if (not store_film or CJK.search(cue['text'])) and len(re.sub(r'\s+', '', cue['text'])) > 9:
                     raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds 9 characters', 2)
 
         print("Joining %d parts, %.1f s ..." % (len(parts), t))
@@ -579,8 +673,10 @@ def main():
             raise Stop("loudnorm.py failed (see above).", 3)
         STAGE = "check"
         print("Checking ...")
-        options = {'outro_start': card_span[0] if job.get('film') else None,
+        options = {'outro_start': (card_span[0] if card_span else t) if job.get('film') else None,
                    'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur')}
+        if store_film:
+            options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
                   'subtitle_timing': 'provided' if job.get('srt') else ('estimated' if cues else 'not_applicable')}
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)

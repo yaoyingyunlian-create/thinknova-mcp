@@ -1,3 +1,10 @@
+## 门店成片入口 / Store film entry
+
+排片和制作前读「每日出片规范」，写首帧或视频提示词前读「镜头提示词」，拼片和交付读「门店成片」，收到参考片、反馈或数据时读「学习规则」。每日只准备当天一份计划。工具包的 run-day 命令负责等任务和备片，首发停在待审。
+执行当天已确认的计划时，用 python toolkit.py run-day <plan.json> --max-credits <approved_budget>。计划 schema_version=1，包含 date、rules_version、film_type、shop_name、featured_service、opening、visual_batch、segments 和 platforms。每段填写首帧、参考图、场景、时长、提示词、节拍和字幕；双语用 subs2 对应 subs。仅小红书版允许省略 end_card。需要已授权设备领取当日运行，输出待审成片和发布清单。
+
+Before planning, read Daily Film Standard. Read Shot Prompts before generation, Store Film before assembly and delivery, and Learning Rules when incorporating references or feedback. Prepare one plan per day and stop at review.
+
 # ThinkNova 工具包 AI 助手操作规则
 
 > 适用于具备本地命令和文件执行能力的 AI 助手。MCP 负责账户、规则、素材、生成和取件；工具包在客户电脑制作、检查和发布。首次自动准备，后续发现新版自动更新。普通任务真实发布须当次确认；另行启用的受控自动化仅在服务端有效授权范围内执行，普通 OAuth 不等于自动化授权。
