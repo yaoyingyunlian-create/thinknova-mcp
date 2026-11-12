@@ -5,6 +5,8 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 
@@ -42,17 +44,62 @@ def decode_audio(path, ffmpeg=None):
     return np.frombuffer(result.stdout, dtype=np.float32).copy()
 
 
-def recognize(path, model_name, language, ffmpeg=None, **options):
+def recognize_local(path, model_name, language, ffmpeg=None, **options):
+    print("SPEECH_PHASE:model_load", file=sys.stderr, flush=True)
     try:
         model = ensure_runtime(model_name)
     except Exception as exc:
         raise RuntimeError('SPEECH_MODEL_UNAVAILABLE: prepare faster-whisper and the local model cache') from exc
+    print("SPEECH_PHASE:audio_decode", file=sys.stderr, flush=True)
     audio = decode_audio(path, ffmpeg)
+    print("SPEECH_PHASE:transcription", file=sys.stderr, flush=True)
     try:
         segments, info = model.transcribe(audio, language=language, **options)
         return list(segments), info
     except Exception as exc:
         raise RuntimeError('SPEECH_TRANSCRIPTION_FAILED: inspect audio and language settings') from exc
+
+
+def recognize(path, model_name, language, ffmpeg=None, **options):
+    payload = json.dumps([str(path), model_name, language, ffmpeg, options])
+    try:
+        run = subprocess.run([sys.executable, str(Path(__file__).resolve()), '--worker'],
+                             input=payload, capture_output=True, encoding='utf-8', errors='replace', timeout=150)
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError('SPEECH_WORKER_TIMEOUT') from exc
+    if run.returncode < 0 or run.returncode >= 128:
+        phases = re.findall(r'^SPEECH_PHASE:(model_load|audio_decode|transcription)$', run.stderr, re.M)
+        phase = phases[-1] if phases else 'startup'
+        raise RuntimeError(f'SPEECH_WORKER_CRASH: {phase}, exit code {run.returncode}')
+    try:
+        result = json.loads(run.stdout)
+    except ValueError as exc:
+        raise RuntimeError(f'SPEECH_WORKER_FAILED: exit code {run.returncode}') from exc
+    if run.returncode:
+        raise RuntimeError(result.get('error', 'SPEECH_WORKER_FAILED'))
+    segments = []
+    for segment in result['segments']:
+        segment['words'] = [SimpleNamespace(**word) for word in segment['words']]
+        segments.append(SimpleNamespace(**segment))
+    return segments, SimpleNamespace(language=result['language'])
+
+
+def worker():
+    path, model, language, ffmpeg, options = json.load(sys.stdin)
+    try:
+        segments, info = recognize_local(path, model, language, ffmpeg, **options)
+        result = {'language': info.language, 'segments': [
+            {'start': segment.start, 'end': segment.end, 'text': segment.text,
+             'words': [{'start': word.start, 'end': word.end, 'word': word.word}
+                       for word in (segment.words or [])]}
+            for segment in segments
+        ]}
+        code = 0
+    except (RuntimeError, ImportError) as exc:
+        result, code = {'error': str(exc)}, 2
+    print(json.dumps(result))
+    return code
+
 
 
 def transcribe(path, model_name='small', language='zh'):
@@ -80,4 +127,4 @@ def main():
                           'next_action':'Check FFmpeg, faster-whisper and its local model cache. No model is downloaded automatically.'}))
         return 3
 
-if __name__ == '__main__': raise SystemExit(main())
+if __name__ == '__main__': raise SystemExit(worker() if sys.argv[1:] == ['--worker'] else main())

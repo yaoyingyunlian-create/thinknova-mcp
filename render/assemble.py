@@ -32,6 +32,7 @@ job.json fields (paths are relative to job.json):
 Exit code: 0 = done and check.py found no FAIL; 1 = bad input; 2 = check.py FAIL; 3 = ffmpeg failed.
 """
 import io
+import hashlib
 import math
 import contextlib
 import json
@@ -339,11 +340,170 @@ def validate_job(job):
         if not re.fullmatch(r'#?[0-9A-Fa-f]{6}', str(card.get('color', 'F3ECDF'))): raise Stop('INVALID_JOB: invalid end_card.color')
 
 
+def delivery_targets(output):
+    stem = os.path.splitext(output)[0]
+    return output, stem + '.srt', stem + '_sheet.jpg', output + '.film.json'
+
+
+def ensure_output_available(output, overwrite):
+    if not overwrite and any(os.path.exists(path) for path in delivery_targets(output)):
+        raise Stop('OUTPUT_EXISTS: use --overwrite to replace existing artifacts')
+
+
+def run_delivery_check(ff, fp, video, srt, options):
+    folder = os.path.dirname(video)
+    cmd = [sys.executable, os.path.join(HERE, 'check.py'), video, '--sheet', folder,
+           '--ffmpeg', ff, '--ffprobe', fp, '--allow-silent']
+    if options['outro_start'] is not None:
+        cmd += ['--film', '--outro-start', str(options['outro_start'])]
+        if options['speech_language']:
+            cmd += ['--lang', options['speech_language']]
+    if srt:
+        cmd += ['--srt', srt]
+    if options['max_dur']:
+        cmd += ['--max-dur', str(options['max_dur'])]
+    try:
+        checked = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=240)
+        report = checked.stdout + '\n' + checked.stderr
+        code = checked.returncode
+    except subprocess.TimeoutExpired:
+        report, code = '  [FILM_CHECK_TIMEOUT] Film check timed out.', 2
+    print(report, file=sys.stderr)
+    diagnostics = [{'code': code, 'message': message}
+                   for code, message in re.findall(r'^  \[([^]]+)\] (.+)$', report, re.M)]
+    sheet = os.path.splitext(video)[0] + '_sheet.jpg'
+    if code == 0 and not os.path.isfile(sheet):
+        code = 2
+        diagnostics.append({'code': 'CONTACT_SHEET_FAILED', 'message': 'No visual review artifact.'})
+    if code and not diagnostics:
+        diagnostics.append({'code': 'CHECK_FAILED', 'message': f'Film check exited with code {code}.'})
+    return code == 0, diagnostics, sheet, report
+
+
+def file_digest(path):
+    with open(path, 'rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest() if hasattr(hashlib, 'file_digest') else hashlib.sha256(stream.read()).hexdigest()
+
+
+def deliver(video, srt, sheet, output, options, result, warnings, overwrite):
+    ensure_output_available(output, overwrite)
+    _, target_srt, target_sheet, target_receipt = delivery_targets(output)
+    film = options['outro_start'] is not None
+    receipt = os.path.join(os.path.dirname(video), 'delivery-receipt.json')
+    if film:
+        with open(receipt, 'w', encoding='utf-8') as stream:
+            json.dump({'sha256': file_digest(video), 'state': 'awaiting_review',
+                       'machine_check': 'pass', 'outro_start': options['outro_start']}, stream)
+    # Clear any previous receipt before replacing the artifacts. A partial delivery
+    # cannot inherit a passing receipt from an earlier output.
+    if overwrite and os.path.isfile(target_receipt):
+        os.remove(target_receipt)
+    os.replace(video, output)
+    if srt:
+        os.replace(srt, target_srt)
+    elif overwrite and os.path.isfile(target_srt):
+        os.remove(target_srt)
+    os.replace(sheet, target_sheet)
+    if film:
+        os.replace(receipt, target_receipt)
+        result.update(delivery_state='awaiting_review', film_receipt=target_receipt)
+    emit(dict(result, status='succeeded', output=output, machine_check='pass', visual_review='pending',
+              warnings=warnings, contact_sheet=target_sheet))
+    return 0
+
+
+def save_pending(ff, video, srt, sheet, output, options, result, diagnostics, report):
+    decoded = subprocess.run([ff, '-nostdin', '-v', 'error', '-xerror', '-i', video,
+                              '-map', '0:v:0', '-map', '0:a:0?', '-f', 'null', '-'],
+                             capture_output=True, timeout=180)
+    if decoded.returncode:
+        raise Stop('CHECK_FAILED: preview is not decodable', 2)
+    folder = tempfile.mkdtemp(prefix='film_pending_', dir=os.path.dirname(output))
+    preview = os.path.join(folder, 'preview.mp4')
+    shutil.copyfile(video, preview)
+    if srt:
+        shutil.copyfile(srt, os.path.join(folder, 'preview.srt'))
+    if os.path.isfile(sheet):
+        shutil.copyfile(sheet, os.path.join(folder, 'preview_sheet.jpg'))
+    receipt = preview + '.film.json'
+    record = {'sha256': file_digest(preview), 'subtitle_sha256': file_digest(srt) if srt else None,
+              'state': 'pending_check', 'machine_check': 'failed',
+              'output': os.path.basename(output), 'options': options, 'result': result}
+    with open(receipt, 'w', encoding='utf-8') as stream:
+        json.dump(record, stream, ensure_ascii=False)
+    return report_pending(preview, receipt, diagnostics, report)
+
+
+def report_pending(preview, receipt, diagnostics, report):
+    log = os.path.join(os.path.dirname(preview), 'check.log')
+    with open(log, 'w', encoding='utf-8') as stream:
+        stream.write(report)
+    sheet = os.path.splitext(preview)[0] + '_sheet.jpg'
+    emit({'status': 'failed', 'delivery_state': 'pending_check', 'machine_check': 'failed',
+          'exit_code': 2, 'error': 'CHECK_FAILED', 'preview': preview, 'pending_receipt': receipt,
+          'diagnostic_log': log, 'diagnostics': diagnostics,
+          'contact_sheet': sheet if os.path.isfile(sheet) else None})
+    return 2
+
+
+def recheck(receipt, overwrite):
+    receipt = os.path.abspath(receipt)
+    folder = os.path.dirname(receipt)
+    if os.path.basename(receipt) != 'preview.mp4.film.json' or not os.path.basename(folder).startswith('film_pending_'):
+        raise Stop('INVALID_PENDING_RECEIPT')
+    with open(receipt, encoding='utf-8') as stream:
+        record = json.load(stream)
+    if record.get('state') != 'pending_check' or record.get('machine_check') != 'failed':
+        raise Stop('INVALID_PENDING_RECEIPT')
+    preview = os.path.join(folder, 'preview.mp4')
+    srt = os.path.join(folder, 'preview.srt')
+    if not os.path.isfile(preview) or file_digest(preview) != record.get('sha256'):
+        raise Stop('PREVIEW_DIGEST_MISMATCH', 2)
+    if record.get('subtitle_sha256'):
+        if not os.path.isfile(srt) or file_digest(srt) != record['subtitle_sha256']:
+            raise Stop('SUBTITLE_DIGEST_MISMATCH', 2)
+    else:
+        srt = None
+    name = record.get('output', '')
+    options = record.get('options', {})
+    outro = options.get('outro_start')
+    if not name or os.path.basename(name) != name or name in ('.', '..') or not isinstance(outro, (int, float)) or not math.isfinite(outro) or outro <= 0:
+        raise Stop('INVALID_PENDING_RECEIPT')
+    output = os.path.join(os.path.dirname(folder), name)
+    ensure_output_available(output, overwrite)
+    ff, fp = tool('ffmpeg'), tool('ffprobe')
+    # Validate a private copy so later edits cannot change what gets delivered.
+    with tempfile.TemporaryDirectory(prefix='film_recheck_', dir=os.path.dirname(folder)) as work:
+        video = os.path.join(work, 'delivery.mp4')
+        shutil.copyfile(preview, video)
+        if file_digest(video) != record['sha256']:
+            raise Stop('PREVIEW_DIGEST_MISMATCH', 2)
+        if srt:
+            temp_srt = os.path.join(work, 'delivery.srt')
+            shutil.copyfile(srt, temp_srt)
+            if file_digest(temp_srt) != record['subtitle_sha256']:
+                raise Stop('SUBTITLE_DIGEST_MISMATCH', 2)
+        else:
+            temp_srt = None
+        passed, diagnostics, sheet, report = run_delivery_check(ff, fp, video, temp_srt, options)
+        if not passed:
+            if os.path.isfile(sheet):
+                shutil.copyfile(sheet, os.path.splitext(preview)[0] + '_sheet.jpg')
+            return report_pending(preview, receipt, diagnostics, report)
+        return deliver(video, temp_srt, sheet, output, options, record['result'], diagnostics, overwrite)
+
+
+
 def main():
     global STAGE
     argv = [a for a in sys.argv[1:] if a != '--json']
     overwrite = '--overwrite' in argv
     if overwrite: argv.remove('--overwrite')
+    if argv[:1] == ['--recheck']:
+        STAGE = 'check'
+        if len(argv) != 2:
+            raise Stop('Usage: assemble.py --recheck <preview.mp4.film.json> [--json] [--overwrite]')
+        return recheck(argv[1], overwrite)
     job, base = load_job(argv)
     validate_job(job)
     if not job.get("out") or not job.get("clips"):
@@ -351,9 +511,9 @@ def main():
     ff, fp = tool("ffmpeg"), tool("ffprobe")
     out = resolve(base, job["out"])
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    film_receipt = out + '.film.json'
-    targets = [out, os.path.splitext(out)[0] + '.srt', os.path.splitext(out)[0] + '_sheet.jpg', film_receipt]
-    if not overwrite and any(os.path.exists(p) for p in targets): raise Stop('OUTPUT_EXISTS: use --overwrite to replace existing artifacts')
+
+    targets = delivery_targets(out)
+    ensure_output_available(out, overwrite)
     for clip in job['clips']:
         for key in ('file', 'voice'):
             if clip.get(key) and os.path.normcase(os.path.realpath(resolve(base, clip[key]))) in [os.path.normcase(os.path.realpath(p)) for p in targets]: raise Stop('OUTPUT_IS_INPUT: source must not be overwritten')
@@ -419,47 +579,17 @@ def main():
             raise Stop("loudnorm.py failed (see above).", 3)
         STAGE = "check"
         print("Checking ...")
-        cmd = [sys.executable, os.path.join(HERE, 'check.py'), out, '--sheet', wk, '--ffmpeg', ff, '--ffprobe', fp, '--allow-silent']
-        if job.get('film'):
-            cmd += ['--film', '--outro-start', str(card_span[0])]
-            if job.get('speech_language'):
-                cmd += ['--lang', job['speech_language']]
-        if srt: cmd += ['--srt', srt]
-        if job.get('max_dur'): cmd += ['--max-dur', str(job['max_dur'])]
-        checked=subprocess.run(cmd,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=180)
-        print(checked.stdout,file=sys.stderr)
-        if checked.stderr: print(checked.stderr,file=sys.stderr)
-        if checked.returncode != 0:
-            if 'SPEECH_CHECK_PENDING' in checked.stdout:
-                raise Stop('SPEECH_CHECK_PENDING: prepare the local speech model and recheck', 2)
+        options = {'outro_start': card_span[0] if job.get('film') else None,
+                   'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur')}
+        result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
+                  'subtitle_timing': 'provided' if job.get('srt') else ('estimated' if cues else 'not_applicable')}
+        passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
+        if not passed:
+            if job.get('film'):
+                return save_pending(ff, out, srt, sheet, final_out, options, result, diagnostics, report)
             raise Stop('CHECK_FAILED: do not publish this file', 2)
-        warnings=[{'code':code,'message':message} for code,message in re.findall(r'^  \[([^]]+)\] (.+)$',checked.stdout,re.M)]
-        sheet = os.path.splitext(out)[0] + '_sheet.jpg'
-        if not os.path.isfile(sheet): raise Stop('CONTACT_SHEET_FAILED: no visual review artifact', 2)
-        receipt = None
-        if job.get('film'):
-            import hashlib
-            receipt = os.path.join(wk, 'film.json')
-            with open(out, 'rb') as stream:
-                digest = hashlib.sha256(stream.read()).hexdigest()
-            with open(receipt, 'w', encoding='utf-8') as stream:
-                json.dump({'sha256': digest, 'state': 'awaiting_review', 'machine_check': 'pass',
-                           'outro_start': card_span[0]}, stream)
-        os.replace(out, final_out)
-        if receipt:
-            os.replace(receipt, film_receipt)
-        elif overwrite and os.path.isfile(film_receipt):
-            os.remove(film_receipt)
-        if srt: os.replace(srt, os.path.splitext(final_out)[0] + '.srt')
-        elif overwrite and os.path.isfile(os.path.splitext(final_out)[0]+'.srt'): os.remove(os.path.splitext(final_out)[0]+'.srt')
-        os.replace(sheet, os.path.splitext(final_out)[0] + '_sheet.jpg')
-        result = {'status': 'succeeded', 'output': final_out, 'duration_seconds': t,
-                  'width': W, 'height': H, 'fps': FPS, 'machine_check': 'pass',
-                  'visual_review': 'pending', 'warnings':warnings, 'contact_sheet':os.path.splitext(final_out)[0]+'_sheet.jpg', 'subtitle_timing': 'provided' if job.get('srt') else ('estimated' if cues else 'not_applicable')}
-        if receipt:
-            result.update(delivery_state='awaiting_review', film_receipt=film_receipt)
-        emit(result)
-        return 0
+        return deliver(out, srt, sheet, final_out, options, result, diagnostics, overwrite)
+
     finally:
         shutil.rmtree(wk, ignore_errors=True)
 

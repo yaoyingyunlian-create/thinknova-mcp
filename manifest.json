@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.10",
   "text_line_endings": "lf",
-  "revision": "98d38c4591e8b2add8e519048e392a8371fd75236c30f58f092b335be9b37cda",
+  "revision": "ed1a3ab7c4ce391b93fa060daa85f7a3d04dc292975725a73e95a8026033c3b7",
   "files": [
     {
       "path": ".gitignore",
@@ -205,7 +205,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "42ece4a728d9735c348bc56a13a001b59c30052eb929fb289d29774027c2b655"
+      "sha256": "b5c84601b6a543b2e62634a7e337f04eeff8e1d8d6973a1f0e7773ae12793fd8"
     },
     {
       "path": "render/captions.py",
@@ -249,7 +249,7 @@
     },
     {
       "path": "render/speech_review.py",
-      "sha256": "19cf7d824da7240caf73c181b6ff4555ae21d6806ad6f62e57bfabe398e71464"
+      "sha256": "54fe3f609f5a0287382d5c2b19c388761f87c29b9b71bccb16fe2bdf7a7ad5e7"
     },
     {
       "path": "render/templates/\u95e8\u5e97\u6210\u7247_6\u62cd.json",
@@ -289,7 +289,7 @@
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "02fee53162eecea05d13d94acafea7606dec3f1701092cd566b4d90bb482d623"
+      "sha256": "f4e2999ffa92ae7c7e09c246fffa029e308a15a3eb4dc7dbecd93f45c1d4e724"
     },
     {
       "path": "test_automation.py",
@@ -317,11 +317,11 @@
     },
     {
       "path": "test_render_pipeline.py",
-      "sha256": "9b52a62bd1f0dd5204dff7ee55e0fc1c2668dda911e738df1e4080bfd4da1837"
+      "sha256": "14dcbf5b03e6634bfde80f3a6661d3cbd0c10862bcc69b2f493cb5dddf17e7bd"
     },
     {
       "path": "test_speech_review.py",
-      "sha256": "dd7839b0dcf6cc5db7ece400a5471327a806da31d95aa2b8818b70cce1021df9"
+      "sha256": "28b8833d08d1ee585f880af209d42fc46b3f2803353b5dea4a5833686e7a951f"
     },
     {
       "path": "test_staged_workflow.py",

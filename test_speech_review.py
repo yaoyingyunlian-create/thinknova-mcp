@@ -5,6 +5,23 @@ sys.path.insert(0,str(Path(__file__).parent / 'render'))
 from speech_review import evaluate
 
 class SpeechReviewTests(unittest.TestCase):
+    def test_isolated_worker_errors(self):
+        import subprocess
+        from unittest.mock import patch
+        from render.speech_review import recognize
+
+        cases = [
+            (subprocess.CompletedProcess([], 3221225477, '', ''), 'SPEECH_WORKER_CRASH'),
+            (subprocess.TimeoutExpired([], 150), 'SPEECH_WORKER_TIMEOUT'),
+            (subprocess.CompletedProcess([], 2, '{"error":"SPEECH_MODEL_UNAVAILABLE"}', ''), 'SPEECH_MODEL_UNAVAILABLE'),
+        ]
+        for result, expected in cases:
+            with patch('render.speech_review.subprocess.run', side_effect=[result]):
+                with self.assertRaisesRegex(RuntimeError, expected):
+                    recognize('source.mp4', 'small', 'zh')
+
+
+
     def test_known_wrong_term_blocks(self):
         report=evaluate([{'start':0,'end':6,'text':'你们有没有小城厨'}],['小程序'])
         self.assertEqual(report['status'],'speech_mismatch')
@@ -39,6 +56,7 @@ class AutomationQualityTests(unittest.TestCase):
         import tempfile
         import json
         import subprocess
+        from unittest.mock import patch
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as folder:
             directory=Path(folder)
