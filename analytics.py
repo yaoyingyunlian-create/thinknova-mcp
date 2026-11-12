@@ -44,13 +44,69 @@ def _append_memory(line: str) -> None:
         stream.write("\n- " + line + "\n")
 
 
-def youtube_metrics(content_id: str) -> dict:
+def comment_topics(items):
+    patterns = {
+        'price': r'价格|多少钱|收费|\bprice\b|how much',
+        'booking': r'预约|订位|\bbook(?:ing)?\b|appointment',
+        'location': r'地址|在哪|怎么走|\blocation\b|\baddress\b',
+        'hours': r'营业|几点|opening hours|\bopen\b.*\btime\b',
+        'service': r'适合|怎么做|服务|how does|\bservice\b',
+    }
+    topics = {}
+    for item in items:
+        comment = item.get('snippet', {}).get('topLevelComment', {}).get('snippet', {})
+        text = comment.get('textOriginal') or comment.get('textDisplay') or ''
+        hits = [topic for topic, pattern in patterns.items() if re.search(pattern, text, re.I)]
+        for topic in hits:
+            result = topics.setdefault(topic, {'count': 0, 'last_seen_at': ''})
+            result['count'] += 1
+            published = comment.get('publishedAt', '')
+            if re.fullmatch(r'\d{4}-\d{2}-\d{2}T[0-9:.]+Z', published):
+                result['last_seen_at'] = max(result['last_seen_at'], published)
+    return topics
+
+
+def youtube_comment_topics(yt, content_id, channel_id):
+    channel = (yt.channels().list(part='id', mine=True).execute().get('items') or [{}])[0].get('id')
+    if not channel or channel != channel_id:
+        return {'status': 'unavailable', 'reason': 'VIDEO_NOT_OWNED'}
+    page = yt.commentThreads().list(part='snippet', videoId=content_id, maxResults=100,
+                                    textFormat='plainText', order='time').execute()
+    items = page.get('items') or []
+    return {'status': 'partial' if page.get('nextPageToken') else ('available' if items else 'empty'),
+            'scope': 'recent_top_level_comments', 'video_id': content_id, 'sample_size': len(items), 'topics': comment_topics(items)}
+
+
+
+def youtube_metrics(content_id: str, controlled: bool = False) -> dict:
     sys.path.insert(0, str(ROOT / "publish" / "youtube"))
     import yt_common
-    yt = yt_common.youtube(interactive=False)
-    item = (yt.videos().list(part="statistics", id=content_id).execute().get("items") or [None])[0]
+    previous_token = yt_common.TOKEN
+    if controlled:
+        from automation import YOUTUBE_TOKEN
+        yt_common.TOKEN = str(YOUTUBE_TOKEN)
+    try:
+        yt = yt_common.youtube(interactive=False)
+    except SystemExit:
+        return {'comment_topics': {'status': 'unavailable', 'reason': 'YOUTUBE_AUTH_REQUIRED'},
+                'inbox_topics': {'status': 'unavailable', 'reason': 'NO_AUTHORIZED_CONNECTOR'}}
+    finally:
+        yt_common.TOKEN = previous_token
+    try:
+        item = (yt.videos().list(part="statistics,snippet", id=content_id).execute().get("items") or [None])[0]
+    except Exception as exc:
+        if getattr(getattr(exc, 'resp', None), 'status', None) not in (401, 403):
+            raise
+        return {'comment_topics': {'status': 'unavailable', 'reason': 'YOUTUBE_AUTH_REQUIRED'},
+                'inbox_topics': {'status': 'unavailable', 'reason': 'NO_AUTHORIZED_CONNECTOR'}}
     if not item: raise RuntimeError("YouTube video was not found or is unavailable to this account.")
-    return {"views": item["statistics"].get("viewCount"), "likes": item["statistics"].get("likeCount"), "comments": item["statistics"].get("commentCount")}
+    try:
+        feedback = youtube_comment_topics(yt, content_id, item.get('snippet', {}).get('channelId'))
+    except Exception:
+        feedback = {'status': 'unavailable', 'reason': 'COMMENTS_READ_FAILED'}
+    return {"views": item["statistics"].get("viewCount"), "likes": item["statistics"].get("likeCount"),
+            "comments": item["statistics"].get("commentCount"), 'comment_topics': feedback,
+            'inbox_topics': {'status': 'unavailable', 'reason': 'NO_AUTHORIZED_CONNECTOR'}}
 
 
 def tiktok_metrics(url: str) -> dict:
@@ -77,7 +133,9 @@ def tiktok_metrics(url: str) -> dict:
             if not metrics: raise RuntimeError('TikTok counters unavailable; login, verification or page change requires inspection. No metrics were recorded.')
         finally:
             browser.close()
-    return {'available_counters': metrics, 'units': 'platform_display_text', 'views': None}
+    return {'available_counters': metrics, 'units': 'platform_display_text', 'views': None,
+            'comment_topics': {'status': 'unavailable', 'reason': 'NO_AUTHORIZED_CONNECTOR'},
+            'inbox_topics': {'status': 'unavailable', 'reason': 'NO_AUTHORIZED_CONNECTOR'}}
 
 
 def collect() -> int:
@@ -97,12 +155,16 @@ def _collect() -> int:
         due = "24h" if timedelta(hours=24) <= age < timedelta(hours=48) and "24h" not in samples else "48h" if age >= timedelta(hours=48) and "48h" not in samples else ""
         if not due: continue
         try:
-            data = youtube_metrics(item["content_id"]) if item["platform"] == "youtube" else tiktok_metrics(item["content_url"])
+            if item["platform"] == "youtube":
+                data = (youtube_metrics(item["content_id"], controlled=True) if item.get("controlled")
+                        else youtube_metrics(item["content_id"]))
+            else:
+                data = tiktok_metrics(item["content_url"])
             append_memory("%s | %s | content_id=%s | %s | published=%s | 数据：%s" % (now.isoformat(), item['platform'], item['content_id'], due, item['published_at'], json.dumps(data, ensure_ascii=False)))
             samples[due] = {"collected_at": now.isoformat(), "metrics": data}
             if due == '48h' and '24h' not in samples: item['missed_24h'] = True
         except Exception as exc:
-            item["last_error"] = str(exc)[:300]; item["last_attempt_at"] = now.isoformat()
+            item["last_error"] = "ANALYTICS_COLLECTION_FAILED"; item["last_attempt_at"] = now.isoformat()
             failed = True
             append_memory("%s | %s | content_id=%s | %s 数据采集失败：%s（未重发内容）" % (now.isoformat(), item['platform'], item['content_id'], due, item['last_error']))
         changed = True
@@ -124,6 +186,8 @@ def _register(args: argparse.Namespace) -> int:
     if any(item['platform'] == args.platform and item['content_id'] == args.content_id for item in items):
         print('Target already registered; retained its collected samples.'); return 0
     items.append({"platform": args.platform, "content_id": args.content_id, "content_url": args.content_url or "", "published_at": published})
+    if getattr(args, 'controlled', False):
+        items[-1]['controlled'] = True
     save_targets(items); print("Registered read-only 24/48 hour collection target.")
     return 0
 

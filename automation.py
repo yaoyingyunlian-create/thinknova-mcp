@@ -408,10 +408,29 @@ def scheduled_store_day(phase):
             if grant.get('local_time', '') < grant.get('production_time', '10:00'):
                 return
             path = STATE / 'plans' / grant['project_key'] / f'{day}.json'
-            if not path.is_file():
-                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_MISSING'})
+            if path.is_file():
+                plan = validate_day_plan(json.loads(path.read_text(encoding='utf-8-sig')))
+            else:
+                try:
+                    response, _ = client.post('/mcp/device/day-plan', {})
+                except (RuntimeError, OSError) as exc:
+                    code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
+                    atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': code})
+                    return
+                result = response.get('data') or {}
+                status = result.get('status')
+                if status != 'ready':
+                    if status not in ('processing', 'not_due'):
+                        atomic(STATE / 'daily-reminder.json', {
+                            'date': day, 'error_code': result.get('error_code') or 'DAY_PLAN_INPUT_REQUIRED',
+                            'missing_fields': result.get('missing_fields', []),
+                        })
+                    return
+                plan = validate_day_plan(result.get('plan'))
+            if (plan['date'] != day or plan['rules_version'] != grant['rules_version']
+                    or plan.get('project_key') != grant['project_key']):
+                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_SCOPE_CHANGED'})
                 return
-            plan = validate_day_plan(json.loads(path.read_text(encoding='utf-8-sig')))
             claim = client.claim('produce')
             if claim.get('due'):
                 try:
@@ -468,13 +487,22 @@ def publish_store_day(client, claim):
             raise RuntimeError('PUBLICATION_OUTCOME_UNKNOWN')
         steps.update(stage='complete', youtube_video_id=video_id)
         client.receipt(run_no, steps, 'succeeded')
-        atomic(STATE / 'daily-reminder.json', {'date': claim['usage_date'], 'status': 'published',
-                'video_url': f'https://youtube.com/shorts/{video_id}'})
+        published = {'date': claim['usage_date'], 'status': 'published',
+                     'video_url': f'https://youtube.com/shorts/{video_id}'}
     except Exception as exc:
         code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'PUBLICATION_FAILED'
         atomic(STATE / 'daily-reminder.json', {'date': claim['usage_date'], 'error_code': code})
         client.receipt(run_no, steps, 'waiting_user', code)
         raise RuntimeError(code) from exc
+
+
+    try:
+        from analytics import register
+        register(argparse.Namespace(platform='youtube', content_id=video_id, content_url=None,
+                                    published_at=datetime.now(timezone.utc).isoformat(), controlled=True))
+    except (OSError, RuntimeError, ValueError):
+        published['analytics_error'] = 'ANALYTICS_REGISTRATION_FAILED'
+    atomic(STATE / 'daily-reminder.json', published)
 
 
 def install_daily_schedules():
