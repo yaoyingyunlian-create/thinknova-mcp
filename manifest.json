@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "5211ac8a6c77296b249b35f1dd6ed0f1e1bc80f0518e4d06e779f2d6571b57f0",
+  "revision": "0bdab4606a828f71886d0a8dc0eda096181178060a7e13a797e2f61839d9a80a",
   "files": [
     {
       "path": ".gitignore",
@@ -9,11 +9,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "c8eca968669dc8f777c1d2f1d8df719f5c35bc3437f40a41e5c406e3f416c653"
+      "sha256": "c84f09d494dd85408d5ad9261f3123d211e4196c61e77ef60e9e39ab6e40f5ca"
     },
     {
       "path": "AUTOMATION.md",
-      "sha256": "5e8ff40aff31add8fb26f76e9b0a49976d65bb55478dd1826d1c3a29330a891f"
+      "sha256": "63a9a279fd31e984f6ac016d6b038c09c1aa0292ccc810ef3a89edabca542f36"
     },
     {
       "path": "README.md",
