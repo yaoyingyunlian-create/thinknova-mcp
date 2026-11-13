@@ -242,6 +242,8 @@ def main() -> int:
     run_day_parser.add_argument("--max-credits", required=True, type=int)
     authorization_parser = sub.add_parser("authorization", description="Read the paired project grant. Exit 2 on authorization or installation failure.")
     authorization_parser.add_argument("--install-schedules", action="store_true", help="Register both local jobs after confirming the sample, authorizing and pairing the device")
+    sub.add_parser("assistant-schedule", help="Read the authorized schedule for the customer AI assistant")
+    sub.add_parser("enable-youtube", help="Open ThinkNova to enable YouTube automatic publishing")
     sub.add_parser("platform-capabilities", description="Print JSON showing ordinary publishing, unattended scheduling, and receipt verification by platform.")
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
@@ -253,6 +255,17 @@ def main() -> int:
             result = {'status': 'blocked', 'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'awaiting_review' else 2
+    if args.command in ("enable-youtube", "assistant-schedule"):
+        from automation import assistant_schedule, enable_youtube
+        try:
+            result = enable_youtube() if args.command == "enable-youtube" else assistant_schedule()
+            print(json.dumps(result))
+            return 0 if result["status"] == "authorized" else 2
+        except Exception as exc:
+            detail = str(exc)
+            code = detail if re.fullmatch(r'[A-Z0-9_]{1,64}', detail) or detail.startswith('SCHEDULE_INSTALL_FAILED (') else 'YOUTUBE_SETUP_FAILED'
+            print(json.dumps({'status': 'blocked', 'error': code}), file=sys.stderr)
+            return 2
     if args.command == "authorization":
         from automation import authorization, install_daily_schedules
         try:

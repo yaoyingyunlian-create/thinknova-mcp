@@ -358,6 +358,84 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     return summary
 
 
+def enable_youtube():
+    import secrets
+    import urllib.error
+    import urllib.request
+    import webbrowser
+    from automation_client import BASE, NoRedirect
+
+    def post(stage, **data):
+        req = urllib.request.Request(BASE + '/mcp/device/youtube-setup/' + stage,
+            json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'})
+        try:
+            with urllib.request.build_opener(NoRedirect()).open(req, timeout=20) as response:
+                return json.loads(response.read(65536))['data']
+        except urllib.error.HTTPError as exc:
+            error = json.loads(exc.read(4096)).get('error', '')
+            raise RuntimeError(error if re.fullmatch('[A-Z0-9_]{1,64}', error) else 'YOUTUBE_SETUP_FAILED') from None
+
+    proof = secrets.token_hex(32)
+    proof_hash = hashlib.sha256(proof.encode()).hexdigest()
+    setup = post('start', proof_hash=proof_hash)['setup_id']
+    if not re.fullmatch('[a-f0-9]{48}', setup):
+        raise RuntimeError('YOUTUBE_SETUP_INVALID')
+    url = 'https://thinknova.top/app/account/mcp#youtube_setup=' + setup
+    print('Confirm the device and budget in ThinkNova / 请在 ThinkNova 页面确认设备与预算', flush=True)
+    print('Pairing code / 配对码: ' + proof_hash[:8].upper(), flush=True)
+    if not webbrowser.open(url):
+        print(url, flush=True)
+    deadline = time.monotonic() + 300
+    while time.monotonic() < deadline:
+        response = post('poll', setup_id=setup, secret=proof)
+        if response.get('status') == 'confirmed':
+            break
+        time.sleep(3)
+    else:
+        raise RuntimeError('YOUTUBE_SETUP_EXPIRED')
+
+    from google_auth_oauthlib.flow import InstalledAppFlow
+    from googleapiclient.discovery import build
+    sys.path.insert(0, str(ROOT / 'publish' / 'youtube'))
+    import yt_common
+    flow = InstalledAppFlow.from_client_config(response['oauth'], yt_common.SCOPES, autogenerate_code_verifier=True)
+    credentials = flow.run_local_server(host='127.0.0.1', port=0, timeout_seconds=max(1, int(deadline - time.monotonic())),
+                                      authorization_prompt_message=None, prompt='select_account')
+    channel = yt_common.my_channel(build('youtube', 'v3', credentials=credentials, cache_discovery=False))
+    if channel['id'] != response['channel_id']:
+        raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
+    existing = secure_state.load(CREDENTIALS) if CREDENTIALS.is_file() else {}
+    execution = hashlib.sha256(('thinknova-youtube-execution:' + proof).encode()).hexdigest()
+    pending_token = YOUTUBE_TOKEN.with_name('youtube-pending' + YOUTUBE_TOKEN.suffix)
+    secure_state.save(pending_token, json.loads(credentials.to_json()))
+    try:
+        result = post('activate', setup_id=setup, secret=proof, google_access_token=credentials.token)
+    except (OSError, ValueError, RuntimeError):
+        # A committed grant is independently verifiable with its locally derived credential.
+        Client({'execution_token': execution}).post('/mcp/device/configuration', {})
+        result = {}
+    secure_state.save(YOUTUBE_TOKEN, secure_state.load(pending_token))
+    secure_state.save(CREDENTIALS, {**existing, 'execution_token': execution,
+                                  **({'telemetry_token': result['telemetry_token']} if 'telemetry_token' in result else {})})
+    (STATE / 'paused.json').unlink(missing_ok=True)
+    return assistant_schedule()
+
+
+def assistant_schedule():
+    grant = authorization()
+    if grant.get('status') != 'available' or not grant.get('project_key'):
+        raise RuntimeError('AUTOMATION_PROJECT_AUTHORIZATION_REQUIRED')
+    if not grant.get('auto_publish'):
+        raise RuntimeError('AUTOMATION_PUBLICATION_NOT_AUTHORIZED')
+    return {'status': 'authorized', 'scheduler': 'customer_ai_assistant',
+            'grant_no': grant['grant_no'], 'timezone': grant['timezone'],
+            'tasks': [
+                {'phase': phase, 'local_time': grant[field],
+                 'argv': [sys.executable, str(ROOT / 'automation.py'), 'tick-' + phase]}
+                for phase, field in [('produce', 'production_time'), ('publish', 'publish_time')]
+            ]}
+
+
 def authorization():
     if not CREDENTIALS.is_file():
         return {'status': 'unconfigured'}
@@ -368,7 +446,7 @@ def authorization():
     if not grant:
         return {'status': 'unconfigured'}
     fields = ('grant_no', 'channel_id', 'rules_version', 'daily_budget', 'publish_time',
-              'timezone', 'expires_at', 'project_key', 'weekly_budget', 'production_time')
+              'timezone', 'expires_at', 'project_key', 'weekly_budget', 'production_time', 'auto_publish')
     return {'status': 'available', 'platform': 'youtube',
             **{key: grant[key] for key in fields if key in grant}}
 

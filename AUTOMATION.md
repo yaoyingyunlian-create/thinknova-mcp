@@ -58,8 +58,10 @@ macOS uses a GUI-session LaunchAgent and Keychain-backed markers; Windows uses t
 Preview only through get_balance with quote_request={tool,arguments}. Check the capability and explicit generation_quote no-task/no-reservation response. Persist each cap before creating and keep it during retries. A price above the cap is rejected before freezing. Deployment and new tool discovery are required; do not test unknown quote flags on paid tools.
 
 
-After sample approval, account authorization, and local pairing, use
-`python toolkit.py authorization --install-schedules` to register the daily jobs.
-Setup and updates do not register them. Doctor reports scheduler readiness separately.
 首次安装 Chromium 的实测下载量约 330 MB，实际大小随版本与平台变化。
 A clean installation downloaded about 330 MB for Chromium in testing.
+
+### YouTube 一次启用 / YouTube setup
+
+运行 python toolkit.py enable-youtube。完成授权后，以返回的 tasks 在客户机 AI 助理的原生定时功能分别登记制作和发布，使用返回的时区及本机命令。按 phase 更新已有任务，避免重复。若 AI 助理不支持定时或本机执行，报告该限制。用 python toolkit.py assistant-schedule 重新读取授权时间。此流程由 AI 助理调度。
+Run python toolkit.py enable-youtube. Register or update the returned production and publication tasks in the customer AI assistant's native scheduler. Use the returned timezone and local commands. If the assistant cannot schedule local execution, report that limitation. Use python toolkit.py assistant-schedule to retrieve the schedule again.

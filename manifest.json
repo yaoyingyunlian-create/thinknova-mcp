@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.16",
+  "version": "thinknova-automation-toolkit-v3.1.17",
   "text_line_endings": "lf",
-  "revision": "fc69b7019a0acab5a4d1d33b97bc3bec9f2a6c3350c7dec78de2f67fdbdcf16e",
+  "revision": "ab62226381f3d2a9f2b3d87170b6ed7b69618d83f5299f737974004dab7db6fb",
   "files": [
     {
       "path": ".gitignore",
@@ -9,11 +9,11 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "e1ab71c457deafd2ec49ce22bab9999ac234fb1c7193d7d711288893f62bbd2b"
+      "sha256": "13f1a5803493713ccad29aa52d5a64abcb3bc1a5d08d32736acdd5b79fcfae62"
     },
     {
       "path": "AUTOMATION.md",
-      "sha256": "1636d800cdcc17656f4f36f7aaa5e2581f9d6105196827805a7cae202fede38d"
+      "sha256": "5e8ff40aff31add8fb26f76e9b0a49976d65bb55478dd1826d1c3a29330a891f"
     },
     {
       "path": "README.md",
@@ -25,7 +25,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "fa4e010533ec03a3d1e9c87d7720aa2f926a464929e305beeb4be0d2b7174232"
+      "sha256": "358addbdef4e2f0118ae9ac1ce6af6c98313c31ebd3fd503fca17ee801ed5118"
     },
     {
       "path": "automation_client.py",
@@ -41,7 +41,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "d121a367f1b844e4d59990e9f700ef3df2d12fe2994af9eb5c1a4698b0b30500"
+      "sha256": "67098f3a56ffb8e5cce25cbbf7fb93cb514280677f46eccf0db316d63ec7c69e"
     },
     {
       "path": "drafts.py",
@@ -365,7 +365,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "07bd40ea8a5bdbfa619996ed4110c40b0daba29ddd1580efa9a270b94df8db96"
+      "sha256": "4cc8071448b81308cd9e1f0a342627bcab10b03207d88548a8871d7a5c8fd7aa"
     },
     {
       "path": "update.py",
