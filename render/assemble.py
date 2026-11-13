@@ -524,7 +524,7 @@ def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False
           'exit_code': 2, 'error': 'CHECK_FAILED', 'preview': preview, 'pending_receipt': receipt,
           'diagnostic_log': log, 'diagnostics': diagnostics,
                     'contact_sheet': sheet if os.path.isfile(sheet) else None}
-    if diagnostics_only:
+    if diagnostics_only and os.environ.get('THINKNOVA_REVIEW_PREVIEW') != '1':
         for key in ('preview', 'pending_receipt', 'contact_sheet'):
             result.pop(key)
         result['next_action'] = 'Resolve the film check findings and ask support to recheck the local pending file.'

@@ -678,6 +678,35 @@ def connected_report(check_local: bool = True, require_codex: bool = True) -> di
     return result
 
 
+def doctor_command(as_json):
+    from health import display
+    print('Checking local dependencies, device authorization and YouTube / 正在检查本机依赖、设备授权和 YouTube', file=sys.stderr, flush=True)
+    if as_json:
+        try:
+            probe = subprocess.run(
+                [sys.executable, '-c',
+                 'import automation, contextlib, json, sys; '
+                 'redirect = contextlib.redirect_stdout(sys.stderr); '
+                 'redirect.__enter__(); result = automation.connected_report(); '
+                 'redirect.__exit__(None, None, None); print(json.dumps(result, ensure_ascii=True))'],
+                cwd=ROOT, capture_output=True, timeout=150, encoding='utf-8', errors='replace',
+            )
+            if probe.returncode != 0:
+                raise ValueError('AUTOMATION_DOCTOR_PROBE_FAILED')
+            result = json.loads(probe.stdout)
+        except subprocess.TimeoutExpired:
+            result = {'schema_version': 1, 'automation_ready': False, 'overall': 'blocked',
+                      'checks': [{'name': 'connected_probe', 'status': 'unknown',
+                                  'remedy': 'AUTOMATION_DOCTOR_TIMEOUT: check local doctor, authorization and YouTube separately'}]}
+        except (OSError, ValueError):
+            result = {'schema_version': 1, 'automation_ready': False, 'overall': 'blocked',
+                      'checks': [{'name': 'connected_probe', 'status': 'unknown', 'remedy': 'AUTOMATION_DOCTOR_PROBE_FAILED'}]}
+    else:
+        result = connected_report()
+    display(result, as_json)
+    return 0 if result['automation_ready'] else 2
+
+
 def installation_preflight():
     if not connected_report()['automation_ready']:raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
 
@@ -742,9 +771,7 @@ def main():
             os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
             subprocess.run([sys.executable,str(ROOT/'publish/youtube/auth.py')],check=True)
         elif args.command=='doctor':
-            from health import display
-            result=connected_report();display(result,args.json)
-            return 0 if result['automation_ready'] else 2
+            return doctor_command(args.json)
         elif args.command=='tick':tick()
         elif args.command in ('tick-produce', 'tick-publish'):
             scheduled_store_day(args.command.removeprefix('tick-'))

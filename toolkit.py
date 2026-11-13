@@ -162,11 +162,81 @@ def uninstall_schedule() -> int:
     return 0
 
 
+def film_review(job_path, recheck=False):
+    from file_integrity import sha256
+    from automation import atomic
+    from publish.dispatch import PLATFORMS
+    job_path = job_path.resolve()
+    job = json.loads(job_path.read_text(encoding='utf-8-sig'))
+    variants = job.get('platforms')
+    if not isinstance(variants, dict) or not variants:
+        raise ValueError('FILM_REVIEW_PLATFORMS_REQUIRED')
+    review = {}
+    for platform_name, copy in variants.items():
+        if platform_name not in PLATFORMS or not isinstance(copy, dict):
+            raise ValueError('FILM_REVIEW_PLATFORM_INVALID')
+        body = copy.get('description') or copy.get('caption') or copy.get('body')
+        if not all(isinstance(value, str) and value.strip() for value in (copy.get('title'), body)):
+            raise ValueError(f'FILM_REVIEW_COPY_REQUIRED: {platform_name}')
+        tags = copy.get('tags', [])
+        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+            raise ValueError(f'FILM_REVIEW_TAGS_INVALID: {platform_name}')
+        review[platform_name] = {
+            'title': copy['title'], 'description': body, 'tags': tags,
+            'target_account': copy.get('target_account') or copy.get('expected_channel_id'),
+            'publish_time': copy.get('publishAt') or copy.get('schedule'),
+            'status': 'platform_rules_pending' if copy.get('platform_rules_status') == 'draft' else 'platform_review_required',
+        }
+    print('Preparing local film / 正在本机制作成片', file=sys.stderr, flush=True)
+    if recheck:
+        pending = Path(job['pending_receipt'])
+        args = ['--recheck', str(job_path.parent / pending)]
+    else:
+        if job.get('film') is not True and job.get('film_profile') != 'store_v2':
+            raise ValueError('FILM_REVIEW_PROFILE_REQUIRED')
+        args = [str(job_path)]
+    run = subprocess.run([sys.executable, str(ROOT / 'render' / 'assemble.py'), *args, '--json'],
+                         cwd=job_path.parent, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW="1"),
+                         stdout=subprocess.PIPE, stderr=sys.stderr,
+                         encoding='utf-8', errors='replace', timeout=1800)
+    try:
+        result = json.loads(run.stdout)
+    except ValueError:
+        return {'status': 'blocked', 'error': 'FILM_RENDER_REPORT_UNAVAILABLE'}
+    if run.returncode or result.get('machine_check') != 'pass' or not result.get('film_receipt'):
+        return {**result, 'status': 'blocked'}
+    video = Path(result['output'])
+    receipt = json.loads(Path(result['film_receipt']).read_text(encoding='utf-8'))
+    digest = sha256(video)
+    if receipt.get('machine_check') != 'pass' or receipt.get('sha256') != digest:
+        raise ValueError('FILM_REVIEW_RECEIPT_INVALID')
+    supplied_cover = job.get('cover')
+    cover = job_path.parent / supplied_cover if isinstance(supplied_cover, str) else None
+    if cover is None or not cover.is_file():
+        cover = video.with_name(video.stem + '.' + digest[:12] + '.cover.jpg')
+        ff = shutil.which('ffmpeg')
+        if ff and not cover.is_file():
+            try:
+                subprocess.run([ff, '-nostdin', '-v', 'error', '-n', '-i', str(video),
+                                '-frames:v', '1', str(cover)], capture_output=True, timeout=30)
+            except (OSError, subprocess.TimeoutExpired):
+                pass
+    package = {'status': 'awaiting_review', 'video': str(video), 'sha256': digest,
+               'cover': str(cover) if cover.is_file() else None,
+               'contact_sheet': result.get('contact_sheet'), 'platforms': review}
+    output = video.with_name(video.stem + '.review-package.json')
+    atomic(output, package)
+    return {**package, 'review_package': str(output)}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
+    film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
+    film_parser.add_argument("job", type=Path)
+    film_parser.add_argument("--recheck", action="store_true")
     run_day_parser = sub.add_parser("run-day", description="Run an approved schema_version=1 day plan JSON with date, project_key, rules_version, opening, segments and platforms. Uses --max-credits as the budget cap. Exit 2 if blocked.")
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
@@ -176,6 +246,13 @@ def main() -> int:
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
     args = parser.parse_args()
+    if args.command == "film":
+        try:
+            result = film_review(args.job, args.recheck)
+        except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
+            result = {'status': 'blocked', 'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result['status'] == 'awaiting_review' else 2
     if args.command == "authorization":
         from automation import authorization, install_daily_schedules
         try:

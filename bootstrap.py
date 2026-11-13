@@ -131,6 +131,64 @@ def update(confirmed=False):
     subprocess.run([sys.executable, str(ROOT / 'bootstrap.py'), 'setup'], check=True)
 
 
+def recovery_report(workspace):
+    import tempfile
+    from file_integrity import manifest_mismatches
+
+    def failures(root):
+        try:
+            return manifest_mismatches(root, json.loads((root / 'manifest.json').read_text(encoding='utf-8')))
+        except (OSError, ValueError, TypeError, KeyError):
+            return ['manifest.json']
+
+    report = {'status': 'blocked', 'version_status': 'unknown', 'active_toolkit': None}
+    mismatches = failures(ROOT)
+    report['missing'] = [name for name in mismatches if not (ROOT / name).is_file()]
+    report['integrity_mismatches'] = mismatches
+    try:
+        changed = git('diff', 'HEAD', '--name-only', '-z').split('\0')
+        substantive = set(git('diff', 'HEAD', '--ignore-cr-at-eol', '--name-only', '-z').split('\0'))
+        report['source_changes'] = sorted(substantive - {''} - set(report['missing']))
+        report['line_ending_changes'] = [name for name in changed if name and name not in substantive]
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        report['git_status'] = 'unknown'
+    try:
+        import contextlib
+        with contextlib.redirect_stdout(sys.stderr):
+            remote = check()
+        report['version_status'] = 'update_available' if remote['update_available'] else 'current'
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        remote = None
+
+    if not mismatches and not (remote and remote['update_available']):
+        return {**report, 'status': 'ready', 'active_toolkit': str(ROOT)}
+
+    if remote:
+        try:
+            workspace.mkdir(parents=True, exist_ok=True)
+            candidate = Path(tempfile.mkdtemp(prefix='thinknova-toolkit-', dir=ROOT.parent))
+            env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
+            subprocess.run(['git', '-c', 'core.autocrlf=false', 'clone', '--branch', 'main', '--single-branch',
+                            REPOSITORY, str(candidate)], env=env, capture_output=True, check=True, timeout=120)
+            head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=candidate, timeout=15).decode().strip()
+            if head != remote['latest_commit'] or failures(candidate):
+                raise RuntimeError('TOOLKIT_CANDIDATE_INTEGRITY_FAILED')
+            setup_result = subprocess.run([sys.executable, str(candidate / 'bootstrap.py'), 'setup', '--json'],
+                                          capture_output=True, timeout=1800)
+            if setup_result.returncode or failures(candidate):
+                raise RuntimeError('TOOLKIT_CANDIDATE_SETUP_FAILED')
+            from automation import atomic
+            atomic(workspace / '.thinknova-toolkit.json', {'toolkit': str(candidate), 'commit': head})
+            return {**report, 'status': 'ready', 'active_toolkit': str(candidate), 'version_status': 'current',
+                    'recovery': 'clean_copy'}
+        except (OSError, RuntimeError, subprocess.SubprocessError):
+            report['recovery'] = 'clean_copy_failed'
+    if not mismatches:
+        return {**report, 'status': 'ready', 'active_toolkit': str(ROOT)}
+    report['error'] = 'TOOLKIT_INTEGRITY_RECOVERY_REQUIRED'
+    return report
+
+
 def setup(json_output=False):
     global SETUP_PHASE
     SETUP_PHASE = 'python'
@@ -171,7 +229,8 @@ def setup(json_output=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command', choices=['setup', 'repair', 'check', 'update', 'prepare-update'])
+    parser.add_argument('command', choices=['setup', 'repair', 'check', 'update', 'prepare-update', 'recover'])
+    parser.add_argument('--workspace', type=Path, default=Path.cwd())
     parser.add_argument('--user-confirmed', action='store_true')
     parser.add_argument('--json', action='store_true', help='Emit a structured setup result; installation logs go to stderr')
     args = parser.parse_args()
@@ -187,6 +246,13 @@ def main():
             if args.json:
                 python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
                 subprocess.run([str(python), str(ROOT / 'health.py'), '--json'], check=True)
+        elif args.command == 'recover':
+            from automation import atomic
+            report = recovery_report(args.workspace.resolve())
+            if report['status'] == 'blocked':
+                atomic(args.workspace.resolve() / 'thinknova-recovery.json', report)
+            print(json.dumps(report, ensure_ascii=False))
+            return 0 if report['status'] == 'ready' else 2
         elif args.command == 'check': check()
         elif args.command == 'prepare-update': prepare_legacy_update()
         else: update(args.user_confirmed)

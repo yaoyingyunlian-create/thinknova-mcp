@@ -1,3 +1,6 @@
+客户说「用这些素材给我的店做一条宣传视频」时，先用已授权的现有素材准备本机拼片配置，在 JSON 中加入各平台的标题、正文、标签、账号和时间。已查到规则为草稿时在对应平台填 platform_rules_status: draft，然后用虚拟环境运行 python toolkit.py film job.json。只汇报待审成片或具体制作阻塞。平台规则草稿、未登录和未安装定时任务只影响对应后续操作。已有预算才使用 MCP 报价建单，沿用原请求号重试。
+When asked for a store video, reuse authorized clips, add per-platform review copy to the assembly job, set platform_rules_status to draft when known, and run python toolkit.py film job.json. Review preparation works independently of browser and scheduling. Use python bootstrap.py recover --workspace CUSTOMER_DIR for damaged installations and follow active_toolkit in its JSON. Keep customer files in place.
+
 ## 门店成片入口 / Store film entry
 
 排片和制作前读「每日出片规范」，写首帧或视频提示词前读「镜头提示词」，拼片和交付读「门店成片」，收到参考片、反馈或数据时读「学习规则」。每日只准备当天一份计划。工具包的 run-day 命令负责等任务和备片，首发停在待审。
