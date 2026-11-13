@@ -243,6 +243,7 @@ def main() -> int:
     authorization_parser = sub.add_parser("authorization", description="Read the paired project grant. Exit 2 on authorization or installation failure.")
     authorization_parser.add_argument("--install-schedules", action="store_true", help="Register both local jobs after confirming the sample, authorizing and pairing the device")
     sub.add_parser("assistant-schedule", help="Read the authorized schedule for the customer AI assistant")
+    sub.add_parser("enable-production", help="Authorize scheduled production and review")
     sub.add_parser("enable-youtube", help="Open ThinkNova to enable YouTube automatic publishing")
     sub.add_parser("platform-capabilities", description="Print JSON showing ordinary publishing, unattended scheduling, and receipt verification by platform.")
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
@@ -255,10 +256,10 @@ def main() -> int:
             result = {'status': 'blocked', 'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'awaiting_review' else 2
-    if args.command in ("enable-youtube", "assistant-schedule"):
-        from automation import assistant_schedule, enable_youtube
+    if args.command in ("enable-production", "enable-youtube", "assistant-schedule"):
+        from automation import assistant_schedule, enable_automation
         try:
-            result = enable_youtube() if args.command == "enable-youtube" else assistant_schedule()
+            result = assistant_schedule() if args.command == "assistant-schedule" else enable_automation(include_publish=args.command == "enable-youtube")
             print(json.dumps(result))
             return 0 if result["status"] == "authorized" else 2
         except Exception as exc:

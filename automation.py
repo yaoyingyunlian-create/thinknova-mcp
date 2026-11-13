@@ -134,7 +134,7 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
     def checkpoint(status='running',error=None):
         atomic(state_path,steps);client.receipt(run_no,steps,status,error)
     try:
-        preflight = connected_report() if day_plan is None else connected_report(require_codex=False)
+        preflight = connected_report(require_publication=True) if day_plan is None else connected_report(require_codex=False, require_publication=False)
         if not preflight['automation_ready']:
             raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
         project = grant.get('project_key')
@@ -240,9 +240,9 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     copy_policies = {}
     if grant.get('project_key'):
         from store_editorial import validate_plan_copy, validate_rotation
-        if set(plan['platforms']) != {'youtube'}:
+        if grant.get('auto_publish') and set(plan['platforms']) != {'youtube'}:
             raise RuntimeError('DAY_PLAN_PLATFORM_NOT_AUTHORIZED')
-        if plan['platforms']['youtube'].get('expected_channel_id') != grant['channel_id']:
+        if grant.get('auto_publish') and plan['platforms']['youtube'].get('expected_channel_id') != grant['channel_id']:
             raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
         rows = plan.get('week_rows')
         if not isinstance(rows, list):
@@ -336,7 +336,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     from publish.dispatch import film_review
     film_review(job_path, {'job': {'film': True}, 'artifacts': [
         {'role': 'video', 'file': str(output), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}],
-        'platform': 'youtube', 'manifest_sha256': ''})
+        'platform': next(iter(plan['platforms'])), 'manifest_sha256': ''})
     publish_job = directory / 'publish.json'
     publish_payload = {'video': str(output), 'film': True, 'platforms': plan['platforms']}
     if editorial_row is not None:
@@ -358,7 +358,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     return summary
 
 
-def enable_youtube():
+def enable_automation(include_publish=False):
     import secrets
     import urllib.error
     import urllib.request
@@ -381,6 +381,8 @@ def enable_youtube():
     if not re.fullmatch('[a-f0-9]{48}', setup):
         raise RuntimeError('YOUTUBE_SETUP_INVALID')
     url = 'https://thinknova.top/app/account/mcp#youtube_setup=' + setup
+    if include_publish:
+        url += '&publish=youtube'
     print('Confirm the device and budget in ThinkNova / 请在 ThinkNova 页面确认设备与预算', flush=True)
     print('Pairing code / 配对码: ' + proof_hash[:8].upper(), flush=True)
     if not webbrowser.open(url):
@@ -394,27 +396,31 @@ def enable_youtube():
     else:
         raise RuntimeError('YOUTUBE_SETUP_EXPIRED')
 
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
-    sys.path.insert(0, str(ROOT / 'publish' / 'youtube'))
-    import yt_common
-    flow = InstalledAppFlow.from_client_config(response['oauth'], yt_common.SCOPES, autogenerate_code_verifier=True)
-    credentials = flow.run_local_server(host='127.0.0.1', port=0, timeout_seconds=max(1, int(deadline - time.monotonic())),
-                                      authorization_prompt_message=None, prompt='select_account')
-    channel = yt_common.my_channel(build('youtube', 'v3', credentials=credentials, cache_discovery=False))
-    if channel['id'] != response['channel_id']:
-        raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
+    credentials = None
+    if not response.get('production_only'):
+        from google_auth_oauthlib.flow import InstalledAppFlow
+        from googleapiclient.discovery import build
+        sys.path.insert(0, str(ROOT / 'publish' / 'youtube'))
+        import yt_common
+        flow = InstalledAppFlow.from_client_config(response['oauth'], yt_common.SCOPES, autogenerate_code_verifier=True)
+        credentials = flow.run_local_server(host='127.0.0.1', port=0, timeout_seconds=max(1, int(deadline - time.monotonic())),
+                                          authorization_prompt_message=None, prompt='select_account')
+        channel = yt_common.my_channel(build('youtube', 'v3', credentials=credentials, cache_discovery=False))
+        if channel['id'] != response['channel_id']:
+            raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
     existing = secure_state.load(CREDENTIALS) if CREDENTIALS.is_file() else {}
     execution = hashlib.sha256(('thinknova-youtube-execution:' + proof).encode()).hexdigest()
     pending_token = YOUTUBE_TOKEN.with_name('youtube-pending' + YOUTUBE_TOKEN.suffix)
-    secure_state.save(pending_token, json.loads(credentials.to_json()))
+    if credentials:
+        secure_state.save(pending_token, json.loads(credentials.to_json()))
     try:
-        result = post('activate', setup_id=setup, secret=proof, google_access_token=credentials.token)
+        result = post('activate', setup_id=setup, secret=proof, google_access_token=credentials.token if credentials else "")
     except (OSError, ValueError, RuntimeError):
         # A committed grant is independently verifiable with its locally derived credential.
         Client({'execution_token': execution}).post('/mcp/device/configuration', {})
         result = {}
-    secure_state.save(YOUTUBE_TOKEN, secure_state.load(pending_token))
+    if credentials:
+        secure_state.save(YOUTUBE_TOKEN, secure_state.load(pending_token))
     secure_state.save(CREDENTIALS, {**existing, 'execution_token': execution,
                                   **({'telemetry_token': result['telemetry_token']} if 'telemetry_token' in result else {})})
     (STATE / 'paused.json').unlink(missing_ok=True)
@@ -425,14 +431,15 @@ def assistant_schedule():
     grant = authorization()
     if grant.get('status') != 'available' or not grant.get('project_key'):
         raise RuntimeError('AUTOMATION_PROJECT_AUTHORIZATION_REQUIRED')
-    if not grant.get('auto_publish'):
-        raise RuntimeError('AUTOMATION_PUBLICATION_NOT_AUTHORIZED')
+    phases = [('produce', 'production_time')]
+    if grant.get('auto_publish'):
+        phases.append(('publish', 'publish_time'))
     return {'status': 'authorized', 'scheduler': 'customer_ai_assistant',
             'grant_no': grant['grant_no'], 'timezone': grant['timezone'],
             'tasks': [
                 {'phase': phase, 'local_time': grant[field],
                  'argv': [sys.executable, str(ROOT / 'automation.py'), 'tick-' + phase]}
-                for phase, field in [('produce', 'production_time'), ('publish', 'publish_time')]
+                for phase, field in phases
             ]}
 
 
@@ -722,7 +729,7 @@ def tick():
             atomic(STATE/'health.json',{'state':'normal'})
 
 
-def connected_report(check_local: bool = True, require_codex: bool = True) -> dict:
+def connected_report(check_local: bool = True, require_codex: bool = True, require_publication: bool = False) -> dict:
     from health import report
     result=report() if check_local else {'schema_version':1,'checked_at':datetime.now(timezone.utc).isoformat(),'checks':[],'overall':'partial'}
     def status(name, state, remedy=''):
@@ -742,13 +749,16 @@ def connected_report(check_local: bool = True, require_codex: bool = True) -> di
         project = (config.get('data') or {}).get('project_key')
         rules = client.tool('get_content_rules', {'project_key': project}) if project else client.tool('get_content_rules')
         status('rules','pass' if not rules.get('needs_onboarding') and rules.get('version')==config['data']['rules_version'] else 'waiting_user','Confirm current account rules / 确认当前账户规则')
-        os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
-        sys.path.insert(0,str(ROOT/'publish/youtube'))
-        import yt_common
-        try:status('platform_authorization','pass' if yt_common.my_channel(yt_common.youtube())['id']==config['data']['channel_id'] else 'fail','YOUTUBE_CHANNEL_MISMATCH')
-        except (Exception,SystemExit):status('platform_authorization','waiting_user','Run automation.py youtube-auth / 完成平台授权')
+        if require_publication:
+            os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
+            sys.path.insert(0,str(ROOT/'publish/youtube'))
+            import yt_common
+            try:status('platform_authorization','pass' if yt_common.my_channel(yt_common.youtube())['id']==config['data']['channel_id'] else 'fail','YOUTUBE_CHANNEL_MISMATCH')
+            except (Exception,SystemExit):status('platform_authorization','waiting_user','Run automation.py youtube-auth / 完成平台授权')
     except (Exception,SystemExit):status('account','waiting_user','Pair an active device/grant; no secrets in chat / 配对有效设备与授权')
     required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','account','rules','platform_authorization','server_quote')]
+    if not require_publication:
+        required = [check for check in required if check['name'] != 'platform_authorization']
     if not require_codex:
         required = [check for check in required if check['name'] != 'codex_login']
     result['automation_ready']=all(c['status']=='pass' for c in required)
@@ -786,7 +796,7 @@ def doctor_command(as_json):
 
 
 def installation_preflight():
-    if not connected_report()['automation_ready']:raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
+    if not connected_report(require_publication=True)['automation_ready']:raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
 
 
 SCHEDULE_LABEL='top.thinknova.controlled-automation'

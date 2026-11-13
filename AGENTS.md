@@ -162,3 +162,6 @@ The runner currently gates only shots whose plan contains 小程序: local ASR r
 
 运行 python toolkit.py enable-youtube。完成授权后，以返回的 tasks 在客户机 AI 助理的原生定时功能分别登记制作和发布，使用返回的时区及本机命令。按 phase 更新已有任务，避免重复。若 AI 助理不支持定时或本机执行，报告该限制。用 python toolkit.py assistant-schedule 重新读取授权时间。此流程由 AI 助理调度。
 Run python toolkit.py enable-youtube. Register or update the returned production and publication tasks in the customer AI assistant's native scheduler. Use the returned timezone and local commands. If the assistant cannot schedule local execution, report that limitation. Use python toolkit.py assistant-schedule to retrieve the schedule again.
+
+自动创作用 python toolkit.py enable-production 确认 ThinkNova 预算和制作时间。客户机 AI 助理登记制作任务，成片进入待审。需要 YouTube 自动发布时再启用频道授权。
+Use python toolkit.py enable-production to approve the ThinkNova production budget and schedule. Register the production task in the customer AI assistant and prepare films for review. Authorize the YouTube channel when enabling automatic YouTube publishing.
