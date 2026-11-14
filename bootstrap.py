@@ -230,7 +230,7 @@ def setup(json_output=False):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('command', choices=['setup', 'repair', 'check', 'update', 'prepare-update', 'recover'])
-    parser.add_argument('--workspace', type=Path, default=Path.cwd())
+    parser.add_argument('--workspace', type=Path, help='Customer workspace for automatic recovery if updating is blocked')
     parser.add_argument('--user-confirmed', action='store_true')
     parser.add_argument('--json', action='store_true', help='Emit a structured setup result; installation logs go to stderr')
     args = parser.parse_args()
@@ -248,14 +248,26 @@ def main():
                 subprocess.run([str(python), str(ROOT / 'health.py'), '--json'], check=True)
         elif args.command == 'recover':
             from automation import atomic
-            report = recovery_report(args.workspace.resolve())
+            workspace = (args.workspace or Path.cwd()).resolve()
+            report = recovery_report(workspace)
             if report['status'] == 'blocked':
-                atomic(args.workspace.resolve() / 'thinknova-recovery.json', report)
+                atomic(workspace / 'thinknova-recovery.json', report)
             print(json.dumps(report, ensure_ascii=False))
             return 0 if report['status'] == 'ready' else 2
         elif args.command == 'check': check()
         elif args.command == 'prepare-update': prepare_legacy_update()
-        else: update(args.user_confirmed)
+        else:
+            try:
+                update(args.user_confirmed)
+            except (OSError, RuntimeError, subprocess.SubprocessError):
+                if args.workspace is None:
+                    raise
+                report = recovery_report(args.workspace.resolve())
+                if report['status'] == 'blocked':
+                    from automation import atomic
+                    atomic(args.workspace.resolve() / 'thinknova-recovery.json', report)
+                print(json.dumps(report, ensure_ascii=False))
+                return 0 if report['status'] == 'ready' else 2
         return 0
     except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
         print(str(exc), file=sys.stderr)

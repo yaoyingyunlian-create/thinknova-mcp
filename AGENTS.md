@@ -18,8 +18,17 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 - 首次自动 get_toolkit，通过 HTTPS 克隆 https://github.com/yaoyingyunlian-create/thinknova-mcp.git；无须再次询问下载。已有目录先核对归属，不能覆盖。
 - 读取本文件，运行 python bootstrap.py setup；缺项自动 bootstrap.py repair。缺 Git/Python 用 install.ps1/install.sh；使用 .venv 内的 Python 运行后续命令。校验与对应能力 doctor 未通过不得宣布该能力就绪；core_production、browser_publishing、ai_browser 和授权分别判断。Mac 缺 ego 不影响不使用它的 API/脚本流程。
 - 机器可读安装报告用 bootstrap.py setup --json；独立检查用 .venv Python 执行 toolkit.py doctor --json --online。浏览器必须实际启动成功；账户、规则和平台检查未知时仍须通过对应授权接口核实，不宣称全流程就绪。相同故障自动修复一次后仍失败就报告，不无限重试。
-- 以后开工先读 memory.md 与 reminders.txt（若有），运行 bootstrap.py check；发现新版自动运行 bootstrap.py update，无需询问。网络失败是版本未知，不是已最新；保留客户修改、记忆和登录态。
+- 以后开工先读 memory.md 与 reminders.txt（若有），运行 bootstrap.py check；发现新版自动运行 bootstrap.py update --workspace 客户目录，无需询问。网络失败是版本未知，不是已最新；保留客户修改、记忆和登录态。
 - 新的会话、OAuth 撤销或过期时按客户端正常重新授权；不索取 ThinkNova API Key。不具备本地执行能力时如实说明。
+
+## 规则与更新 / Rules and updates
+
+- 必须执行：MCP 的账户、素材授权、报价和预算校验，工具包的成片质检，以及对应平台已发布的 hard_constraints。平台草稿、未登录和未开通自动发布只影响各自的发布步骤。
+- 客户可改：选题、人物、风格、常用素材、字幕语言、平台安排和制作偏好。用 get_content_rules 读取当前项目的 effective_rules，用 expected_version 保存合并后的规则。运营建议与技能默认值用于补充缺项。只在客户选择固定角色、镜头需要保持同一人物时使用三视图和角色禁项。
+- 客户本地偏好放在客户工作目录的 AGENTS.local.md 或项目规则中。官方仓库的 AGENTS.md、技能和脚本由 ThinkNova 更新。发现新版自动更新；遇到源码改动或更新失败，用 bootstrap.py recover --workspace 客户目录，按结果里的 active_toolkit 继续。原目录和客户文件保留。GitHub 离线时，完整性通过的安装可继续使用，版本记为未知。
+- 同一生成请求沿用原参数和请求号。成片通过后集中交审；缺必要素材或预算时只说明具体缺项。平台发布故障分别记录。
+
+Enforce account eligibility, asset authorization, quotes, budgets, film checks, and published platform hard constraints at their applicable stages. Customers can change topics, characters, style, subtitles, targets, and editorial preferences in project rules. Platform drafts and login problems affect publication only. Keep local preferences in the customer workspace. If an update fails, run bootstrap.py recover --workspace CUSTOMER_DIR and follow active_toolkit. Continue offline with an integrity-verified installation.
 
 ## 2 账户规则与主动访谈
 - get_content_rules 返回的 platform_rules 是目标平台规则：硬性约束优先于客户偏好，客户偏好优先于运营建议；草稿不能当作有效规则。九个平台有规则目录不代表都有发布器或无人值守验收。
@@ -87,7 +96,7 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 ## English operational summary
 Use ego lite for AI browser work and read ego-browser skill first. Windows x64 setup downloads the official signed installer when missing; GUI installation/onboarding remains user controlled and blocks readiness. Existing installations are not silently upgraded. Legacy Python publishers retain their separate Chromium runtime and profiles until individually migrated and tested.
 Controlled automation is a separate opt-in Windows/Codex/YouTube pilot, not ordinary OAuth consent. It is limited by server-side daily credits, channel, rules version and a 30-day grant. Never ask the user to paste device tokens into chat. Use hidden local pairing, Windows DPAPI or macOS Keychain; Mac implementation still requires real-device acceptance; no paid terminal retries. Installation reports include real Chromium startup and explicit unknown account/platform states. Prefer schema v2 shop/style profiles, invite optional style references, and explicitly pass image ratio when requested.
-1. Check balance and eligibility. First setup automatically clones the HTTPS repository and runs bootstrap.py setup/repair; use the local .venv. Later updates run automatically without asking, using bootstrap.py update. Never overwrite customer data or claim success after failed checks.
+1. Check balance and eligibility. First setup automatically clones the HTTPS repository and runs bootstrap.py setup/repair; use the local .venv. Later updates run automatically without asking, using bootstrap.py update --workspace CUSTOMER_DIR. Never overwrite customer data or claim success after failed checks.
 2. Read memory, get_content_rules and its version. Proactively ask only missing questions, at most three per turn. Merge and save rules with expected_version. Default pre_publish follows the agreed budget; pre_generation reviews scripts first.
 3. Record asset consent and role. Use at most three references; animate_image must put the actual first frame first. Report first_only honestly.
 4. Persist request/task IDs and billing facts. Network retries reuse the same ID; active tasks are polled. Terminal failure or quality changes require a new request within an authorized budget, never a presumed free retry.
@@ -165,3 +174,6 @@ Run python toolkit.py enable-youtube only when the customer requests automatic Y
 
 自动创作用 python toolkit.py enable-production 确认 ThinkNova 预算和制作时间。客户机 AI 助理登记制作任务，成片进入待审。需要 YouTube 自动发布时再启用频道授权。
 Use python toolkit.py enable-production to approve the ThinkNova production budget and schedule. Register the production task in the customer AI assistant and prepare films for review. Authorize the YouTube channel when enabling automatic YouTube publishing.
+
+同一人物跨镜头时，先用含正面、侧面、背面的单张授权设定板制作镜头首帧。日计划填 recurring_character: true、character_sheet_asset_id 和镜头适用的 negative_prompt。设定板不能当视频首帧；首帧始终排第一。工具包把禁项合入实际报价与建单使用的 prompt。
+For recurring characters, use one authorized front/side/back sheet to create each shot's first frame. Set recurring_character, character_sheet_asset_id and the shot's negative_prompt in the day plan. Put the actual shot frame first; the sheet is supplementary. The toolkit merges exclusions into the same prompt used to quote and generate.

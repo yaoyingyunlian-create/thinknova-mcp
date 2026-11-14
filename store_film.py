@@ -28,7 +28,19 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     if not isinstance(prompt, str) or not prompt.strip():
         raise ValueError('FILM_PROMPT_REQUIRED')
     from generation_quality import prepare_prompt
-    prompt = prepare_prompt(prompt.strip(), 'video')
+    prompt = prepare_prompt(prompt.strip(), 'video', segment.get('negative_prompt'))
+    board = segment.get('character_sheet_asset_id')
+    if segment.get('recurring_character') and not board:
+        raise ValueError('FILM_CHARACTER_SHEET_REQUIRED')
+    if board is not None:
+        if not isinstance(board, str) or not ASSET.fullmatch(board) or board not in authorized_assets:
+            raise ValueError('FILM_CHARACTER_SHEET_NOT_AUTHORIZED')
+        if board == segment.get('first_frame_asset_id'):
+            raise ValueError('FILM_CHARACTER_SHEET_CANNOT_BE_FIRST_FRAME')
+        prompt += (
+            '\nContinue from the actual shot first frame. Preserve the same character face, hair and clothing. '
+            'Avoid identity drift, wardrobe changes and extra or fused fingers.'
+        )
     length = len(prompt.encode('utf-8'))
     if length > 3500:
         raise ValueError(f'FILM_PROMPT_TOO_LONG: {length}/3500 UTF-8 bytes')
@@ -41,7 +53,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
         raise ValueError('FILM_REFERENCE_INVALID')
     if not isinstance(first, str) or not ASSET.fullmatch(first):
         raise ValueError('FILM_FIRST_FRAME_REQUIRED')
-    refs = list(dict.fromkeys([first, *refs]))
+    refs = list(dict.fromkeys([first, *([board] if board else []), *refs]))
     if len(refs) > 3 or any(ref not in authorized_assets for ref in refs):
         raise ValueError('FILM_REFERENCE_NOT_AUTHORIZED')
     location = segment.get('shop_location')
