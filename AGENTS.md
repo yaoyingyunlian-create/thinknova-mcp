@@ -1,4 +1,4 @@
-客户说「用这些素材给我的店做一条宣传视频」时，先用已授权的现有素材准备本机拼片配置，在 JSON 中加入各平台的标题、正文、标签、账号和时间。已查到规则为草稿时在对应平台填 platform_rules_status: draft，然后用虚拟环境运行 python toolkit.py film job.json。只汇报待审成片或具体制作阻塞。平台规则草稿、未登录和未安装定时任务只影响对应后续操作。已有预算才使用 MCP 报价建单，沿用原请求号重试。
+客户说「用这些素材给我的店做一条宣传视频」时，先用已授权的现有素材准备本机拼片配置，在 JSON 中加入各平台的标题、正文、标签、账号和时间。已查到规则为草稿时在对应平台填 platform_rules_status: draft，然后用虚拟环境运行 python toolkit.py film job.json。只汇报待审成片或具体制作阻塞。平台规则草稿和未安装定时任务不阻塞制作。已有预算才使用 MCP 报价建单，沿用原请求号重试。
 When asked for a store video, reuse authorized clips, add per-platform review copy to the assembly job, set platform_rules_status to draft when known, and run python toolkit.py film job.json. Review preparation works independently of browser and scheduling. Use python bootstrap.py recover --workspace CUSTOMER_DIR for damaged installations and follow active_toolkit in its JSON. Keep customer files in place.
 
 ## 门店成片入口 / Store film entry
@@ -23,12 +23,12 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 
 ## 规则与更新 / Rules and updates
 
-- 必须执行：MCP 的账户、素材授权、报价和预算校验，工具包的成片质检，以及对应平台已发布的 hard_constraints。平台草稿、未登录和未开通自动发布只影响各自的发布步骤。
+- 必须执行：MCP 的账户、素材授权、报价和预算校验，工具包的成片质检，以及对应平台已发布的 hard_constraints。平台规则发布状态、后台账号映射、无人值守授权和验收是对应平台的无人值守开通条件。
 - 客户可改：选题、人物、风格、常用素材、字幕语言、平台安排和制作偏好。用 get_content_rules 读取当前项目的 effective_rules，用 expected_version 保存合并后的规则。运营建议与技能默认值用于补充缺项。只在客户选择固定角色、镜头需要保持同一人物时使用三视图和角色禁项。
 - 客户本地偏好放在客户工作目录的 AGENTS.local.md 或项目规则中。官方仓库的 AGENTS.md、技能和脚本由 ThinkNova 更新。发现新版自动更新；遇到源码改动或更新失败，用 bootstrap.py recover --workspace 客户目录，按结果里的 active_toolkit 继续。原目录和客户文件保留。GitHub 离线时，完整性通过的安装可继续使用，版本记为未知。
 - 同一生成请求沿用原参数和请求号。成片通过后集中交审；缺必要素材或预算时只说明具体缺项。平台发布故障分别记录。
 
-Enforce account eligibility, asset authorization, quotes, budgets, film checks, and published platform hard constraints at their applicable stages. Customers can change topics, characters, style, subtitles, targets, and editorial preferences in project rules. Platform drafts and login problems affect publication only. Keep local preferences in the customer workspace. If an update fails, run bootstrap.py recover --workspace CUSTOMER_DIR and follow active_toolkit. Continue offline with an integrity-verified installation.
+Enforce account eligibility, asset authorization, quotes, budgets, film checks, and published platform hard constraints at their applicable stages. Customers can change topics, characters, style, subtitles, targets, and editorial preferences in project rules. Published rules, account mapping, unattended authorization and acceptance are gates for unattended publishing only. Keep local preferences in the customer workspace. If an update fails, run bootstrap.py recover --workspace CUSTOMER_DIR and follow active_toolkit. Continue offline with an integrity-verified installation.
 
 ## 2 账户规则与主动访谈
 - get_content_rules 返回的 platform_rules 是目标平台规则：硬性约束优先于客户偏好，客户偏好优先于运营建议；草稿不能当作有效规则。九个平台有规则目录不代表都有发布器或无人值守验收。
@@ -69,6 +69,9 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 
 ## 6 发布确认与脚本
 - 每次创作先读近期七天作品及可用数据，改变主题、开场、画面和文案，在 memory 写明变化与依据；没有数据时如实说明。各目标平台分别填写标题、正文和 tags，不能一份文案机械复制全部平台。
+- Ego Lite 日常协作独立使用。打开平台、检查登录、准备草稿和按客户当次确认执行普通发布时，无需等待 ThinkNova 平台规则发布、后台账号映射或无人值守验收。真正发布前核对当前登录的目标账号、作品和文案，并取得当次确认。平台现场的登录、披露及审核要求照常执行。
+- Ego Lite interactive work can browse, check sign-in, prepare drafts and publish with per-post confirmation, independently of ThinkNova rule publication, account mapping or unattended acceptance. Confirm the signed-in destination, asset and copy before publishing. Follow the platform's live requirements.
+
 - 普通发布统一入口：python publish/dispatch.py job.json --platform 平台 --dry 生成清单并本地预检；得到该作品/账号/时间的明确确认后使用 --execute --user-confirmed。清单冻结实际传给发布器的配置；保留回执和回读差异。unknown/submitted_unverified 不能写成已发布，不得删除尝试标记重跑。
 - 所有 --dry 均只做本地检查，不登录、不上传、不创建草稿。安装不强制演练上传；首条可以在本地检查通过和明确授权后直接真发。原发布脚本缺少模式时也不得执行。
 

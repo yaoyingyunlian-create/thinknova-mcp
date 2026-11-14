@@ -68,3 +68,9 @@ Run python toolkit.py enable-youtube only when the customer requests automatic Y
 
 只启用自动创作时运行 python toolkit.py enable-production，按返回配置登记制作任务。成片留待审核。
 For production only, run python toolkit.py enable-production and register the returned production task. Films stay in review.
+
+### Ego Lite 普通操作 / Interactive Ego Lite
+
+先完成对应平台规则、账号映射和无人值守发布授权及实测验收，再启用对应平台的无人值守发布。这个门槛只约束无人值守任务，与 Ego Lite 普通操作独立。普通发布按当次确认执行，核对当前登录账号与发布内容。
+
+Complete platform rules, account mapping, unattended authorization and real acceptance before enabling unattended publishing on that platform. Interactive Ego Lite remains available for ordinary work, with per-post confirmation and verification of the signed-in destination and content.
