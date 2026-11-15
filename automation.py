@@ -322,7 +322,10 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
            'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips}
     if plan.get('speech_language'):
         job['speech_language'] = plan['speech_language']
-    if set(plan['platforms']) == {'xiaohongshu'}:
+    if plan['schema_version'] == 2:
+        job['short_dialogue_seconds'] = sum(segment['duration_seconds'] for segment in plan['segments'])
+        job['closing_overlay'] = [plan['shop_name'], plan['featured_service']]
+    elif set(plan['platforms']) == {'xiaohongshu'}:
         job['platform'] = 'xiaohongshu'
     else:
         job['end_card'] = plan['end_card']
@@ -506,7 +509,7 @@ def daily_film(project, day, work_slot=1):
         grant = payload.get('data') or {}
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
-        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot})
+        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version': 2})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -559,7 +562,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 return
         else:
             try:
-                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot})
+                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version': 2})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})

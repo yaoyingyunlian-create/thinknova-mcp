@@ -417,7 +417,7 @@ def validate_job(job):
             raise Stop('INVALID_JOB: %s must be a finite number >= %s' % (field, minimum))
     if 'film' in job and not isinstance(job['film'], bool):
         raise Stop('INVALID_JOB: film must be boolean')
-    if job.get('film') and not (job.get('film_profile') == 'store_v2' and job.get('platform') == 'xiaohongshu') and (not isinstance(job.get('end_card'), dict) or not job['end_card'].get('lines')):
+    if job.get('film') and not (job.get('film_profile') == 'store_v2' and job.get('platform') == 'xiaohongshu') and not job.get('short_dialogue_seconds') and (not isinstance(job.get('end_card'), dict) or not job['end_card'].get('lines')):
         raise Stop('FILM_OUTRO_REQUIRED: supply a closing card with text')
     if 'speech_language' in job and not isinstance(job['speech_language'], str):
         raise Stop('INVALID_JOB: speech_language must be text')
@@ -463,6 +463,8 @@ def run_delivery_check(ff, fp, video, srt, options):
            '--ffmpeg', ff, '--ffprobe', fp, '--allow-silent']
     if options['outro_start'] is not None:
         cmd += ['--film', '--outro-start', str(options['outro_start'])]
+        if options.get('short_dialogue_seconds'):
+            cmd += ['--planned-film-seconds', str(options['short_dialogue_seconds'])]
         if options.get('film_profile') == 'store_v2':
             cmd += ['--store-film', '--shop-name', options['shop_name'], '--featured-service', options['featured_service']]
         if options['speech_language']:
@@ -664,7 +666,7 @@ def main():
                 source = resolve(base, c['file'])
                 check_store_source(ff, fp, source, i + 1)
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
-            if store_film:
+            if store_film and not job.get('short_dialogue_seconds'):
                 shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i)
                 pace_report.append(pace)
             parts.append(shot)
@@ -692,6 +694,11 @@ def main():
             parts.append(shot)
             card_span = (t, t + dur)
             t += dur
+        if job.get('short_dialogue_seconds'):
+            if job.get('end_card') or len(parts) != 1 or not job.get('closing_overlay'):
+                raise Stop('FILM_DIALOGUE_SINGLE_SHOT_REQUIRED', 2)
+            card_span = (max(0, t - 2.5), t)
+            job['end_card'] = {'lines': job['closing_overlay']}
         job["_total"] = t
         if job.get('srt'):
             cues=parse_srt(resolve(base,job['srt']))
@@ -734,6 +741,8 @@ def main():
         print("Checking ...")
         options = {'outro_start': (card_span[0] if card_span else t) if job.get('film') else None,
                    'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur')}
+        if job.get('short_dialogue_seconds'):
+            options.update(short_dialogue_seconds=job['short_dialogue_seconds'], outro_start=t)
         if store_film:
             options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,

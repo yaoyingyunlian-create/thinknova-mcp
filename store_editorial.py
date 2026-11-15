@@ -154,6 +154,14 @@ def validate_script(plan):
         if (not isinstance(lines, list) or len(lines) < 2
                 or (len(segments) > 4 and segment.get('duration_seconds', 0) <= 6)):
             raise ValueError(f'FILM_ONE_LINE_PER_CLIP: {index + 1}')
+        if plan.get('schema_version') == 2:
+            prompt = str(segment.get('prompt', ''))
+            if re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|talking to camera|对着镜头', prompt, re.I):
+                raise ValueError('VOICE_NARRATION_NOT_DIALOGUE')
+            if re.search(r'从\s*\d+(?:\.\d+)?\s*秒\s*(?:开始)?\s*(?:说|念|持续)|持续到\s*\d+\s*秒', prompt):
+                raise ValueError('VOICE_FORCED_TIMING')
+            if len(lines) > 4:
+                raise ValueError('DIALOGUE_LINE_LIMIT')
         if VOICE_FLAT.search(str(segment.get('prompt', ''))):
             raise ValueError(f'VOICE_FLAT_DIRECTION: {index + 1}')
         emotion = segment.get('voice_emotion')
@@ -162,6 +170,10 @@ def validate_script(plan):
         for line in lines:
             if not isinstance(line, dict) or line.get('beat') not in beats:
                 raise ValueError(f'SCRIPT_BEAT_INVALID: {index + 1}')
+            if plan.get('schema_version') == 2 and not all(
+                    isinstance(line.get(field), str) and line[field].strip()
+                    for field in ('speaker', 'listener', 'emotion')):
+                raise ValueError('DIALOGUE_SPEAKER_MISSING')
             content = line.get('text')
             if not isinstance(content, str) or not content.strip():
                 raise ValueError(f'SCRIPT_LINE_REQUIRED: {index + 1}')
@@ -183,6 +195,11 @@ def scripted_segment(segment, script, shop):
     identity = shop.get('voice_identity')
     if not isinstance(identity, str) or identity != script['voice_identity']:
         raise ValueError('VOICE_IDENTITY_PROFILE_MISMATCH')
+    if all('speaker' in line for line in segment['dialogue']):
+        dialogue = '\n'.join(f'{line["speaker"]}（{line["emotion"]}）对{line["listener"]}说：「{line["text"].strip()}」'
+                             for line in segment['dialogue'])
+        return {**segment, 'prompt': segment['prompt'].rstrip()
+                + f'\nIn-scene dialogue:\n{dialogue}\nVoice identity: {identity}'}
     dialogue = ' '.join(line['text'].strip() for line in segment['dialogue'])
     return {**segment, 'prompt': segment['prompt'].rstrip()
             + f'\nUse only this approved dialogue: 「{dialogue}」'

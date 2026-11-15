@@ -83,7 +83,7 @@ def get_opts(argv):
          "--lufs": "-14", "--lufs-tol": "2", "--max-tp": "-1", "--max-silence-pct": "10",
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
-         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--shop-name": None, "--featured-service": None}
+         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--shop-name": None, "--featured-service": None}
     flags = {"--speech", "--allow-silent", "--film", "--store-film"}
     pos, on, i = [], set(), 0
     while i < len(argv):
@@ -362,7 +362,11 @@ def main():
     o["film"] = "--film" in on
     o["store_film"] = "--store-film" in on
     if o["film"]:
-        if not 30 <= dur <= 40:
+        planned = o.get('--planned-film-seconds')
+        if planned is not None:
+            if not planned.isdecimal() or not 6 <= int(planned) <= 15 or abs(dur - int(planned)) > 1:
+                fail('FILM_DURATION', 'duration differs from the authorized short-film specification')
+        elif not 30 <= dur <= 40:
             fail("FILM_DURATION", "duration %.2fs is outside 30–40s" % dur)
         try:
             o["outro_start"] = float(o["--outro-start"])
@@ -384,6 +388,8 @@ def main():
         text = normalize(''.join(cue['text'] for cue in captions))
         for flag, code in (('--shop-name', 'FILM_SHOP_NAME_MISSING'),
                            ('--featured-service', 'FILM_FEATURED_SERVICE_MISSING')):
+            if o.get('--planned-film-seconds') is not None:
+                continue
             term = normalize(o[flag] or '')
             if not term or term not in text:
                 fail(code, 'required confirmed term missing from subtitles')

@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "4ccddb2a6e24134739bef24131f1ef26221cffef40dc492f44e2a94e0da858d2",
+  "revision": "d2a4e644668c72bb7e4a9e3d523b408e6ce6671720339c552682a0dc9ecc000f",
   "files": [
     {
       "path": ".gitignore",
@@ -25,7 +25,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "2916dcd41d16caf499bb640cc88e912d3b7dd9e9190fc28a83635e26f9596c5c"
+      "sha256": "8498e6b0a856f6961f479d282acca08de558272b7dee3f8bafb25fd4d948c157"
     },
     {
       "path": "automation_client.py",
@@ -209,7 +209,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "759a07633b3c92f60a0edfd7aebaa9d575343f98df0790691f741a0bd0146ae5"
+      "sha256": "b332917bf0331b2c2ee32c65906cb8b6ffc5f276bd0c7c3c4778cc272c9b5602"
     },
     {
       "path": "render/captions.py",
@@ -217,7 +217,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "007194f849a598110927e17ceeaabc911886da26835aff42542de1e100b7b3da"
+      "sha256": "46508c2f36d8ec4df689e239a89d7dd85ee5e48ec71ecfeac9006d190bfcf134"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -309,11 +309,11 @@
     },
     {
       "path": "store_editorial.py",
-      "sha256": "d656d5f81da0e626b4233f313df4864056d6a33693c8ff386f5037a7a7b40313"
+      "sha256": "cf900b7d5f041e2c1e3a92d87cae2d4d3430838cb95d21f7f5ba121226a3427f"
     },
     {
       "path": "store_film.py",
-      "sha256": "7e75145c9fb2eef4eef21db4f93dfac1c918083544771ed19dd7c6df5e61685b"
+      "sha256": "4e70c89a81ffb0ebb596d2e5d6a86e930b4e9c6d406639da2ba05b1e91f864c8"
     },
     {
       "path": "test_automation.py",

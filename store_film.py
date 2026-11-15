@@ -89,7 +89,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
 def validate_day_plan(plan):
     from datetime import date
 
-    if not isinstance(plan, dict) or plan.get('schema_version') != 1:
+    if not isinstance(plan, dict) or plan.get('schema_version') not in (1, 2):
         raise ValueError('DAY_PLAN_SCHEMA_UNSUPPORTED')
     day = plan.get('date')
     if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or type(plan.get('rules_version')) is not int:
@@ -125,6 +125,10 @@ def validate_day_plan(plan):
     if any(type(seconds) is not int or not 6 <= seconds <= 15 for seconds in durations):
         raise ValueError('FILM_DURATION_REQUIRED: specify an integer from 6 to 15')
     total = sum(durations)
+    if plan['schema_version'] == 2:
+        if len(segments) != 1 or not plan.get('script'):
+            raise ValueError('FILM_DIALOGUE_SINGLE_SHOT_REQUIRED')
+        return plan
     if set(platforms) != {'xiaohongshu'}:
         card = plan.get('end_card')
         if not isinstance(card, dict) or not card.get('lines'):
