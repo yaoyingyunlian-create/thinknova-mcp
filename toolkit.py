@@ -237,6 +237,10 @@ def main() -> int:
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
     film_parser.add_argument("--recheck", action="store_true")
+    daily_film_parser = sub.add_parser("daily-film", help="Use today's authorized server store-film plan")
+    daily_film_parser.add_argument("--project", required=True)
+    daily_film_parser.add_argument("--date", required=True)
+    daily_film_parser.add_argument("--work-slot", type=int, choices=range(1, 6), default=1)
     run_day_parser = sub.add_parser("run-day", description="Run an approved schema_version=1 day plan JSON with date, project_key, rules_version, opening, segments and platforms. Uses --max-credits as the budget cap. Exit 2 if blocked.")
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
@@ -298,6 +302,15 @@ def main() -> int:
             return 0
         except (ValueError, KeyError, OSError, TypeError) as exc:
             print(json.dumps({'status': 'invalid', 'error': str(exc)}, ensure_ascii=False))
+            return 2
+    if args.command == "daily-film":
+        from automation import daily_film
+        try:
+            result = daily_film(args.project, args.date, args.work_slot)
+            print(json.dumps(result, ensure_ascii=False))
+            return 0 if result.get('status') in ('awaiting_review', 'ready_to_publish', 'not_due') else 2
+        except (ValueError, RuntimeError, OSError, KeyError) as exc:
+            print(json.dumps({'status': 'failed', 'error': str(exc)}, ensure_ascii=False))
             return 2
     if args.command == "run-day":
         from automation import run_day

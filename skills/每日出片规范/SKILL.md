@@ -75,7 +75,7 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 
 ## 六、店主只确认三次
 
-建档案和确认本周方向时各一次，每条成片发布前再确认一次。其余你自己按本规范做完，⛔ 把台词、镜头表、检查报告逐条推给店主审。
+普通发布按本条作品确认。经明确授权并已验收的无人值守发布按已授权的账号、预算和排期执行。 Ordinary publishing requires approval for the current work. Validated unattended publishing follows the confirmed authorization.其余你自己按本规范做完，⛔ 把台词、镜头表、检查报告逐条推给店主审。
 
 ## English summary
 

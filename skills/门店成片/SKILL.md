@@ -57,7 +57,7 @@ get_balance 的 quote_request 把这条片要的首帧和每段视频逐项报�
 
 写法：标题是这条片讲的那件具体的事加地点词；正文第一行重复开场那句，第二行一个具体信息，活动周加起止日期。AI 标注只打开平台自带的开关，⛔ 在正文里再写免责声明。
 
-店主确认这一条后才发布。
+普通发布按本条作品确认。经明确授权并已验收的无人值守发布按已授权的账号、预算和排期执行。 Ordinary publishing requires approval for the current work. Validated unattended publishing follows the confirmed authorization.
 
 ## English summary
 After clips are generated: quote every item first (with duration_seconds) and stay within the owner's daily cap. Assemble with render/assemble.py from the store-film template, trimming each clip to the spoken lines (0.3 s before the first word, 0.3 s after the last) and cutting out only the bad phase of a clip. Captions copy the spoken lines verbatim, max 9 characters per screen at size 90. End card: shop name plus what the shop solves; contact details live in the profile bio. Pass check.py --film plus the manual checklist (action in the first second, no speech gap over 1 s, same person and same shop throughout, one narrator, no model-drawn text, no invented claims); never self-approve past a FAIL or reword a WARN. Deliver the film with per-platform copy written separately; AI disclosure via the platform toggle only.

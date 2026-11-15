@@ -53,7 +53,23 @@ def generation_arguments(segment, shop_assets, authorized_assets):
         raise ValueError('FILM_REFERENCE_INVALID')
     if not isinstance(first, str) or not ASSET.fullmatch(first):
         raise ValueError('FILM_FIRST_FRAME_REQUIRED')
-    refs = list(dict.fromkeys([first, *([board] if board else []), *refs]))
+    product_board = segment.get('product_sheet_asset_id')
+    if segment.get('customer_product') and not product_board:
+        raise ValueError('FILM_PRODUCT_SHEET_REQUIRED')
+    if product_board is not None:
+        if (not isinstance(product_board, str) or not ASSET.fullmatch(product_board)
+                or product_board not in authorized_assets):
+            raise ValueError('FILM_PRODUCT_SHEET_NOT_AUTHORIZED')
+        if product_board in (first, board):
+            raise ValueError('FILM_PRODUCT_SHEET_MUST_BE_DISTINCT')
+        prompt += (
+            ' Preserve the product shape, color, logo and existing packaging print from the reference. '
+            'Do not add unrelated text or invent a usage action.'
+        )
+        length = len(prompt.encode('utf-8'))
+        if length > 3500:
+            raise ValueError(f'FILM_PROMPT_TOO_LONG: {length}/3500 UTF-8 bytes')
+    refs = list(dict.fromkeys([first, *(asset for asset in (board, product_board) if asset), *refs]))
     if len(refs) > 3:
         raise ValueError('FILM_REFERENCE_LIMIT_EXCEEDED: first frame and each sheet count toward the three-image limit')
     if any(ref not in authorized_assets for ref in refs):
@@ -62,7 +78,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     if location and not set(refs).intersection(shop_assets.get(location, [])):
         raise ValueError('FILM_SHOP_REFERENCE_REQUIRED')
     result = {'prompt': prompt, 'duration_seconds': seconds, 'reference_asset_ids': refs,
-            'visual_subject': 'customer_identity' if location or segment.get('customer_identity') else 'generic',
+            'visual_subject': 'customer_identity' if location or product_board or segment.get('customer_identity') else 'generic',
             'film_profile': 'store_v2'}
     if location:
         result['shop_location'] = location
@@ -85,6 +101,8 @@ def validate_day_plan(plan):
     if not isinstance(segments, list) or not 1 <= len(segments) <= 12 or any(not isinstance(s, dict) for s in segments):
         raise ValueError('DAY_PLAN_SEGMENTS_INVALID')
     validate_beats(segments, plan.get('film_type'))
+    from store_editorial import validate_script
+    validate_script(plan)
     for segment in segments:
         lines = segment.get('subs')
         if not isinstance(lines, list) or not lines or any(not isinstance(line, str) or not line.strip() for line in lines):

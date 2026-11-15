@@ -223,6 +223,7 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
 
 def execute_store_day(client, claim, plan, budget, rules, balance, directory, steps, checkpoint):
     from store_film import generation_arguments
+    from store_editorial import scripted_segment
 
     grant = claim['grant']
     if (plan['rules_version'] != rules['version'] or plan['date'] != claim.get('usage_date')
@@ -264,7 +265,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
-        args = generation_arguments(segment, shop_assets, authorized)
+        args = generation_arguments(scripted_segment(segment, plan.get("script"), shop), shop_assets, authorized)
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
             args['project_key'] = grant['project_key']
@@ -493,9 +494,36 @@ def run_day(path, budget):
         return execute(client, claim, day_plan=plan, budget=budget)
 
 
-def scheduled_store_day(phase):
-    """Poll a due phase for the device; publishing consumes a verified handoff."""
+def daily_film(project, day, work_slot=1):
     from store_film import validate_day_plan
+    with state_lock(STATE / 'runner'):
+        if (STATE / 'paused.json').exists():
+            raise RuntimeError('AUTOMATION_PAUSED')
+        if not CREDENTIALS.is_file():
+            raise RuntimeError('AUTOMATION_AUTHORIZATION_REQUIRED')
+        client = Client(secure_state.load(CREDENTIALS))
+        payload, _ = client.post('/mcp/device/configuration', {})
+        grant = payload.get('data') or {}
+        if project != grant.get('project_key') or day != grant.get('local_date'):
+            raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
+        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot})
+        result = payload.get('data') or {}
+        if result.get('status') != 'ready':
+            return result
+        plan = validate_day_plan(result['plan'])
+        if (plan['date'], plan.get('project_key'), plan['rules_version']) != (day, project, grant['rules_version']):
+            raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
+        if plan.get('work_slot', 1) != work_slot:
+            raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
+        preflight_plan_copy(client, plan)
+        claim = client.claim('produce', work_slot)
+        if not claim.get('due'):
+            return {'status': 'not_due'}
+        return execute(client, claim, day_plan=plan, budget=int(grant['daily_budget']))
+
+
+def scheduled_store_day(phase):
+    """Poll a due phase for each work authorized on the device."""
 
     if not CREDENTIALS.is_file() or (STATE / 'paused.json').exists():
         return
@@ -508,58 +536,69 @@ def scheduled_store_day(phase):
         day = grant.get('local_date', '')
         if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', day):
             raise RuntimeError('AUTOMATION_DATE_UNAVAILABLE')
-        if phase == 'produce':
-            if grant.get('local_time', '') < grant.get('production_time', '10:00'):
-                return
-            path = STATE / 'plans' / grant['project_key'] / f'{day}.json'
-            if path.is_file():
-                try:
-                    raw_plan = json.loads(path.read_text(encoding='utf-8-sig'))
-                except (OSError, ValueError):
-                    atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_FILE_INVALID'})
-                    return
-            else:
-                try:
-                    response, _ = client.post('/mcp/device/day-plan', {})
-                except (RuntimeError, OSError) as exc:
-                    code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
-                    atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': code})
-                    return
-                result = response.get('data') or {}
-                status = result.get('status')
-                if status != 'ready':
-                    if status not in ('processing', 'not_due'):
-                        atomic(STATE / 'daily-reminder.json', {
-                            'date': day, 'error_code': result.get('error_code') or 'DAY_PLAN_INPUT_REQUIRED',
-                            'missing_fields': result.get('missing_fields', []),
-                        })
-                    return
-                raw_plan = result.get('plan')
+        for slot in range(1, int(grant.get('daily_work_count', 1)) + 1):
+            reminder = STATE / ('daily-reminder.json' if slot == 1 else f'daily-reminder-{slot}.json')
             try:
-                plan = validate_day_plan(raw_plan)
-            except ValueError as exc:
-                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': str(exc)})
-                return
-            if (plan['date'] != day or plan['rules_version'] != grant['rules_version']
-                    or plan.get('project_key') != grant['project_key']):
-                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': 'DAY_PLAN_SCOPE_CHANGED'})
-                return
+                scheduled_store_work(client, phase, grant, day, slot, reminder)
+            except (RuntimeError, OSError, ValueError) as exc:
+                code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_SLOT_FAILED'
+                atomic(reminder, {'date': day, 'work_slot': slot, 'error_code': code})
+
+
+def scheduled_store_work(client, phase, grant, day, slot, reminder):
+    from store_film import validate_day_plan
+    if phase == 'produce':
+        if grant.get('local_time', '') < grant.get('production_time', '10:00'):
+            return
+        path = STATE / 'plans' / grant['project_key'] / (f'{day}.json' if slot == 1 else f'{day}-{slot}.json')
+        if path.is_file():
             try:
-                preflight_plan_copy(client, plan)
-            except (ValueError, RuntimeError) as exc:
-                atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': str(exc)})
+                raw_plan = json.loads(path.read_text(encoding='utf-8-sig'))
+            except (OSError, ValueError):
+                atomic(reminder, {'date': day, 'error_code': 'DAY_PLAN_FILE_INVALID'})
                 return
-            claim = client.claim('produce')
-            if claim.get('due'):
-                try:
-                    execute(client, claim, day_plan=plan, budget=int(grant['daily_budget']))
-                except RuntimeError as exc:
-                    atomic(STATE / 'daily-reminder.json', {'date': day, 'error_code': str(exc)})
-                    raise
-        elif grant.get('auto_publish'):
-            claim = client.claim('publish')
-            if claim.get('due'):
-                publish_store_day(client, claim)
+        else:
+            try:
+                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot})
+            except (RuntimeError, OSError) as exc:
+                code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
+                atomic(reminder, {'date': day, 'error_code': code})
+                return
+            result = response.get('data') or {}
+            status = result.get('status')
+            if status != 'ready':
+                if status not in ('processing', 'not_due'):
+                    atomic(reminder, {
+                        'date': day, 'error_code': result.get('error_code') or 'DAY_PLAN_INPUT_REQUIRED',
+                        'missing_fields': result.get('missing_fields', []),
+                    })
+                return
+            raw_plan = result.get('plan')
+        try:
+            plan = validate_day_plan(raw_plan)
+        except ValueError as exc:
+            atomic(reminder, {'date': day, 'error_code': str(exc)})
+            return
+        if (plan['date'] != day or plan['rules_version'] != grant['rules_version']
+                or plan.get('project_key') != grant['project_key'] or plan.get('work_slot', 1) != slot):
+            atomic(reminder, {'date': day, 'error_code': 'DAY_PLAN_SCOPE_CHANGED'})
+            return
+        try:
+            preflight_plan_copy(client, plan)
+        except (ValueError, RuntimeError) as exc:
+            atomic(reminder, {'date': day, 'error_code': str(exc)})
+            return
+        claim = client.claim('produce', slot)
+        if claim.get('due'):
+            try:
+                execute(client, claim, day_plan=plan, budget=int(grant['daily_budget']))
+            except RuntimeError as exc:
+                atomic(reminder, {'date': day, 'error_code': str(exc)})
+                raise
+    elif grant.get('auto_publish'):
+        claim = client.claim('publish', slot)
+        if claim.get('due'):
+            publish_store_day(client, claim)
 
 
 def publish_store_day(client, claim):

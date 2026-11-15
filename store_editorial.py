@@ -122,3 +122,68 @@ def validate_platform_copy(variants, policies=None):
         if SequenceMatcher(None, *parts, autojunk=False).ratio() >= 0.85:
             raise ValueError(f'COPY_VARIANTS_TOO_SIMILAR: {left}, {right}')
     return bodies
+
+SCRIPT_TEMPLATES = {
+    'customer_thoughts': ('pain', 'process', 'change', 'service'),
+    'real_question': ('question', 'process', 'fact', 'service'),
+    'process_only': ('action', 'detail', 'result', 'service'),
+}
+VOICE_FLAT = re.compile(r'语速平稳|声音温和|平静|monotone|steady pace|gentle voice', re.I)
+REPORT_WORDS = ('了解', '安排', '问清楚', '记下', '项目', '预约问题')
+
+
+def validate_script(plan):
+    """Validate a structured script before its plan can reach a quote."""
+    script = plan.get('script')
+    if script is None:
+        return
+    if (not isinstance(script, dict) or not isinstance(script.get('template'), str)
+            or script['template'] not in SCRIPT_TEMPLATES):
+        raise ValueError('SCRIPT_TEMPLATE_REQUIRED')
+    beats = SCRIPT_TEMPLATES[script['template']]
+    identity = script.get('voice_identity')
+    if not isinstance(identity, str) or not identity.strip():
+        raise ValueError('VOICE_IDENTITY_REQUIRED')
+    if VOICE_FLAT.search(identity):
+        raise ValueError('VOICE_FLAT_DIRECTION')
+    used = []
+    patterns = {}
+    segments = plan['segments']
+    for index, segment in enumerate(segments):
+        lines = segment.get('dialogue')
+        if (not isinstance(lines, list) or len(lines) < 2
+                or (len(segments) > 4 and segment.get('duration_seconds', 0) <= 6)):
+            raise ValueError(f'FILM_ONE_LINE_PER_CLIP: {index + 1}')
+        if VOICE_FLAT.search(str(segment.get('prompt', ''))):
+            raise ValueError(f'VOICE_FLAT_DIRECTION: {index + 1}')
+        emotion = segment.get('voice_emotion')
+        if not isinstance(emotion, str) or not emotion.strip() or VOICE_FLAT.search(emotion):
+            raise ValueError(f'VOICE_FLAT_DIRECTION: {index + 1}')
+        for line in lines:
+            if not isinstance(line, dict) or line.get('beat') not in beats:
+                raise ValueError(f'SCRIPT_BEAT_INVALID: {index + 1}')
+            content = line.get('text')
+            if not isinstance(content, str) or not content.strip():
+                raise ValueError(f'SCRIPT_LINE_REQUIRED: {index + 1}')
+            used.append((line['beat'], content.strip()))
+            opening = re.sub(r'[\W_]+', '', normalized(content))
+            pattern = '我先…再' if re.match(r'我先.+再', opening) else opening[:4]
+            if pattern:
+                patterns[pattern] = patterns.get(pattern, 0) + 1
+                if patterns[pattern] >= 3:
+                    raise ValueError('SCRIPT_REPEATED_PATTERN')
+    if tuple(dict.fromkeys(beat for beat, _ in used)) != beats:
+        raise ValueError('SCRIPT_BEATS_INCOMPLETE')
+    if used and sum(any(term in content for term in REPORT_WORDS) for _, content in used) > len(used) / 2:
+        raise ValueError('SCRIPT_REPORT_TONE')
+
+def scripted_segment(segment, script, shop):
+    if script is None:
+        return segment
+    identity = shop.get('voice_identity')
+    if not isinstance(identity, str) or identity != script['voice_identity']:
+        raise ValueError('VOICE_IDENTITY_PROFILE_MISMATCH')
+    dialogue = ' '.join(line['text'].strip() for line in segment['dialogue'])
+    return {**segment, 'prompt': segment['prompt'].rstrip()
+            + f'\nUse only this approved dialogue: 「{dialogue}」'
+            + f'\nVoice identity: {identity}\nVoice performance: {segment["voice_emotion"]}'}
