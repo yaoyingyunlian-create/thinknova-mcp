@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "d2a4e644668c72bb7e4a9e3d523b408e6ce6671720339c552682a0dc9ecc000f",
+  "revision": "5d243777593a81c214f8bf08a3884af447a42d43e9a14f8be0268056a574d23c",
   "files": [
     {
       "path": ".gitignore",
@@ -25,11 +25,11 @@
     },
     {
       "path": "automation.py",
-      "sha256": "8498e6b0a856f6961f479d282acca08de558272b7dee3f8bafb25fd4d948c157"
+      "sha256": "7f97766bd378ba6653bbc368ea1f5eb11dddc657b1d22262605e4055d4d38c0e"
     },
     {
       "path": "automation_client.py",
-      "sha256": "40d9e1a4d3bc7234c65534a1f3b99bd98c2fbab10259f3f91fbeb1863256e93a"
+      "sha256": "1982594824fa6d1bd1aa7c4736455e0665517aa97b12b73c9122b4c696b1126b"
     },
     {
       "path": "automation_plan.schema.json",

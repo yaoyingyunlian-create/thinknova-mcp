@@ -1,6 +1,8 @@
 """Restricted ThinkNova device and MCP client. Tokens remain in the local runner."""
 from __future__ import annotations
 import json
+import re
+from pathlib import Path
 import urllib.request
 import urllib.error
 
@@ -16,6 +18,13 @@ class Client:
     def __init__(self, secrets: dict):
         self.secrets = secrets; self.session = None; self.lease = ''; self.sequence = 0
         self.opener = urllib.request.build_opener(NoRedirect())
+        self.toolkit_version = ''
+        try:
+            version = json.loads(Path(__file__).with_name('manifest.json').read_text(encoding='utf-8')).get('version')
+            if isinstance(version, str) and re.fullmatch(r'[A-Za-z0-9_.-]{1,64}', version):
+                self.toolkit_version = version
+        except (OSError, ValueError):
+            pass
 
     def post(self, path: str, value: dict, execution: bool = True) -> tuple[dict, object]:
         token = self.secrets['execution_token' if execution else 'telemetry_token']
@@ -57,6 +66,6 @@ class Client:
         result = value['data']; self.lease = result.get('lease', ''); return result
 
     def receipt(self, run_no: str, steps: dict, status='running', error_code=None):
-        body = {'steps':steps,'status':status}
+        body = {'steps': {**steps, **({'toolkit_version': self.toolkit_version} if self.toolkit_version else {})}, 'status': status}
         if error_code: body['error_code']=error_code
         self.post('/mcp/device/runs/' + run_no + '/receipt', body)

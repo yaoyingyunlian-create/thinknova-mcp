@@ -341,6 +341,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     film_review(job_path, {'job': {'film': True}, 'artifacts': [
         {'role': 'video', 'file': str(output), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}],
         'platform': next(iter(plan['platforms'])), 'manifest_sha256': ''})
+    steps['film_check'] = 'pass'
+    try:
+        measured = run_command([shutil.which('ffprobe') or 'ffprobe', '-v', 'error',
+                                '-show_entries', 'format=duration', '-of', 'csv=p=0', str(output)],
+                               directory, timeout=10)
+        steps['film_duration_ms'] = str(round(float(measured.stdout.strip()) * 1000))
+    except (OSError, ValueError, OverflowError, RuntimeError, subprocess.TimeoutExpired):
+        pass  # Optional monitoring metadata; the production gate already ran.
     publish_job = directory / 'publish.json'
     publish_payload = {'video': str(output), 'film': True, 'platforms': plan['platforms']}
     if editorial_row is not None:
