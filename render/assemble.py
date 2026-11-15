@@ -251,18 +251,27 @@ def adjust_store_pace(ff, fp, shot, language, wk, index):
     duration = probe(fp, shot)[0]
     intervals = speech_intervals(segments, duration)
     removed = []
+    factor = pace_factor(rate, detected)
     previous = 0.0
-    for start, stop in [*intervals, (duration, duration)]:
-        if start - previous > 0.5:
-            margin = min(0.15, 0.24 * pace_factor(rate, detected))
+    for position, (start, stop) in enumerate([*intervals, (duration, duration)]):
+        gap = start - previous
+        edge_margin = min(0.12, 0.12 * factor)
+        if position == 0:
+            if gap > edge_margin:
+                removed.append((0.0, start - edge_margin))
+        elif position == len(intervals):
+            if gap > edge_margin:
+                removed.append((previous + edge_margin, duration))
+        elif gap > 0.45:
+            margin = min(0.15, 0.15 * factor)
             removed.append((previous + margin, start - margin))
         previous = stop
-    factor = pace_factor(rate, detected)
     if not removed and factor == 1.0:
         return shot, duration, {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
     out = os.path.join(wk, f'paced_{index:03d}.mp4')
     keep = list(zip([0.0, *(stop for _, stop in removed)], [*(start for start, _ in removed), duration]))
     filters = []
+    keep = [(start, stop) for start, stop in keep if stop > start]
     for n, (start, stop) in enumerate(keep):
         filters.extend([
             f'[0:v]trim=start={start:.6f}:end={stop:.6f},setpts=PTS-STARTPTS[v{n}]',

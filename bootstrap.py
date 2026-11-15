@@ -161,6 +161,25 @@ def preserve_customer_state(source, candidate):
                 raise RuntimeError(f'TOOLKIT_CUSTOMER_STATE_COPY_FAILED: {relative}')
 
 
+def remove_failed_candidate(candidate, parent):
+    import stat
+
+    if (candidate.is_symlink() or getattr(candidate, 'is_junction', lambda: False)()
+            or candidate.resolve().parent != parent or not candidate.name.startswith('tn-')
+            or not (candidate / '.tn-recovery-failed').is_file()):
+        raise OSError('Unsafe recovery cleanup target')
+
+    def retry_readonly(operation, filename, error):
+        path = Path(filename)
+        if (os.name != 'nt' or not isinstance(error[1], PermissionError)
+                or candidate not in path.resolve().parents or path.is_symlink() or not path.is_file()):
+            raise error[1]
+        path.chmod(stat.S_IREAD | stat.S_IWRITE)
+        operation(filename)
+
+    shutil.rmtree(candidate, onerror=retry_readonly)
+
+
 def recovery_report(workspace):
     import tempfile
     from file_integrity import manifest_mismatches
@@ -198,6 +217,12 @@ def recovery_report(workspace):
         candidate_parent = (Path(os.environ.get('LOCALAPPDATA') or Path.home()) / 'tn-kit').resolve()
         try:
             candidate_parent.mkdir(parents=True, exist_ok=True)
+            for abandoned in candidate_parent.glob('tn-*'):
+                if (abandoned / '.tn-recovery-failed').is_file():
+                    try:
+                        remove_failed_candidate(abandoned, candidate_parent)
+                    except OSError:
+                        report['candidate_cleanup'] = 'failed'
             workspace.mkdir(parents=True, exist_ok=True)
             candidate = Path(tempfile.mkdtemp(prefix='tn-', dir=candidate_parent))
             env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
@@ -206,7 +231,6 @@ def recovery_report(workspace):
             head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=candidate, timeout=15).decode().strip()
             if head != remote['latest_commit'] or failures(candidate):
                 raise RuntimeError('TOOLKIT_CANDIDATE_INTEGRITY_FAILED')
-            preserve_customer_state(ROOT, candidate)
             setup_result = subprocess.run([sys.executable, str(candidate / 'bootstrap.py'), 'setup', '--json'],
                                           capture_output=True, timeout=1800)
             if setup_result.returncode:
@@ -215,6 +239,14 @@ def recovery_report(workspace):
                 raise RuntimeError(report['setup_failure'])
             if failures(candidate):
                 raise RuntimeError('TOOLKIT_CANDIDATE_SETUP_FAILED')
+            memory = candidate / 'memory.md'
+            template = candidate / 'memory.template.md'
+            if ((ROOT / 'memory.md').is_file() and memory.is_file() and template.is_file()
+                    and memory.read_bytes() == template.read_bytes()):
+                memory.unlink()
+            preserve_customer_state(ROOT, candidate)
+            if failures(candidate):
+                raise RuntimeError('TOOLKIT_CANDIDATE_INTEGRITY_FAILED')
             from automation import atomic
             atomic(workspace / '.thinknova-toolkit.json', {'toolkit': str(candidate), 'commit': head})
             return {**report, 'status': 'ready', 'active_toolkit': str(candidate), 'version_status': 'current',
@@ -226,7 +258,8 @@ def recovery_report(workspace):
                 report['state_failure'] = reason
             if candidate and candidate.resolve().parent == candidate_parent and candidate.name.startswith('tn-'):
                 try:
-                    shutil.rmtree(candidate)
+                    (candidate / '.tn-recovery-failed').touch()
+                    remove_failed_candidate(candidate, candidate_parent)
                 except OSError:
                     report['candidate_cleanup'] = 'failed'
     if not mismatches:
