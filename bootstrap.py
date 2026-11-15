@@ -131,6 +131,36 @@ def update(confirmed=False):
     subprocess.run([sys.executable, str(ROOT / 'bootstrap.py'), 'setup'], check=True)
 
 
+def preserve_customer_state(source, candidate):
+    from file_integrity import sha256
+
+    paths = [source / name for name in (
+        'memory.md', 'reminders.txt', 'AGENTS.local.md', 'video-content-rules.md',
+        'memory_archive', 'publication_history.json', 'publication_attempts', 'analytics_targets.json',
+    )]
+    for platform in (source / 'publish').glob('*'):
+        if platform.is_dir():
+            paths.extend(platform / name for name in ('_profile', 'token.json', 'oauth_client.json'))
+    for item in paths:
+        if not item.exists() and not item.is_symlink():
+            continue
+        files = [item, *item.rglob('*')] if item.is_dir() else [item]
+        for original in files:
+            relative = original.relative_to(source)
+            if original.is_symlink() or getattr(original, 'is_junction', lambda: False)():
+                raise RuntimeError(f'TOOLKIT_CUSTOMER_STATE_LINK: {relative}')
+            destination = candidate / relative
+            if original.is_dir():
+                destination.mkdir(parents=True, exist_ok=True)
+                continue
+            if not original.is_file() or destination.exists():
+                raise RuntimeError(f'TOOLKIT_CUSTOMER_STATE_CONFLICT: {relative}')
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(original, destination)
+            if sha256(original) != sha256(destination):
+                raise RuntimeError(f'TOOLKIT_CUSTOMER_STATE_COPY_FAILED: {relative}')
+
+
 def recovery_report(workspace):
     import tempfile
     from file_integrity import manifest_mismatches
@@ -164,25 +194,41 @@ def recovery_report(workspace):
         return {**report, 'status': 'ready', 'active_toolkit': str(ROOT)}
 
     if remote:
+        candidate = None
+        candidate_parent = (Path(os.environ.get('LOCALAPPDATA') or Path.home()) / 'tn-kit').resolve()
         try:
+            candidate_parent.mkdir(parents=True, exist_ok=True)
             workspace.mkdir(parents=True, exist_ok=True)
-            candidate = Path(tempfile.mkdtemp(prefix='thinknova-toolkit-', dir=ROOT.parent))
+            candidate = Path(tempfile.mkdtemp(prefix='tn-', dir=candidate_parent))
             env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
             subprocess.run(['git', '-c', 'core.autocrlf=false', 'clone', '--branch', 'main', '--single-branch',
                             REPOSITORY, str(candidate)], env=env, capture_output=True, check=True, timeout=120)
             head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=candidate, timeout=15).decode().strip()
             if head != remote['latest_commit'] or failures(candidate):
                 raise RuntimeError('TOOLKIT_CANDIDATE_INTEGRITY_FAILED')
+            preserve_customer_state(ROOT, candidate)
             setup_result = subprocess.run([sys.executable, str(candidate / 'bootstrap.py'), 'setup', '--json'],
                                           capture_output=True, timeout=1800)
-            if setup_result.returncode or failures(candidate):
+            if setup_result.returncode:
+                detail = (setup_result.stderr or b'').decode('utf-8', errors='replace').lower()
+                report['setup_failure'] = 'WINDOWS_PATH_TOO_LONG' if any(x in detail for x in ('winerror 206', 'long path', 'filename or extension is too long')) else 'TOOLKIT_CANDIDATE_SETUP_FAILED'
+                raise RuntimeError(report['setup_failure'])
+            if failures(candidate):
                 raise RuntimeError('TOOLKIT_CANDIDATE_SETUP_FAILED')
             from automation import atomic
             atomic(workspace / '.thinknova-toolkit.json', {'toolkit': str(candidate), 'commit': head})
             return {**report, 'status': 'ready', 'active_toolkit': str(candidate), 'version_status': 'current',
                     'recovery': 'clean_copy'}
-        except (OSError, RuntimeError, subprocess.SubprocessError):
+        except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
             report['recovery'] = 'clean_copy_failed'
+            reason = str(exc)
+            if reason.startswith('TOOLKIT_CUSTOMER_STATE_'):
+                report['state_failure'] = reason
+            if candidate and candidate.resolve().parent == candidate_parent and candidate.name.startswith('tn-'):
+                try:
+                    shutil.rmtree(candidate)
+                except OSError:
+                    report['candidate_cleanup'] = 'failed'
     if not mismatches:
         return {**report, 'status': 'ready', 'active_toolkit': str(ROOT)}
     report['error'] = 'TOOLKIT_INTEGRITY_RECOVERY_REQUIRED'
@@ -228,7 +274,7 @@ def setup(json_output=False):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, epilog='recover checks the official version, prepares a verified short-path copy when needed, preserves customer state, then updates the workspace pointer.')
     parser.add_argument('command', choices=['setup', 'repair', 'check', 'update', 'prepare-update', 'recover'])
     parser.add_argument('--workspace', type=Path, help='Customer workspace for automatic recovery if updating is blocked')
     parser.add_argument('--user-confirmed', action='store_true')

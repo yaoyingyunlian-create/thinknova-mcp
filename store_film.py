@@ -54,7 +54,9 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     if not isinstance(first, str) or not ASSET.fullmatch(first):
         raise ValueError('FILM_FIRST_FRAME_REQUIRED')
     refs = list(dict.fromkeys([first, *([board] if board else []), *refs]))
-    if len(refs) > 3 or any(ref not in authorized_assets for ref in refs):
+    if len(refs) > 3:
+        raise ValueError('FILM_REFERENCE_LIMIT_EXCEEDED: first frame and each sheet count toward the three-image limit')
+    if any(ref not in authorized_assets for ref in refs):
         raise ValueError('FILM_REFERENCE_NOT_AUTHORIZED')
     location = segment.get('shop_location')
     if location and not set(refs).intersection(shop_assets.get(location, [])):

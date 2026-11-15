@@ -102,6 +102,25 @@ def worker():
 
 
 
+def speech_intervals(segments, end=None):
+    spans = []
+    for segment in segments:
+        if not segment.text.strip():
+            continue
+        times = segment.words or [segment]
+        spans.extend((max(0, t.start), min(t.end, end) if end is not None else t.end)
+                     for t in times if end is None or t.start < end)
+    merged = []
+    for start, stop in sorted(spans):
+        if stop <= start:
+            continue
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(stop, merged[-1][1]))
+        else:
+            merged.append((start, stop))
+    return merged
+
+
 def speech_pace(segments, language, end=None):
     spans = [segment for segment in segments if segment.text.strip() and (end is None or segment.start < end)]
     if not spans:
@@ -115,15 +134,14 @@ def speech_pace(segments, language, end=None):
     text = ' '.join(word.word for word in words) if words else ' '.join(segment.text for segment in spans)
     count = (len(re.findall(r'[\u3400-\u9fff]', text)) if language == 'zh'
              else len(re.findall(r"[A-Za-z]+(?:['’][A-Za-z]+)?", text)))
-    start = words[0].start if words else spans[0].start
-    stop = words[-1].end if words else spans[-1].end
-    if count == 0 or stop <= start:
+    duration = sum(stop - start for start, stop in speech_intervals(spans, end))
+    if count == 0 or duration <= 0:
         raise RuntimeError('FILM_PACE_SPEECH_MISSING')
-    return count / (stop - start)
+    return count / duration
 
 
 def pace_factor(rate, language):
-    low, high, target = (4.2, 4.8, 4.5) if language == 'zh' else (2.6, 3.0, 2.8)
+    low, high, target = (4.0, 5.2, 4.6) if language == 'zh' else (2.6, 3.0, 2.8)
     return max(0.8, min(1.25, target / rate)) if not low <= rate <= high else 1.0
 
 

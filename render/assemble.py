@@ -240,7 +240,7 @@ def norm_shot(ff, fp, base, c, idx, wk):
 
 
 def adjust_store_pace(ff, fp, shot, language, wk, index):
-    from speech_review import pace_factor, recognize, speech_pace
+    from speech_review import pace_factor, recognize, speech_intervals, speech_pace
 
     try:
         segments, info = recognize(shot, 'small', language, ff, word_timestamps=True, vad_filter=True)
@@ -248,11 +248,30 @@ def adjust_store_pace(ff, fp, shot, language, wk, index):
         rate = speech_pace(segments, detected)
     except (RuntimeError, ImportError) as exc:
         raise Stop(f'FILM_PACE_UNAVAILABLE: clip {index + 1}: {exc}', 2) from exc
+    duration = probe(fp, shot)[0]
+    intervals = speech_intervals(segments, duration)
+    removed = []
+    previous = 0.0
+    for start, stop in [*intervals, (duration, duration)]:
+        if start - previous > 0.5:
+            margin = min(0.15, 0.24 * pace_factor(rate, detected))
+            removed.append((previous + margin, start - margin))
+        previous = stop
     factor = pace_factor(rate, detected)
-    if factor == 1.0:
-        return shot, probe(fp, shot)[0], {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+    if not removed and factor == 1.0:
+        return shot, duration, {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
     out = os.path.join(wk, f'paced_{index:03d}.mp4')
-    run_ff(ff, ['-i', shot, '-vf', f'setpts=PTS/{factor:.8f}', '-af', f'atempo={factor:.8f}',
+    keep = list(zip([0.0, *(stop for _, stop in removed)], [*(start for start, _ in removed), duration]))
+    filters = []
+    for n, (start, stop) in enumerate(keep):
+        filters.extend([
+            f'[0:v]trim=start={start:.6f}:end={stop:.6f},setpts=PTS-STARTPTS[v{n}]',
+            f'[0:a]atrim=start={start:.6f}:end={stop:.6f},asetpts=PTS-STARTPTS[a{n}]',
+        ])
+    inputs = ''.join(f'[v{n}][a{n}]' for n in range(len(keep)))
+    filters.append(f'{inputs}concat=n={len(keep)}:v=1:a=1[v][a]')
+    filters.extend([f'[v]setpts=PTS/{factor:.8f}[video]', f'[a]atempo={factor:.8f}[audio]'])
+    run_ff(ff, ['-i', shot, '-filter_complex', ';'.join(filters), '-map', '[video]', '-map', '[audio]',
                 '-r', str(FPS), '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
                 '-c:a', 'aac', '-ar', str(SR), out], 'store speech pace')
     # Measure the transformed audio rather than assuming the encoder achieved the target.
@@ -592,6 +611,8 @@ def main():
         return recheck(argv[1], overwrite)
     job, base = load_job(argv)
     store_film = job.get('film_profile') == 'store_v2'
+    if store_film and job.get('srt'):
+        raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
     if store_film:
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
         sys.path.insert(0, os.path.dirname(HERE))
