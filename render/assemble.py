@@ -241,8 +241,8 @@ def norm_shot(ff, fp, base, c, idx, wk):
     return out, dur
 
 
-def dialogue_pace_adjustment(rate, language, duration, intervals):
-    """Slow fast dialogue only if edge silence can fund the extra playback time."""
+def dialogue_pace_adjustment(rate, language, duration, intervals, max_duration=None):
+    """Prefer exact duration, then use a bounded amount of the film duration tolerance."""
     high = 5.2 if language == 'zh' else 3.0
     if rate <= high or not intervals:
         return None
@@ -253,12 +253,18 @@ def dialogue_pace_adjustment(rate, language, duration, intervals):
     tail = max(0.0, duration - intervals[-1][1] - 0.15)
     trim = duration * (1 - factor)
     if head + tail < trim:
-        return None
+        if max_duration is None:
+            return None
+        # Leave one hundredth below the measured limit and a frame of duration headroom.
+        factor = max(factor, (duration - head - tail) / max_duration)
+        if factor >= 1 or rate * factor > high - 0.01:
+            return None
+        trim = min(head + tail, max(0.0, duration - max_duration * factor))
     start = max(0.0, trim - tail)
     return start, duration - (trim - start), factor
 
 
-def adjust_store_pace(ff, fp, shot, language, wk, index, keep_dialogue_duration=False):
+def adjust_store_pace(ff, fp, shot, language, wk, index, keep_dialogue_duration=False, planned_seconds=None):
     from speech_review import pace_factor, recognize, speech_intervals, speech_pace
 
     try:
@@ -286,9 +292,13 @@ def adjust_store_pace(ff, fp, shot, language, wk, index, keep_dialogue_duration=
             removed.append((previous + margin, start - margin))
         previous = stop
     if keep_dialogue_duration:
-        adjustment = dialogue_pace_adjustment(rate, detected, duration, intervals)
+        max_duration = max(duration, planned_seconds + 0.45) if planned_seconds is not None else None
+        adjustment = dialogue_pace_adjustment(rate, detected, duration, intervals, max_duration)
         if adjustment is None:
-            return shot, duration, {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+            report = {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+            if rate > (5.2 if detected == 'zh' else 3.0):
+                report['status'] = 'insufficient_safe_timing_margin'
+            return shot, duration, report
         start, stop, factor = adjustment
         keep = [(start, stop)]
     else:
@@ -708,7 +718,9 @@ def main():
                 dialogue = bool(job.get('short_dialogue_seconds'))
                 try:
                     shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i,
-                                                        keep_dialogue_duration=dialogue)
+                                                        keep_dialogue_duration=dialogue,
+                                                        planned_seconds=(job['short_dialogue_seconds'] / len(job['clips'])
+                                                                         if dialogue else None))
                 except Stop as exc:
                     if not dialogue or not str(exc).startswith('FILM_PACE_UNAVAILABLE'):
                         raise

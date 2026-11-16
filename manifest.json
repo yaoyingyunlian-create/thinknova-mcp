@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "4b15c555d2acad45592591b21831c434ce91b844367e18dcb138c556efbbb909",
+  "revision": "c82201ea34c5fe6327858634e4c7f19388a00025c721df81844e423ef9b06b8e",
   "files": [
     {
       "path": ".gitignore",
@@ -209,7 +209,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "756399f55e8dcfdc08d1bd32c7b9f252fe1e7482ae6d2eb6994402594968a4e7"
+      "sha256": "5a2100a8dc84d322ea128b78c07af71003d97e028421caad9b6e426c1db10d84"
     },
     {
       "path": "render/captions.py",
@@ -361,7 +361,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "8f3a1a79863cac4406c9630dc042355bca0885d2971a47ff70300429eb5bbfaf"
+      "sha256": "66e5ad9bcad6dee31b26d9ad76c4d4404a13cbbb9cc2786e71d9a7b3d079c503"
     },
     {
       "path": "test_subtitle_layout.py",

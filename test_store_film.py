@@ -45,6 +45,11 @@ class StoreFilmTests(unittest.TestCase):
         self.assertLessEqual(5.6 * factor, 5.2)
         self.assertGreaterEqual(stop, 13.15)
         self.assertIsNone(dialogue_pace_adjustment(5.6, 'zh', 15, [(0, 14.8)]))
+        start, stop, factor = dialogue_pace_adjustment(5.34, 'zh', 15, [(0, 15)], 15.45)
+        self.assertLessEqual((stop - start) / factor, 15.45)
+        self.assertLess(5.34 * factor, 5.2)
+        self.assertEqual((start, stop), (0, 15))
+        self.assertIsNone(dialogue_pace_adjustment(5.6, 'zh', 15, [(0, 15)], 15.45))
         self.assertIsNone(dialogue_pace_adjustment(4.8, 'zh', 15, [(0.5, 13)]))
 
     def test_delivery_keeps_original_quality_report(self):
