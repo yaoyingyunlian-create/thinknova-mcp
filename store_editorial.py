@@ -149,10 +149,13 @@ def validate_dialogue_v3(plan):
             or not all(isinstance(line, str) and line.strip() and len(line.encode('utf-8')) <= 120 for line in overlay)
             or overlay[0] != expected_overlay):
         raise ValueError('FILM_DIALOGUE_PROFILE_INVALID')
+    revision21 = plan.get('dialogue_rules_revision') == '2.1'
+    if revision21:
+        dialogue_v21_lines(plan)
     for index, segment in enumerate(plan['segments'], 1):
         dialogue = segment.get('dialogue')
         if (not isinstance(dialogue, list) or len(dialogue) not in (3, 4)
-                or re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|对着镜头', str(segment.get('prompt', '')), re.I)):
+                or re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|对着镜头|^\s*\d+(?:[.,]\d+)?\s*[-–—~～至到]\s*\d+(?:[.,]\d+)?\s*(?:s\b|秒)', str(segment.get('prompt', '')), re.I | re.M)):
             raise ValueError(f'FILM_DIALOGUE_LINES_INVALID: {index}')
         speakers = set()
         spoken = []
@@ -176,6 +179,32 @@ def validate_dialogue_v3(plan):
             raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')
         if actual != ''.join(char for char in ''.join(captions) if unicodedata.category(char)[0] in 'LN'):
             raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')
+
+
+def dialogue_v21_lines(plan, previous_lines=()):
+    used = set(previous_lines)
+    lines = []
+    for index, segment in enumerate(plan['segments'], 1):
+        previous = None
+        answered = False
+        for line in segment.get('dialogue', ()):
+            kind = line.get('kind') if isinstance(line, dict) else None
+            text = line.get('text') if isinstance(line, dict) else None
+            if (kind not in ('question', 'answer', 'statement') or not isinstance(text, str)
+                    or (kind == 'question' and not text.strip().endswith(('?', '？')))):
+                raise ValueError(f'FILM_DIALOGUE_TURN_INVALID: {index}')
+            normalized_line = ''.join(char for char in text if unicodedata.category(char)[0] in 'LN')
+            if normalized_line in used:
+                raise ValueError(f'FILM_DIALOGUE_LINE_REPEATED: {index}')
+            used.add(normalized_line)
+            lines.append(normalized_line)
+            if (kind == 'answer' and previous is not None and previous['kind'] == 'question'
+                    and previous.get('speaker') != line.get('speaker')):
+                answered = True
+            previous = line
+        if not answered:
+            raise ValueError(f'FILM_DIALOGUE_QUESTION_ANSWER_REQUIRED: {index}')
+    return lines
 
 
 def validate_script(plan):

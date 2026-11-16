@@ -55,6 +55,17 @@ class EditorialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'WORD_COUNT'):
             validate_dialogue_v3(plan)
 
+    def test_v21_requires_answer_and_rejects_reused_dialogue(self):
+        from store_editorial import dialogue_v21_lines
+        question = {'kind': 'question', 'speaker': 'customer', 'text': '鞋底还能补吗？'}
+        answer = {'kind': 'answer', 'speaker': 'staff', 'text': '可以补。'}
+        plan = {'segments': [{'dialogue': [question, answer]}]}
+        self.assertEqual(dialogue_v21_lines(plan), ['鞋底还能补吗', '可以补'])
+        with self.assertRaisesRegex(ValueError, 'LINE_REPEATED'):
+            dialogue_v21_lines(plan, ['鞋底还能补吗'])
+        with self.assertRaisesRegex(ValueError, 'QUESTION_ANSWER_REQUIRED'):
+            dialogue_v21_lines({'segments': [{'dialogue': [question, dict(answer, speaker='customer')]}]})
+
     def test_copy_requires_fields_and_rejects_platform_prohibitions(self):
         variant = {'title': '下班后想放松的新加坡顾客', 'tags': ['新加坡', '头疗'],
                    'marketing_copy': {'audience_or_pain': '下班总是很累？', 'solution': 'Miorae 做头疗',

@@ -82,6 +82,18 @@ class StoreFilmTests(unittest.TestCase):
                     with self.assertRaisesRegex(Stop, 'FILM_SOURCE_NOT_PORTRAIT'):
                         check_store_source('ffmpeg', 'ffprobe', 'video.mp4', 1)
 
+    def test_v21_generation_requires_distinct_ordered_reference_boards(self):
+        segment = {'prompt': 'Two people choose flowers', 'duration_seconds': 15,
+                   'first_frame_asset_id': 'asset_first', 'shop_location': 'front',
+                   'reference_roles': ['first_frame', 'customer', 'staff'],
+                   'reference_boards': {'customer': 'asset_customer'}}
+        allowed = {'asset_first', 'asset_customer', 'asset_staff'}
+        with self.assertRaisesRegex(ValueError, 'BOARD_REQUIRED: staff'):
+            generation_arguments(segment, {'front': ['asset_first']}, allowed)
+        segment['reference_boards']['staff'] = 'asset_staff'
+        args = generation_arguments(segment, {'front': ['asset_first']}, allowed)
+        self.assertEqual(args['reference_asset_ids'], ['asset_first', 'asset_customer', 'asset_staff'])
+
     def test_portrait_quote_rejects_silent_landscape(self):
         from automation import quoted_generation_args
         from unittest.mock import Mock

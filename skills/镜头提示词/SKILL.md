@@ -3,8 +3,8 @@ name: shot-prompts
 description: 写任何一条首帧（generate_image / edit_image）或图生视频（animate_image）提示词之前必须先读。给出固定要加的话、参考图怎么放、人物怎么锁、台词和声音怎么写、不能写的画面和失败怎么办。
 ---
 
-> 新版日计划（schema_version=3）先读 `rules/store-film-rules-v3.md`。对白必须在画内，由顾客和店员交替说；本文件中的旁白写法仅用于旧计划。
-> For v3 plans, use the in-scene dialogue rules in `rules/store-film-rules-v3.md`. Legacy narration examples apply to legacy plans.
+> 新版日计划（schema_version=3）先读 `rules/store-film-rules-v3.md`。对白必须在画内，由顾客和店员交替说。
+> For v3 plans, use the in-scene dialogue rules in `rules/store-film-rules-v3.md`. Use natural exchanges without time-coded lines.
 
 # 镜头提示词（每写一条提示词都要套）
 
@@ -37,12 +37,9 @@ No subtitles, no captions, no on-screen text, no logos, no background music.
 Natural hands with five fingers. Slow, steady camera.
 ```
 
-## 二、参考图怎么放（每镜首帧最多 3 张，顺序不能错）
-1. 这一镜发生在店里 → 第 1 张放这个位置的门店真实照片。不在店里不放。
-2. 有主角 → 放三视图设定板。
-3. 有产品 → 放产品真实照片。
-图生视频的第 1 张必须是这一镜的首帧。提交后用 get_task 回读，确认存进去的顺序没错。同一个位置的几镜用同一张门店照片；连续动作的下一镜，首帧用上一镜视频的最后一帧。
-带了门店或产品真实照片的调用传 `visual_subject=customer_identity`。
+## 二、参考图顺序
+
+第一张是当前镜头的真实首帧。两人同框无产品时，第二、三张是顾客、店员各自的三视图。画面有主推产品时，第二张是人物板，第三张是产品板；两人都要锁定时，人物板用经确认的两人合版。素材均须获当前项目授权，少一张就报告其角色。
 
 ## 三、人物锁定
 片里的人一律是 AI 生成的虚构角色，可以露脸。只有店主给了本人照片并同意，才用真人。
@@ -53,30 +50,17 @@ Natural hands with five fingers. Slow, steady camera.
 
 ## 四、台词和声音
 
-中文台词先按秒数 × 4 估算，低于秒数 × 3.8 检查是否留了过多空档。声音描述保持固定音色，并使用自然偏快的口语节奏（brisk conversational pace）。成片会按实际转写复测语速。 Draft about four Chinese characters per second, with a brisk conversational pace.
-> 工具包有配音工具之前，声音由视频模型按提示词直接说。有了以后改成画面不说话、旁白另配。
-1. 台词写进图生视频提示词，放在「」里。**按场景分段**：同一个地方的连续动作写成一段，里面分 2～3 个阶段，每阶段一句台词；换地方才开新的一段。台词要写够这一段说：6 秒 20～24 字，10 秒 35～40 字，15 秒 50～55 字；报价和建单都带 `duration_seconds`。出来整段用，不靠后期裁。⛔ 不带时长（默认出 15 秒）；⛔ 一个镜头生成一次。
-2. 台词是主角自己在说，用「我」，像在跟朋友讲；一句里留一个停顿。写法照「口语台词」。
-3. 声音设定两句：
-   - 第一句固定身份，全片一字不改，写明性别、音高、音色，例：`Voice: the same woman in every shot — clearly feminine, light and clear, medium-high pitch, about 30, natural Mandarin, first-person voice-over, no lip-sync.`
-   - 第二句是这一镜的情绪，每镜不同，例：`Tone in this shot: tired, a little irritable.`
-4. 出片后逐镜听：性别不对或明显换了人，在第一句后面加强描述重做一次（原样重做没用）；小的音色差别放过。
-5. 价格和带单位的数字不念，放字幕和文案。多音字、难读的词换掉；品牌名要念就注明读法，不确定就不念。
-6. 方言要写明（如 `Cantonese, NOT Mandarin`），台词用方言字写。
+采用画内两人对白。可在人物介绍里写两个人各自的声音特征，整片保持一致。动作和对白按自然顺序写，给每句注明说话人、对方、动作与情绪。每段用一问一答组织台词，沿用 v2.1 的字数要求。对白不要写进首帧或字幕像素。
 
-## 五、一条完整的图生视频提示词
-```
-Continue exactly from this frame. Keep the same person, clothes, shop and product as in the frame.
-Person: <固定外貌描述，原样复制>.
-0-5 s: <动作 + 景别 + 运镜>. Voice-over: 「<台词>」
-5-10 s: <换一个景别或动作>. Voice-over: 「<台词>」
-10-14 s: <再换>. Voice-over: 「<台词>」
-Voice: <固定身份句，原样复制>
-Tone: <这一段里情绪怎么走，例：starts tired, ends a little curious>.
-Ambient sound of the place, low.
-No subtitles, no captions, no on-screen text, no logos, no background music.
-Natural hands with five fingers. Slow, steady camera.
-```
+## 五、图生视频提示词示例
+
+- 画面：花店柜台前，顾客把相册推到两人中间；店员对照照片拿出一枝粉玫瑰。竖屏中景保留两人和手部动作。
+- 顾客（翻到照片，有点犹豫）对店员说：「我妈平常穿得很素，送粉玫瑰会不会太亮？」
+- 店员（把浅粉和深粉放在一起）对顾客说：「试试浅粉吧，衬她常穿的米白色，摆在家里也好看。」
+- 顾客（把浅粉那支挪到自己面前）对店员说：「这个颜色她应该会喜欢，我下班再来拿。」
+- 音轨：两人用自然的普通话交谈，有店内环境声。画面不加字幕、水印或场景文字。
+
+两人同框且无主推产品时，按首帧、顾客三视图、店员三视图提交。有人且有主推产品时，按首帧、人物板、产品板提交；两人需要锁定就使用已确认的两人合版。先报价确认三张均生效再建单。
 
 ## 六、不能写的画面
 | 不能写 | 会出什么问题 | 改成 |
@@ -103,4 +87,5 @@ Natural hands with five fingers. Slow, steady camera.
 - [ ] 台词里没有价格、带单位的数字、多音字
 
 ## English summary
-Before any first-frame or animate_image prompt: append the fixed tails (photorealistic 9:16, no readable text; "Continue exactly from this frame…"; no subtitles, text or music). Order references: the real shop photo for that location first when the shot is in the shop, then the three-view character sheet, then the real product photo; pass visual_subject=customer_identity when real shop or product photos are used; verify stored order with get_task. Characters are AI-generated fictional people who may show their face, locked by one three-view sheet and one appearance paragraph copied verbatim. Write the spoken line first, then set duration_seconds = characters ÷ 4 + 1 (6–15) and pass it in both quote and creation. Lines are first person, conversational, with room to breathe. Voice is two sentences: a fixed identity sentence repeated verbatim and a per-shot tone sentence. No prices or unit numbers in speech. Never text-only video generation; never let the model draw text, signage or music.
+
+Use natural, in-scene dialogue with speaker, action, emotion and listener. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references.

@@ -1,41 +1,22 @@
 ---
 name: spoken-script
-description: 写短视频台词 / 旁白时用。让台词像真人随口说，不像念稿。
+description: 写短视频对白时用。让台词像真人随口说，不像念稿。
 ---
 
-> 新版日计划（schema_version=3）先读 `rules/store-film-rules-v3.md`。对白必须在画内，由顾客和店员交替说；本文件中的旁白写法仅用于旧计划。
-> For v3 plans, use the in-scene dialogue rules in `rules/store-film-rules-v3.md`. Legacy narration examples apply to legacy plans.
+> 新版日计划（schema_version=3）先读 `rules/store-film-rules-v3.md`。对白必须在画内，由顾客和店员交替说。
+> For v3 plans, use the in-scene dialogue rules in `rules/store-film-rules-v3.md`. Use a question and its answer in every segment.
 
 # 口语台词
 
-## 一、像人随口说
-- ⛔ 一句一句工整排比着念（念稿感）。
-- ⛔ 讲课腔：「你想啊」「说白了」「所以你要……」「这叫 XX 效应」。
+每段至少一问一答。人物只讲自己的事，不给对方播报动作，也不预告下一步。避免采访式的服务清单，预约由店员自然带出。
 
-## 二、排比拆成「一件一件说」
-❌ 摄影、灯光、场地、模特、后期，每一项都在收你的钱。（工整 = 书面）
-✅ 摄影要请人，灯光要租，场地要订，模特还要另算。（一件一件，有先后）
+## 写法
 
-## 三、留口语的不整齐
-「自己拍的吧，光不对」「网上找的吧，又不敢用」「一弄就是俩小时」——人说话本来就不对仗。
+- 每段 3～4 句，合计 60～70 字（不计标点）。两人各说自己的事，问句由另一人接话回答。
+- 避免介绍服务清单、描述眼前动作及预告下一步。把可见的动作写在对白外。
+- 预约方式由店员用一句口语交代。使用已确认的事实，价格和带单位的数字留给文案。
+- 每段对照 `rules/store-film-rules-v3.md` 的 v2.1 样板。核对本片与过去七天台词，交付时逐字对照字幕。
 
-## 四、把账算给人看
-不说「很贵」「很慢」，给数字链：一条多少钱 → 等几天 → 来回多久 → 一个月要几条。
-每个数都要真实、有出处（用户自己的经历、能核实的原话或公开数据）；⛔ 编价格、天数、年数、效果数字。
+## English summary
 
-## 五、结构骨架
-1. **点名**（0–2 秒）：说清是给谁看的（「开 X 店的」）。
-2. **一件一件说**：观众眼里的真实场景；一条片只讲一件事，⛔ 半路插建议、换话题。
-3. **算账**（有真数时）。
-4. **解决**：一句话讲清怎么解决，画面让人亲眼看到（成品、前后对比、过程）。
-5. **收住**：一句观众自己会想通的话；⛔ 结尾提问、下结论、「所以你要……」。
-6. **片尾**：品牌 / 出口按用户规矩来；平台不允许导流字的（如小红书）就只留品牌，出口放主页简介。
-
-## 六、硬规矩
-- **字数**：每 10 秒镜头约 35–40 字以内（约 4 字 / 秒），留停顿。
-- **多音字绕开**：得（děi）→ 要；卡 → 难；露脸 → 出镜；说服 → 告诉；照着 → 按。合成语音末字容易被吃，句末可加缓冲再剪掉。
-- **不做效果承诺**（「保证涨粉」「一定爆」不写）。
-- **字幕**：镜头慢、字少、底部普通字幕；⛔ 逐字变色高亮、⛔ 字在画面中间弹跳。
-
-## 七、交稿前
-逐句问三件事：观众真会这么想吗？是不是编的？对他有什么用？先读取 MCP `get_content_rules` 的 `effective_rules.review_mode`：`pre_generation` 才在出片前请用户审台词；默认 `pre_publish` 仅在真实发布前展示成片和文案并等待明确确认。涉及未经证实的价格、效果、医疗、金融或合规表述时，无论审核模式都必须先核实或询问用户。
+Write a conversation, with a real question and an answer in each segment. Use three or four lines and the v2.1 dialogue budget. Keep stage directions outside the spoken lines. Use confirmed facts and keep booking instructions brief.

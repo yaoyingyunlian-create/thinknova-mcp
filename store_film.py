@@ -53,6 +53,24 @@ def generation_arguments(segment, shop_assets, authorized_assets):
         raise ValueError('FILM_REFERENCE_INVALID')
     if not isinstance(first, str) or not ASSET.fullmatch(first):
         raise ValueError('FILM_FIRST_FRAME_REQUIRED')
+    roles = segment.get('reference_roles')
+    if roles is not None:
+        if roles not in (['first_frame', 'customer', 'staff'], ['first_frame', 'customer', 'product'],
+                          ['first_frame', 'staff', 'product'], ['first_frame', 'cast', 'product']):
+            raise ValueError('FILM_REFERENCE_ROLES_INVALID')
+        boards = segment.get('reference_boards') or {}
+        if not isinstance(boards, dict):
+            raise ValueError('FILM_REFERENCE_BOARDS_INVALID')
+        missing = [role for role in roles[1:] if not boards.get(role)]
+        if missing:
+            raise ValueError('FILM_REFERENCE_BOARD_REQUIRED: ' + ', '.join(missing))
+        refs = [boards[role] for role in roles[1:]]
+        if any(not isinstance(ref, str) or not ASSET.fullmatch(ref) for ref in refs) or len(set([first, *refs])) != 3:
+            raise ValueError('FILM_REFERENCE_BOARDS_MUST_BE_DISTINCT')
+        prompt += ('\nKeep the first frame and reference identities consistent. '
+                   'Keep existing product packaging print; do not add scene text.')
+        if len(prompt.encode('utf-8')) > 3500:
+            raise ValueError('FILM_PROMPT_TOO_LONG')
     product_board = segment.get('product_sheet_asset_id')
     if segment.get('customer_product') and not product_board:
         raise ValueError('FILM_PRODUCT_SHEET_REQUIRED')
@@ -80,6 +98,10 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     result = {'prompt': prompt, 'duration_seconds': seconds, 'reference_asset_ids': refs,
             'visual_subject': 'customer_identity' if location or product_board or segment.get('customer_identity') else 'generic',
             'film_profile': 'store_v2', 'ratio': '9:16'}
+    if roles is not None:
+        if len(refs) != 3:
+            raise ValueError('FILM_REFERENCE_ROLES_INVALID')
+        result['reference_roles'] = roles
     if location:
         result['shop_location'] = location
     return result

@@ -126,6 +126,8 @@ def quoted_generation_args(client, tool, args, balance):
         specification = quote.get('configured_video_specification') or quote.get('specification') or {}
         if not isinstance(specification, dict) or specification.get('ratio') != args['ratio']:
             raise RuntimeError('MCP_VIDEO_QUOTE_RATIO_MISMATCH')
+    if 'reference_roles' in args and quote.get('applied_reference_asset_ids') != args['reference_asset_ids']:
+        raise RuntimeError('MCP_FILM_QUOTE_REFERENCE_MISMATCH')
     return {**args,'max_credits':credits}
 
 
@@ -244,7 +246,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     editorial_row = None
     copy_policies = {}
     if grant.get('project_key'):
-        from store_editorial import validate_plan_copy, validate_rotation
+        from store_editorial import dialogue_v21_lines, validate_plan_copy, validate_rotation
         if grant.get('auto_publish') and set(plan['platforms']) != {'youtube'}:
             raise RuntimeError('DAY_PLAN_PLATFORM_NOT_AUTHORIZED')
         if grant.get('auto_publish') and plan['platforms']['youtube'].get('expected_channel_id') != grant['channel_id']:
@@ -266,6 +268,11 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
+        if plan.get('dialogue_rules_revision') == '2.1':
+            day = date.fromisoformat(plan['date'])
+            recent_lines = [line for row in history if 0 < (day - date.fromisoformat(row['date'])).days <= 7
+                            for line in row.get('dialogue_lines', [])]
+            editorial_row['dialogue_lines'] = dialogue_v21_lines(plan, recent_lines)
         for platform, entry in (rules.get('platform_rules') or {}).items():
             terms = (entry.get('hard_constraints') or {}).get('copy_forbidden_terms')
             if terms:
@@ -277,6 +284,10 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
+        if plan.get('dialogue_rules_revision') == '2.1':
+            roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
+            segment = {**segment, 'reference_roles': roles,
+                       'reference_boards': {**(shop.get('reference_boards') or {}), **(segment.get('reference_boards') or {})}}
         args = generation_arguments(scripted_segment(segment, plan.get("script"), shop), shop_assets, authorized)
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
