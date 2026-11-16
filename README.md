@@ -9,6 +9,10 @@ Installation diagnostics: setup --json and toolkit.py doctor --json --online pro
 自动修复：`python bootstrap.py repair` 会恢复缺失文件并安装缺失工具、Python 依赖与 Chromium，最后重新检查。机器缺少 Git/Python 时使用 `install.ps1`（Windows）或 `install.sh`（macOS/Linux）。没有包管理器、安装权限或网络时返回具体错误，恢复条件后可重复执行。
 Automatic repair: run `python bootstrap.py repair`; missing tracked files and dependencies are repaired and rechecked. Use the native install script if Git/Python is missing. Package-manager, permission and network failures remain explicit and never count as a successful installation.
 
+国内访问可选 [Gitee 镜像](https://gitee.com/zhongjianghua_admin/thinknova-mcp.git)。Windows 安装器用 `-Source Gitee`，macOS/Linux 用 `sh install.sh thinknova-toolkit gitee`。更新先核对 GitHub，访问失败时检查 Gitee；从 Gitee 得到的结果只代表镜像当前提交。两边不可用时版本未知。
+
+For networks with limited GitHub access, select Gitee with `-Source Gitee` on Windows or `sh install.sh thinknova-toolkit gitee` on macOS/Linux. Checks report the actual source and never downgrade to an older mirror.
+
 源码仓库：[thinknova-mcp](https://github.com/yaoyingyunlian-create/thinknova-mcp)。每次开工调用 MCP
 `check_toolkit_update(installed_revision=manifest.json 中的 revision)`；第一次无安装时省略参数。
 首次会员连接后自动调用 `get_toolkit()`，通过 HTTPS 克隆此仓库并运行 `python bootstrap.py setup`。

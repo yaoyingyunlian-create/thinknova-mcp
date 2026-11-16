@@ -26,11 +26,19 @@ if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(0 
   install_dependency python3
 fi
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,10) else "PYTHON_REPAIR_NOT_EFFECTIVE: repository Python is older than 3.10")'
-repository=https://github.com/yaoyingyunlian-create/thinknova-mcp.git
+github=https://github.com/yaoyingyunlian-create/thinknova-mcp.git
+gitee=https://gitee.com/zhongjianghua_admin/thinknova-mcp.git
+case "${2:-github}" in
+  github) repository="$github" ;;
+  gitee) repository="$gitee" ;;
+  *) echo 'Choose github or gitee as the second argument.' >&2; exit 2 ;;
+esac
 if [ ! -e "$destination" ]; then
-  git -c core.autocrlf=false clone "$repository" "$destination"
-elif [ "$(git -C "$destination" remote get-url origin)" != "$repository" ]; then
-  echo 'DESTINATION_CONFLICT: existing directory preserved.' >&2
-  exit 2
+  git -c core.autocrlf=false clone --branch main "$repository" "$destination"
+else
+  case "$(git -C "$destination" remote get-url origin)" in
+    "$github"|"$gitee"|git@github.com:yaoyingyunlian-create/thinknova-mcp.git) ;;
+    *) echo 'DESTINATION_CONFLICT: existing directory preserved.' >&2; exit 2 ;;
+  esac
 fi
 python3 "$destination/bootstrap.py" setup

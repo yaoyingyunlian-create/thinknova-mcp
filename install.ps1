@@ -1,4 +1,4 @@
-param([string]$Destination = (Join-Path (Get-Location) 'thinknova-toolkit'))
+param([string]$Destination = (Join-Path (Get-Location) 'thinknova-toolkit'), [ValidateSet('GitHub', 'Gitee')][string]$Source = 'GitHub')
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new()
 function Refresh-ToolPath {
@@ -26,13 +26,15 @@ if (-not $python) {
     $python = Join-Path $env:LOCALAPPDATA 'Programs/Python/Python312/python.exe'
     if (-not (Test-Path -LiteralPath $python)) { throw 'PYTHON_REPAIR_NOT_EFFECTIVE: Python installer completed but interpreter was not found.' }
 }
-$repository = 'https://github.com/yaoyingyunlian-create/thinknova-mcp.git'
+$github = 'https://github.com/yaoyingyunlian-create/thinknova-mcp.git'
+$gitee = 'https://gitee.com/zhongjianghua_admin/thinknova-mcp.git'
+$repository = if ($Source -eq 'Gitee') { $gitee } else { $github }
 if (-not (Test-Path -LiteralPath $Destination)) {
-    & git -c core.autocrlf=false clone $repository $Destination
-    if ($LASTEXITCODE -ne 0) { throw 'TOOLKIT_CLONE_FAILED: verify GitHub network access.' }
+    & git -c core.autocrlf=false clone --branch main $repository $Destination
+    if ($LASTEXITCODE -ne 0) { throw 'TOOLKIT_CLONE_FAILED: verify the selected Git source and its main branch.' }
 } else {
     $remote = & git -C $Destination remote get-url origin
-    if ($LASTEXITCODE -ne 0 -or $remote -ne $repository) { throw 'DESTINATION_CONFLICT: existing directory is not the expected toolkit; preserved without changes.' }
+    if ($LASTEXITCODE -ne 0 -or $remote -notin @($github, $gitee, 'git@github.com:yaoyingyunlian-create/thinknova-mcp.git')) { throw 'DESTINATION_CONFLICT: existing directory is not the expected toolkit; preserved without changes.' }
 }
 & $python (Join-Path $Destination 'bootstrap.py') setup
 if ($LASTEXITCODE -ne 0) { throw "TOOLKIT_SETUP_FAILED: exit $LASTEXITCODE. See the specific dependency error above." }

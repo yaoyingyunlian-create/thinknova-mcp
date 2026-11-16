@@ -13,6 +13,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 REPOSITORY = 'https://github.com/yaoyingyunlian-create/thinknova-mcp.git'
+GITEE_REPOSITORY = 'https://gitee.com/zhongjianghua_admin/thinknova-mcp.git'
+TRUSTED_ORIGINS = (REPOSITORY, 'git@github.com:yaoyingyunlian-create/thinknova-mcp.git', GITEE_REPOSITORY)
 SETUP_PHASE = 'not_started'
 
 
@@ -81,24 +83,31 @@ def repair_files():
         print('Restored missing toolkit files: ' + ', '.join(missing))
 
 
-def git(*args):
+def git(*args, timeout=60):
     env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
     result = subprocess.run(['git', '-c', 'core.autocrlf=false', *args], cwd=ROOT,
-                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=60)
+                            env=env, capture_output=True, text=True, encoding='utf-8', timeout=timeout)
     if result.returncode: raise RuntimeError(result.stderr.strip() or 'Git command failed; update status unknown.')
     return result.stdout.rstrip('\r\n')
 
 
 def check():
     origin = git('remote', 'get-url', 'origin')
-    if origin not in (REPOSITORY, 'git@github.com:yaoyingyunlian-create/thinknova-mcp.git'):
+    if origin not in TRUSTED_ORIGINS:
         raise RuntimeError('Unexpected toolkit remote; no update was applied.')
     current = git('rev-parse', 'HEAD')
-    remote = git('ls-remote', REPOSITORY, 'refs/heads/main').split()
-    if not remote: raise RuntimeError('GitHub main branch unavailable; update status unknown.')
-    result = {'installed_commit': current, 'latest_commit': remote[0], 'update_available': current != remote[0]}
-    print(json.dumps(result))
-    return result
+    for repository in (REPOSITORY, GITEE_REPOSITORY):
+        try:
+            remote = git('ls-remote', '--exit-code', repository, 'refs/heads/main', timeout=12).split()
+        except (RuntimeError, subprocess.TimeoutExpired):
+            continue
+        if len(remote) != 2 or remote[1] != 'refs/heads/main' or not re.fullmatch(r'[0-9a-f]{40}', remote[0]):
+            continue
+        result = {'installed_commit': current, 'latest_commit': remote[0], 'update_available': current != remote[0],
+                  'source': repository, 'github_verified': repository == REPOSITORY}
+        print(json.dumps(result))
+        return result
+    raise RuntimeError('GitHub and Gitee main branches are unavailable; update status unknown.')
 
 
 def update_blockers():
@@ -125,7 +134,15 @@ def update(confirmed=False):
     if not status['update_available']: return
     changes = update_blockers()
     if changes: raise RuntimeError('Local source changes detected; preserve these files before updating / 请先保留以下文件修改:\n' + '\n'.join(changes))
-    git('fetch', 'origin', 'main')
+    source = status['source']
+    git('fetch', source, 'refs/heads/main')
+    if git('rev-parse', 'FETCH_HEAD') != status['latest_commit']:
+        raise RuntimeError('Toolkit remote changed while fetching; check the version again.')
+    # An older mirror or divergent source may not replace the installed release.
+    try:
+        git('merge-base', '--is-ancestor', status['installed_commit'], status['latest_commit'])
+    except RuntimeError as exc:
+        raise RuntimeError('Toolkit source is older or divergent; update status unknown.') from exc
     git('merge', '--ff-only', status['latest_commit'])
     # The running module still contains OLD code after merge. Start the updated entrypoint.
     subprocess.run([sys.executable, str(ROOT / 'bootstrap.py'), 'setup'], check=True)
@@ -227,7 +244,7 @@ def recovery_report(workspace):
             candidate = Path(tempfile.mkdtemp(prefix='tn-', dir=candidate_parent))
             env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
             subprocess.run(['git', '-c', 'core.autocrlf=false', 'clone', '--branch', 'main', '--single-branch',
-                            REPOSITORY, str(candidate)], env=env, capture_output=True, check=True, timeout=120)
+                            remote['source'], str(candidate)], env=env, capture_output=True, check=True, timeout=120)
             head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=candidate, timeout=15).decode().strip()
             if head != remote['latest_commit'] or failures(candidate):
                 raise RuntimeError('TOOLKIT_CANDIDATE_INTEGRITY_FAILED')

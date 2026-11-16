@@ -33,7 +33,7 @@ class BootstrapTests(unittest.TestCase):
                 self.assertEqual((root / 'AGENTS.md').read_text(encoding='utf-8'), 'customer edits')
 
     def test_update_without_confirmation_fast_forwards(self):
-        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc'}), patch.object(bootstrap, 'git', return_value='') as git, patch.object(bootstrap.subprocess, 'run') as setup:
+        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc', 'installed_commit': 'old', 'source': bootstrap.GITEE_REPOSITORY}), patch.object(bootstrap, 'git', side_effect=['', '', 'abc', '', '']) as git, patch.object(bootstrap.subprocess, 'run') as setup:
             bootstrap.update(False)
             self.assertEqual(git.call_args_list[-1].args, ('merge', '--ff-only', 'abc'))
             setup.assert_called_once()
@@ -45,14 +45,27 @@ class BootstrapTests(unittest.TestCase):
             self.assertEqual(git.call_count, 1)
 
     def test_confirmed_update_fast_forwards(self):
-        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc'}), patch.object(bootstrap, 'git', return_value='') as git, patch.object(bootstrap.subprocess, 'run') as fresh_setup:
+        with patch.object(bootstrap, 'check', return_value={'update_available': True, 'latest_commit': 'abc', 'installed_commit': 'old', 'source': bootstrap.GITEE_REPOSITORY}), patch.object(bootstrap, 'git', side_effect=['', '', 'abc', '', '']) as git, patch.object(bootstrap.subprocess, 'run') as fresh_setup:
             bootstrap.update(True)
             self.assertEqual(git.call_args_list[-1].args, ('merge', '--ff-only', 'abc'))
             fresh_setup.assert_called_once_with([bootstrap.sys.executable, str(bootstrap.ROOT / 'bootstrap.py'), 'setup'], check=True)
 
     def test_network_failure_is_not_latest(self):
-        with patch.object(bootstrap, 'git', side_effect=[bootstrap.REPOSITORY, 'abc', RuntimeError('offline')]):
-            with self.assertRaisesRegex(RuntimeError, 'offline'): bootstrap.check()
+        with patch.object(bootstrap, 'git', side_effect=[bootstrap.REPOSITORY, 'abc', RuntimeError('offline'), '']):
+            with self.assertRaisesRegex(RuntimeError, 'update status unknown'): bootstrap.check()
+
+    def test_gitee_fallback_identifies_mirror_and_fetches_exact_commit(self):
+        revision = 'a' * 40
+        lookup = [bootstrap.REPOSITORY, 'b' * 40, RuntimeError('offline'), f'{revision} refs/heads/main']
+        with patch.object(bootstrap, 'git', side_effect=lookup):
+            result = bootstrap.check()
+        self.assertFalse(result['github_verified'])
+        self.assertEqual(result['source'], bootstrap.GITEE_REPOSITORY)
+        with patch.object(bootstrap, 'check', return_value=result), patch.object(
+                bootstrap, 'git', side_effect=['', '', 'different']) as git:
+            with self.assertRaisesRegex(RuntimeError, 'changed while fetching'):
+                bootstrap.update()
+            git.assert_any_call('fetch', bootstrap.GITEE_REPOSITORY, 'refs/heads/main')
 
     def test_first_init_preserves_memory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -110,8 +123,9 @@ class RealGitFastForwardTests(unittest.TestCase):
             (customer / 'AGENTS.local.md').write_text('preserve customer', encoding='utf-8')
             (upstream / 'source.txt').write_text('new', encoding='utf-8'); run(upstream, 'add', 'source.txt'); run(upstream, 'commit', '-qm', 'update')
             latest = run(upstream, 'rev-parse', 'HEAD')
+            installed = run(customer, 'rev-parse', 'HEAD')
             original = subprocess.run
-            with patch.object(bootstrap, 'ROOT', customer), patch.object(bootstrap, 'check', return_value={'update_available':True, 'latest_commit':latest}), patch.object(bootstrap.subprocess, 'run', wraps=subprocess.run) as processes:
+            with patch.object(bootstrap, 'ROOT', customer), patch.object(bootstrap, 'check', return_value={'update_available':True, 'latest_commit':latest, 'installed_commit':installed, 'source':str(upstream)}), patch.object(bootstrap.subprocess, 'run', wraps=subprocess.run) as processes:
                 # Mock only setup, leaving every Git operation real.
                 def execute(command, **kwargs):
                     if command[0] == bootstrap.sys.executable: return subprocess.CompletedProcess(command, 0)

@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "ab7d77a8a3aa8e4cffd5f69479b6bc232946a56f137b30faff8d826ac7152dec",
+  "revision": "bfa2630aa8c3e5f9a40fe1b396b23ce06d92bcec99b7683d0977217c8f7bc493",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "6cb4507be9fb8b3b649908df0b4dc1b1426316d948b5013c82f4c114a8195ee0"
+      "sha256": "4852711cf6be3f5351bacc6e0cbc467f9a3b5eec383d5c701129ce520ce37ef8"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "eb70043ecf66e4a9f05ff23378d13a75ce66ed3c5b739b119e231cb8bfcf3156"
+      "sha256": "4c56bfa38ced02dec145e2a3fc0c1dcec849cba19c98109797c1f0c38c1db76b"
     },
     {
       "path": "analytics.py",
@@ -37,7 +37,7 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "3431408e51019efc07d2ec0a99eafb633273e7078c0fbc92d3353a0a2cfbf497"
+      "sha256": "bbbe26b2321a9e542549c034d3740b6aeeefeba806f4e969f4aab601625e7222"
     },
     {
       "path": "build_manifest.py",
@@ -65,11 +65,11 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "2cd3a2c835b85e9ff9e1c530cb4a97d3b2bb12a33eda9ba1c4627fb03ffb072d"
+      "sha256": "b080243008ac8d5e35d7750acf5d4164625d31e1f39d32a37c42bc9daf9ece65"
     },
     {
       "path": "install.sh",
-      "sha256": "860f1a864ba282ac78c2847ae68801ca19cf7b37407e2222faf08733ea34a701"
+      "sha256": "c76ac163b212aad9e091c6d4d34cf8d40b60b1ee9673563ddec505bdf06b4729"
     },
     {
       "path": "job.example.json",
@@ -325,7 +325,7 @@
     },
     {
       "path": "test_bootstrap.py",
-      "sha256": "230d5e05e688d868fe9343b17057732c8fd718b0636ca3adf2bb5280bff79205"
+      "sha256": "147307795ba4fde56c5eee1156ba3b325399f7a9eb3a4e80da5ed29c8277570d"
     },
     {
       "path": "test_controlled_youtube.py",

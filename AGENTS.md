@@ -15,7 +15,7 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 ## 1 首次准备与每次开工
 - AI 浏览器默认使用 ego lite。Windows x64 首次 setup 缺少时自动下载并校验官方安装器，打开安装器后等待用户完成首次引导；此时为待处理，不能报就绪。已有 ego lite 不自动升级。浏览器任务先运行 ego-browser skill 并遵循当前接口；不要把 ego 当作 Playwright。旧发布脚本的 Chromium 为兼容运行时，不迁移或覆盖旧登录态。
 - 先 get_balance 核对套餐资格、可用/冻结积分、日额度和并发。资格或余额不足时展示返回的升级/充值链接，不建收费任务。
-- 首次自动 get_toolkit，通过 HTTPS 克隆 https://github.com/yaoyingyunlian-create/thinknova-mcp.git；无须再次询问下载。已有目录先核对归属，不能覆盖。
+- 首次自动 get_toolkit，通过 HTTPS 克隆 https://github.com/yaoyingyunlian-create/thinknova-mcp.git；GitHub 不通且 Gitee 的 `main` 可读时，使用官方国内镜像 https://gitee.com/zhongjianghua_admin/thinknova-mcp.git 。核对提交和 manifest 后运行 setup，无须再次询问下载。已有目录先核对归属，不能覆盖。
 - 读取本文件，运行 python bootstrap.py setup；缺项自动 bootstrap.py repair。缺 Git/Python 用 install.ps1/install.sh；使用 .venv 内的 Python 运行后续命令。校验与对应能力 doctor 未通过不得宣布该能力就绪；core_production、browser_publishing、ai_browser 和授权分别判断。Mac 缺 ego 不影响不使用它的 API/脚本流程。
 - 机器可读安装报告用 bootstrap.py setup --json；独立检查用 .venv Python 执行 toolkit.py doctor --json --online。浏览器必须实际启动成功；账户、规则和平台检查未知时仍须通过对应授权接口核实，不宣称全流程就绪。相同故障自动修复一次后仍失败就报告，不无限重试。
 - 以后开工先读 memory.md 与 reminders.txt（若有），运行 bootstrap.py check；发现新版自动运行 bootstrap.py update --workspace 客户目录，无需询问。网络失败是版本未知，不是已最新；保留客户修改、记忆和登录态。
