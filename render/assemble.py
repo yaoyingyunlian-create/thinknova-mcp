@@ -241,7 +241,24 @@ def norm_shot(ff, fp, base, c, idx, wk):
     return out, dur
 
 
-def adjust_store_pace(ff, fp, shot, language, wk, index):
+def dialogue_pace_adjustment(rate, language, duration, intervals):
+    """Slow fast dialogue only if edge silence can fund the extra playback time."""
+    high = 5.2 if language == 'zh' else 3.0
+    if rate <= high or not intervals:
+        return None
+    factor = max(0.8, (high - 0.05) / rate)
+    if rate * factor > high:
+        return None
+    head = max(0.0, intervals[0][0] - 0.15)
+    tail = max(0.0, duration - intervals[-1][1] - 0.15)
+    trim = duration * (1 - factor)
+    if head + tail < trim:
+        return None
+    start = max(0.0, trim - tail)
+    return start, duration - (trim - start), factor
+
+
+def adjust_store_pace(ff, fp, shot, language, wk, index, keep_dialogue_duration=False):
     from speech_review import pace_factor, recognize, speech_intervals, speech_pace
 
     try:
@@ -268,10 +285,17 @@ def adjust_store_pace(ff, fp, shot, language, wk, index):
             margin = min(0.15, 0.15 * factor)
             removed.append((previous + margin, start - margin))
         previous = stop
-    if not removed and factor == 1.0:
-        return shot, duration, {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+    if keep_dialogue_duration:
+        adjustment = dialogue_pace_adjustment(rate, detected, duration, intervals)
+        if adjustment is None:
+            return shot, duration, {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+        start, stop, factor = adjustment
+        keep = [(start, stop)]
+    else:
+        if not removed and factor == 1.0:
+            return shot, duration, {'clip': index + 1, 'before': round(rate, 3), 'after': round(rate, 3), 'factor': 1.0}
+        keep = list(zip([0.0, *(stop for _, stop in removed)], [*(start for start, _ in removed), duration]))
     out = os.path.join(wk, f'paced_{index:03d}.mp4')
-    keep = list(zip([0.0, *(stop for _, stop in removed)], [*(start for start, _ in removed), duration]))
     filters = []
     keep = [(start, stop) for start, stop in keep if stop > start]
     for n, (start, stop) in enumerate(keep):
@@ -680,8 +704,15 @@ def main():
                 source = resolve(base, c['file'])
                 check_store_source(ff, fp, source, i + 1)
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
-            if store_film and not job.get('short_dialogue_seconds'):
-                shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i)
+            if store_film:
+                dialogue = bool(job.get('short_dialogue_seconds'))
+                try:
+                    shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i,
+                                                        keep_dialogue_duration=dialogue)
+                except Stop as exc:
+                    if not dialogue or not str(exc).startswith('FILM_PACE_UNAVAILABLE'):
+                        raise
+                    pace = {'clip': i + 1, 'status': 'pending', 'reason': str(exc)}
                 pace_report.append(pace)
             if job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
                 raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)

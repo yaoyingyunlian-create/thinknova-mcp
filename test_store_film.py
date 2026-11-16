@@ -38,6 +38,15 @@ class StoreFilmTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'FILM_PROMPT_TOO_LONG'):
             generation_arguments(dict(segment, prompt='长' * 1300), {}, set())
 
+    def test_fast_dialogue_retime_needs_edge_silence_and_preserves_length(self):
+        from render.assemble import dialogue_pace_adjustment
+        start, stop, factor = dialogue_pace_adjustment(5.6, 'zh', 15, [(0.5, 7), (7.8, 13.0)])
+        self.assertAlmostEqual((stop - start) / factor, 15.0)
+        self.assertLessEqual(5.6 * factor, 5.2)
+        self.assertGreaterEqual(stop, 13.15)
+        self.assertIsNone(dialogue_pace_adjustment(5.6, 'zh', 15, [(0, 14.8)]))
+        self.assertIsNone(dialogue_pace_adjustment(4.8, 'zh', 15, [(0.5, 13)]))
+
     def test_delivery_keeps_original_quality_report(self):
         from render.assemble import deliver
         with tempfile.TemporaryDirectory() as directory:
