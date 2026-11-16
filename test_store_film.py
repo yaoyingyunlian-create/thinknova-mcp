@@ -38,10 +38,34 @@ class StoreFilmTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'FILM_PROMPT_TOO_LONG'):
             generation_arguments(dict(segment, prompt='长' * 1300), {}, set())
 
+    def test_delivery_keeps_original_quality_report(self):
+        from render.assemble import deliver
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            video, sheet, output = (root / name for name in ('checked.mp4', 'sheet.jpg', 'final.mp4'))
+            video.write_bytes(b'video fixture')
+            sheet.write_bytes(b'sheet fixture')
+            with unittest.mock.patch('render.assemble.emit'):
+                self.assertEqual(deliver(str(video), None, str(sheet), str(output),
+                                         {'outro_start': 27.5}, {}, [], False,
+                                         'Original machine check'), 0)
+            self.assertEqual(Path(str(output) + '.check.txt').read_text(encoding='utf-8'), 'Original machine check')
+            receipt = json.loads(Path(str(output) + '.film.json').read_text(encoding='utf-8'))
+            self.assertEqual(receipt['machine_check'], 'pass')
+
+    def test_portrait_quote_rejects_silent_landscape(self):
+        from automation import quoted_generation_args
+        from unittest.mock import Mock
+        client = Mock()
+        client.tool.return_value = {'generation_quote': {'quote_only': True, 'creates_task': False,
+            'reserves_credits': False, 'estimated_credits': 60, 'configured_video_specification': {'ratio': '21:9'}}}
+        with self.assertRaisesRegex(RuntimeError, 'MCP_VIDEO_QUOTE_RATIO_MISMATCH'):
+            quoted_generation_args(client, 'animate_image', {'ratio': '9:16'}, {'quote_mode_supported': True})
+
     def test_day_quotes_all_segments_before_budget_rejection(self):
         from datetime import datetime, timezone
         client = Mock()
-        client.tool.return_value = {'generation_quote': {'quote_only': True, 'creates_task': False,
+        client.tool.return_value = {'generation_quote': {'quote_only': True, 'configured_video_specification': {'ratio': '9:16'}, 'creates_task': False,
                                                          'reserves_credits': False, 'estimated_credits': 40}}
         segment = {'prompt': 'A store scene', 'duration_seconds': 10, 'first_frame_asset_id': 'asset_first'}
         claim = {'grant': {'timezone': 'UTC', 'daily_budget': 100}, 'run_no': 'run_test', 'usage_date': datetime.now(timezone.utc).date().isoformat()}

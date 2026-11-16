@@ -84,7 +84,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -163,6 +163,27 @@ def s2_opening(ff, path):
     if dark:
         warn("S2b", "near-black frame with only text at %s (dark title card opening)"
              % ", ".join("%.1fs" % s[0] for s in dark))
+
+
+def check_dialogue_motion(ff, path, opening_seconds):
+    try:
+        sampled = subprocess.run([ff, '-nostdin', '-v', 'error', '-i', path, '-t', str(opening_seconds),
+                                  '-an', '-vf', 'fps=2,scale=64:64,format=gray', '-f', 'rawvideo', '-'],
+                                 capture_output=True, timeout=30)
+    except subprocess.TimeoutExpired:
+        fail('FILM_MOTION_CHECK_PENDING', 'visual sampling timed out')
+        return
+    frame_size = 64 * 64
+    data = sampled.stdout
+    if sampled.returncode or len(data) < frame_size * 2 or len(data) % frame_size:
+        fail('FILM_MOTION_CHECK_PENDING', 'visual samples unavailable')
+        return
+    frames = [data[i:i + frame_size] for i in range(0, len(data), frame_size)]
+    # Subtitles are rendered in the lower third; use the upper part to avoid counting them as scene motion.
+    visible = 64 * 36
+    if all(sum(abs(a - b) for a, b in zip(left[:visible], right[:visible])) < visible
+           for left, right in zip(frames, frames[1:])):
+        fail('FILM_STATIC_SCENE', 'no meaningful visual motion before the closing overlay')
 
 
 # S3 ---------------------------------------------------------------------------
@@ -279,21 +300,38 @@ def s6_speech(ff, path, dur, o):
     words = [word for segment in segments for word in (segment.words or []) if word.word.strip()]
     INFO.append("speech: %d words transcribed" % len(words))
     if o.get('store_film'):
+        dialogue_film = o.get('--planned-film-seconds') is not None
         language = (o["--lang"] or info.language).split('-')[0]
         try:
-            rate = speech_pace(segments, language, o["outro_start"])
+            rate = speech_pace(segments, language, dur if dialogue_film else o["outro_start"])
             low, high = (4.0, 5.2) if language == 'zh' else (2.6, 3.0)
             INFO.append(f"speech pace: {rate:.2f} {'chars/s' if language == 'zh' else 'words/s'}")
             if not low <= rate <= high:
                 fail('FILM_PACE_OUTSIDE_LIMIT', f'{rate:.2f} outside {low:.1f}–{high:.1f}')
         except RuntimeError as exc:
             fail('FILM_PACE_UNAVAILABLE', str(exc))
+        if not words:
+            fail('FILM_SPEECH_GAP', 'no recognized dialogue')
         for previous, following in zip(segments, segments[1:]):
-            if following.start < o["outro_start"] and following.start - previous.end > 0.5:
+            if not dialogue_film and following.start < o["outro_start"] and following.start - previous.end > 0.5:
                 fail('FILM_SENTENCE_PAUSE', f'{previous.end:.2f}–{following.start:.2f}s exceeds 0.5s')
         for start, end in speech_gaps(words, o["outro_start"]):
-            if end - start > 1:
+            if end - start > (2 if dialogue_film else 1):
                 fail('FILM_SPEECH_GAP', f'no recognized speech for {end - start:.2f}s ({start:.2f}–{end:.2f}s)')
+        if o.get('v3_dialogue'):
+            from captions import parse_srt
+            from difflib import SequenceMatcher
+            from speech_review import normalize
+            captions = parse_srt(o['--srt']) if o['--srt'] else []
+            expected = normalize(''.join(cue['text'] for cue in captions))
+            transcript = normalize(''.join(word.word for word in words))
+            if not expected:
+                fail('FILM_DIALOGUE_CHECK_PENDING', 'expected dialogue subtitles are missing')
+            else:
+                coverage = SequenceMatcher(None, expected, transcript, autojunk=False).ratio()
+                INFO.append(f'dialogue ASR agreement: {coverage:.0%}')
+                if coverage < 0.85:
+                    fail('FILM_DIALOGUE_REVIEW_REQUIRED', 'recognized speech differs from the script; review the local preview')
         return
     if film:
         worst = max(speech_gaps(words, o["outro_start"]), key=lambda gap: gap[1] - gap[0], default=(0, 0))
@@ -361,10 +399,11 @@ def main():
     dur = s1_spec(meta, o)
     o["film"] = "--film" in on
     o["store_film"] = "--store-film" in on
+    o["v3_dialogue"] = "--v3-dialogue" in on
     if o["film"]:
         planned = o.get('--planned-film-seconds')
         if planned is not None:
-            if not planned.isdecimal() or not 6 <= int(planned) <= 15 or abs(dur - int(planned)) > 1:
+            if not planned.isdecimal() or int(planned) not in (*range(6, 16), 30) or abs(dur - int(planned)) > 1:
                 fail('FILM_DURATION', 'duration differs from the authorized short-film specification')
         elif not 30 <= dur <= 40:
             fail("FILM_DURATION", "duration %.2fs is outside 30–40s" % dur)
@@ -376,6 +415,8 @@ def main():
             fail("FILM_OUTRO_REQUIRED", "pass the actual outro start in seconds")
             o["outro_start"] = dur
     s2_opening(ff, path)
+    if o.get('--planned-film-seconds') is not None and o['store_film']:
+        check_dialogue_motion(ff, path, o["outro_start"])
     o["allow_silent"] = "--allow-silent" in on
     s3_audio(ff, path, dur, o)
     s4_cuts(ff, path, dur, o)

@@ -3,6 +3,9 @@ name: spoken-script
 description: 写短视频台词 / 旁白时用。让台词像真人随口说，不像念稿。
 ---
 
+> 新版日计划（schema_version=3）先读 `rules/store-film-rules-v3.md`。对白必须在画内，由顾客和店员交替说；本文件中的旁白写法仅用于旧计划。
+> For v3 plans, use the in-scene dialogue rules in `rules/store-film-rules-v3.md`. Legacy narration examples apply to legacy plans.
+
 # 口语台词
 
 ## 一、像人随口说

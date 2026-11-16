@@ -449,7 +449,7 @@ def validate_job(job):
 
 def delivery_targets(output):
     stem = os.path.splitext(output)[0]
-    return output, stem + '.srt', stem + '_sheet.jpg', output + '.film.json'
+    return output, stem + '.srt', stem + '_sheet.jpg', output + '.film.json', output + '.check.txt'
 
 
 def ensure_output_available(output, overwrite):
@@ -465,6 +465,8 @@ def run_delivery_check(ff, fp, video, srt, options):
         cmd += ['--film', '--outro-start', str(options['outro_start'])]
         if options.get('short_dialogue_seconds'):
             cmd += ['--planned-film-seconds', str(options['short_dialogue_seconds'])]
+        if options.get('film_schema_version') == 3:
+            cmd += ['--v3-dialogue']
         if options.get('film_profile') == 'store_v2':
             cmd += ['--store-film', '--shop-name', options['shop_name'], '--featured-service', options['featured_service']]
         if options['speech_language']:
@@ -496,12 +498,15 @@ def file_digest(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest() if hasattr(hashlib, 'file_digest') else hashlib.sha256(stream.read()).hexdigest()
 
 
-def deliver(video, srt, sheet, output, options, result, warnings, overwrite):
+def deliver(video, srt, sheet, output, options, result, warnings, overwrite, report=''):
     ensure_output_available(output, overwrite)
-    _, target_srt, target_sheet, target_receipt = delivery_targets(output)
+    _, target_srt, target_sheet, target_receipt, target_report = delivery_targets(output)
     film = options['outro_start'] is not None
     receipt = os.path.join(os.path.dirname(video), 'delivery-receipt.json')
     if film:
+        report_file = os.path.join(os.path.dirname(video), 'delivery-check.txt')
+        with open(report_file, 'w', encoding='utf-8') as stream:
+            stream.write(report)
         with open(receipt, 'w', encoding='utf-8') as stream:
             json.dump({'sha256': file_digest(video), 'state': 'awaiting_review',
                        'machine_check': 'pass', 'outro_start': options['outro_start']}, stream)
@@ -516,8 +521,11 @@ def deliver(video, srt, sheet, output, options, result, warnings, overwrite):
         os.remove(target_srt)
     os.replace(sheet, target_sheet)
     if film:
+        os.replace(report_file, target_report)
         os.replace(receipt, target_receipt)
-        result.update(delivery_state='awaiting_review', film_receipt=target_receipt)
+        result.update(delivery_state='awaiting_review', film_receipt=target_receipt, check_report=target_report)
+    elif overwrite and os.path.isfile(target_report):
+        os.remove(target_report)
     emit(dict(result, status='succeeded', output=output, machine_check='pass', visual_review='pending',
               warnings=warnings, contact_sheet=target_sheet))
     return 0
@@ -606,7 +614,7 @@ def recheck(receipt, overwrite):
             if os.path.isfile(sheet):
                 shutil.copyfile(sheet, os.path.splitext(preview)[0] + '_sheet.jpg')
             return report_pending(preview, receipt, diagnostics, report, options.get('film_profile') == 'store_v2')
-        return deliver(video, temp_srt, sheet, output, options, record['result'], diagnostics, overwrite)
+        return deliver(video, temp_srt, sheet, output, options, record['result'], diagnostics, overwrite, report)
 
 
 
@@ -628,10 +636,14 @@ def main():
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
         sys.path.insert(0, os.path.dirname(HERE))
         from store_film import validate_beats
-        try:
-            validate_beats(job.get('clips', []), job.get('film_type'))
-        except ValueError as exc:
-            raise Stop(str(exc), 2) from exc
+        if job.get('film_schema_version') == 3:
+            if not job.get('short_dialogue_seconds') or job.get('dialogue_segment_count') not in (1, 2):
+                raise Stop('FILM_DIALOGUE_SEGMENTS_INVALID', 2)
+        else:
+            try:
+                validate_beats(job.get('clips', []), job.get('film_type'))
+            except ValueError as exc:
+                raise Stop(str(exc), 2) from exc
         for key in ('shop_name', 'featured_service'):
             if not isinstance(job.get(key), str) or not job[key].strip():
                 raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
@@ -669,6 +681,8 @@ def main():
             if store_film and not job.get('short_dialogue_seconds'):
                 shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i)
                 pace_report.append(pace)
+            if job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
+                raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)
             parts.append(shot)
             lines = c.get("subs") or (split_text(c["text"]) if c.get("text") else [])
             secondary = c.get('subs2')
@@ -678,7 +692,7 @@ def main():
             ):
                 raise Stop('SUBTITLE_SECONDARY_COUNT_MISMATCH: subs2 must match subs', 2)
             if store_film and secondary is None:
-                lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=9)]
+                lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8)]
             if lines:
                 shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
                 if secondary is not None:
@@ -695,8 +709,12 @@ def main():
             card_span = (t, t + dur)
             t += dur
         if job.get('short_dialogue_seconds'):
-            if job.get('end_card') or len(parts) != 1 or not job.get('closing_overlay'):
-                raise Stop('FILM_DIALOGUE_SINGLE_SHOT_REQUIRED', 2)
+            planned = job['short_dialogue_seconds']
+            count = job.get('dialogue_segment_count', 1)
+            if (type(count) is not int or count not in (1, 2) or len(parts) != count or type(planned) is not int
+                    or (count == 1 and not 6 <= planned <= 15) or (count == 2 and planned != 30)
+                    or job.get('end_card') or not job.get('closing_overlay')):
+                raise Stop('FILM_DIALOGUE_SEGMENTS_INVALID', 2)
             card_span = (max(0, t - 2.5), t)
             job['end_card'] = {'lines': job['closing_overlay']}
         job["_total"] = t
@@ -707,8 +725,8 @@ def main():
 
         if job.get('film') and job.get('font_size') == 90:
             for index, cue in enumerate(cues, 1):
-                if (not store_film or CJK.search(cue['text'])) and len(re.sub(r'\s+', '', cue['text'])) > 9:
-                    raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds 9 characters', 2)
+                if (not store_film or CJK.search(cue['text'])) and len(re.sub(r'\s+', '', cue['text'])) > (8 if store_film else 9):
+                    raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds {8 if store_film else 9} characters', 2)
 
         print("Joining %d parts, %.1f s ..." % (len(parts), t))
         lst = os.path.join(wk, "list.txt")
@@ -742,7 +760,8 @@ def main():
         options = {'outro_start': (card_span[0] if card_span else t) if job.get('film') else None,
                    'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur')}
         if job.get('short_dialogue_seconds'):
-            options.update(short_dialogue_seconds=job['short_dialogue_seconds'], outro_start=t)
+            options.update(short_dialogue_seconds=job['short_dialogue_seconds'], outro_start=card_span[0],
+                           film_schema_version=job.get('film_schema_version'))
         if store_film:
             options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
@@ -754,7 +773,7 @@ def main():
             if job.get('film'):
                 return save_pending(ff, out, srt, sheet, final_out, options, result, diagnostics, report)
             raise Stop('CHECK_FAILED: do not publish this file', 2)
-        return deliver(out, srt, sheet, final_out, options, result, diagnostics, overwrite)
+        return deliver(out, srt, sheet, final_out, options, result, diagnostics, overwrite, report)
 
     finally:
         shutil.rmtree(wk, ignore_errors=True)

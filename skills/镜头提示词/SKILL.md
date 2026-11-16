@@ -3,6 +3,9 @@ name: shot-prompts
 description: 写任何一条首帧（generate_image / edit_image）或图生视频（animate_image）提示词之前必须先读。给出固定要加的话、参考图怎么放、人物怎么锁、台词和声音怎么写、不能写的画面和失败怎么办。
 ---
 
+> 新版日计划（schema_version=3）先读 `rules/store-film-rules-v3.md`。对白必须在画内，由顾客和店员交替说；本文件中的旁白写法仅用于旧计划。
+> For v3 plans, use the in-scene dialogue rules in `rules/store-film-rules-v3.md`. Legacy narration examples apply to legacy plans.
+
 # 镜头提示词（每写一条提示词都要套）
 
 > 这份管「一条提示词怎么写」；「每日出片规范」管「做什么片、一条片必须做到什么」；「门店成片」管「怎么拼、怎么验、怎么交」。

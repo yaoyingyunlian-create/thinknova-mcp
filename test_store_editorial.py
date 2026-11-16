@@ -27,6 +27,34 @@ class EditorialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'PLAN_HISTORY_REPEAT'):
             validate_rotation(rows, [changed], profile)
 
+    def test_v3_dialogue_and_exact_history_window(self):
+        from store_editorial import FILM_V3_FORMATS, validate_dialogue_v3
+        profile = {'audiences': ['a', 'b', 'c'], 'scenes': ['s1', 's2', 's3'],
+                   'pain_points': ['p1', 'p2', 'p3'], 'features': ['f1', 'f2', 'f3'],
+                   'questions': [{'id': f'q{i}', 'count': 4 - i} for i in range(1, 4)]}
+        start = date(2026, 11, 16)
+        week = [{'date': (start + timedelta(days=i)).isoformat(), 'row': profile['audiences'][i % 3],
+                 'col': profile['features'][i % 3], 'scene': 's1', 'format': format_code,
+                 'opening': f'opening {i}', 'opening_visual': f'frame_{i}', 'question': f'q{i % 3 + 1}'}
+                for i, format_code in enumerate(FILM_V3_FORMATS)]
+        self.assertEqual(validate_rotation(week, [dict(week[0], date='2026-11-02')], profile, 3), week)
+        with self.assertRaisesRegex(ValueError, 'PLAN_HISTORY_REPEAT'):
+            validate_rotation(week, [dict(week[0], date='2026-11-03')], profile, 3)
+        lines = [{'speaker': speaker, 'listener': 'staff' if speaker == 'customer' else 'customer',
+                  'action': 'chooses a flower', 'emotion': 'curious', 'text': '花' * 21}
+                 for speaker in ('customer', 'staff', 'customer')]
+        segment = {'dialogue': lines, 'subs': ['花' * 7] * 9}
+        plan = {'script': {'template': 'two_person_dialogue', 'voice_identity': 'voice'},
+                'film_purpose': 'service', 'shop_name': '花店', 'featured_service': '鲜花',
+                'closing_overlay': ['花店'], 'customer_identity': 'short-hair', 'segments': [segment, segment]}
+        validate_dialogue_v3(plan)
+        segment['subs'] = segment['subs'][:-1]
+        with self.assertRaisesRegex(ValueError, 'CAPTIONS_MISMATCH'):
+            validate_dialogue_v3(plan)
+        lines[0]['text'] = '短'
+        with self.assertRaisesRegex(ValueError, 'WORD_COUNT'):
+            validate_dialogue_v3(plan)
+
     def test_copy_requires_fields_and_rejects_platform_prohibitions(self):
         variant = {'title': '下班后想放松的新加坡顾客', 'tags': ['新加坡', '头疗'],
                    'marketing_copy': {'audience_or_pain': '下班总是很累？', 'solution': 'Miorae 做头疗',

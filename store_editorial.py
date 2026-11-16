@@ -7,17 +7,19 @@ from difflib import SequenceMatcher
 
 FORMATS = ('customer_thoughts', 'story', 'themed_story', 'shop_visit', 'behind_the_scenes',
            'before_after', 'qa', 'product_closeup', 'promotion', 'day_in_life')
+FILM_V3_FORMATS = ('shop_visit', 'behind_the_scenes', 'before_after', 'product_intro', 'problem_solution', 'story', 'qa')
 COPY_FIELDS = ('audience_or_pain', 'solution', 'verified_fact', 'next_step')
 DEFAULT_DENY = ('虚构', 'AI 生成', 'fictional', 'not a real', 'a story about')
 XHS_DENY = ('主页', '私信', '联系', '预约方式', '链接', '电话', 'whatsapp', '微信')
-ACTIONS = ('预约', '到店', '留言', '评论', '问我', 'book', 'visit', 'comment', 'reserve')
+ACTIONS = ('预约', '到店', '留言', '评论', '问我', '私信', '咨询', 'book', 'visit', 'comment', 'reserve')
 
 
 def normalized(value):
     return ' '.join(unicodedata.normalize('NFKC', value).casefold().split())
 
 
-def validate_rotation(rows, history, profile):
+def validate_rotation(rows, history, profile, schema_version=1):
+    v3 = schema_version == 3
     for field in ('audiences', 'scenes', 'pain_points', 'features', 'questions'):
         values = profile.get(field)
         if not isinstance(values, list) or len(values) < 3:
@@ -35,7 +37,7 @@ def validate_rotation(rows, history, profile):
     start = date.fromisoformat(rows[0]['date'])
     for index, row in enumerate(rows):
         day = date.fromisoformat(row['date'])
-        if (day - start).days != index or row['format'] not in FORMATS:
+        if (day - start).days != index or row['format'] not in (FILM_V3_FORMATS if v3 else FORMATS):
             raise ValueError(f'PLAN_DATE_OR_FORMAT_INVALID: {row["date"]}')
         if row['row'] not in allowed_rows or row['col'] not in profile['features'] or row['scene'] not in profile['scenes']:
             raise ValueError(f'PLAN_TOPIC_NOT_IN_PROFILE: {row["date"]}')
@@ -47,13 +49,14 @@ def validate_rotation(rows, history, profile):
                 raise ValueError(f'PLAN_ACTIVITY_INACTIVE: {row["date"]}')
         for old in seen:
             age = (day - date.fromisoformat(old['date'])).days
-            if not 0 < age < 56:
+            if not 0 < age < (14 if v3 else 56):
                 continue
             same = tuple(field for field in ('row', 'col', 'format') if row[field] == old[field])
-            if age == 1 and same:
+            if age == 1 and ('format' in same or (not v3 and same)):
                 raise ValueError(f'PLAN_CONSECUTIVE_REPEAT: {row["date"]} {", ".join(same)}')
             same_cell = 'row' in same and 'col' in same
-            if (same_cell and (age < 28 or 'format' in same)
+            if (same_cell and ((not v3 and age < 28) or 'format' in same)
+                    or (v3 and row.get('visual_batch') and row['visual_batch'] == old.get('visual_batch'))
                     or normalized(row['opening']) == normalized(old['opening'])
                     or row['opening_visual'] == old['opening_visual']):
                 raise ValueError(f'PLAN_HISTORY_REPEAT: {row["date"]}')
@@ -132,7 +135,52 @@ VOICE_FLAT = re.compile(r'语速平稳|声音温和|平静|monotone|steady pace|
 REPORT_WORDS = ('了解', '安排', '问清楚', '记下', '项目', '预约问题')
 
 
+def validate_dialogue_v3(plan):
+    script = plan.get('script')
+    customer = plan.get('customer_identity')
+    overlay = plan.get('closing_overlay')
+    purpose = plan.get('film_purpose')
+    expected_overlay = plan['shop_name'] if purpose == 'service' else plan['featured_service']
+    if (purpose not in ('product', 'service') or not isinstance(script, dict)
+            or script.get('template') != 'two_person_dialogue'
+            or not isinstance(script.get('voice_identity'), str) or not script['voice_identity'].strip()
+            or not isinstance(customer, str) or not customer.strip() or len(customer.encode('utf-8')) > 120
+            or not isinstance(overlay, list) or not 1 <= len(overlay) <= 2
+            or not all(isinstance(line, str) and line.strip() and len(line.encode('utf-8')) <= 120 for line in overlay)
+            or overlay[0] != expected_overlay):
+        raise ValueError('FILM_DIALOGUE_PROFILE_INVALID')
+    for index, segment in enumerate(plan['segments'], 1):
+        dialogue = segment.get('dialogue')
+        if (not isinstance(dialogue, list) or len(dialogue) not in (3, 4)
+                or re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|对着镜头', str(segment.get('prompt', '')), re.I)):
+            raise ValueError(f'FILM_DIALOGUE_LINES_INVALID: {index}')
+        speakers = set()
+        spoken = []
+        for line in dialogue:
+            if not isinstance(line, dict) or line.get('speaker') not in ('staff', 'customer'):
+                raise ValueError(f'FILM_DIALOGUE_SPEAKER_INVALID: {index}')
+            speaker = line['speaker']
+            speakers.add(speaker)
+            if (line.get('listener') != ('customer' if speaker == 'staff' else 'staff')
+                    or not all(isinstance(line.get(field), str) and line[field].strip()
+                               and len(line[field].encode('utf-8')) <= 240 for field in ('action', 'emotion', 'text'))
+                    or re.search(r'网上搜|去.{0,10}平台搜', line['text'])):
+                raise ValueError(f'FILM_DIALOGUE_LINE_INVALID: {index}')
+            spoken.append(line['text'])
+        actual = ''.join(char for char in ''.join(spoken) if unicodedata.category(char)[0] in 'LN')
+        length = len(actual)
+        if len(speakers) != 2 or not 60 <= length <= 70:
+            raise ValueError(f'FILM_DIALOGUE_WORD_COUNT: segment {index}, got {length}; expected 60–70 with both speakers')
+        captions = segment.get('subs')
+        if not isinstance(captions, list) or not all(isinstance(item, str) for item in captions):
+            raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')
+        if actual != ''.join(char for char in ''.join(captions) if unicodedata.category(char)[0] in 'LN'):
+            raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')
+
+
 def validate_script(plan):
+    if plan.get('schema_version') == 3:
+        return validate_dialogue_v3(plan)
     """Validate a structured script before its plan can reach a quote."""
     script = plan.get('script')
     if script is None:
@@ -196,7 +244,7 @@ def scripted_segment(segment, script, shop):
     if not isinstance(identity, str) or identity != script['voice_identity']:
         raise ValueError('VOICE_IDENTITY_PROFILE_MISMATCH')
     if all('speaker' in line for line in segment['dialogue']):
-        dialogue = '\n'.join(f'{line["speaker"]}（{line["emotion"]}）对{line["listener"]}说：「{line["text"].strip()}」'
+        dialogue = '\n'.join(f'{line["speaker"]}（{line.get("action", "")} {line["emotion"]}）对{line["listener"]}说：「{line["text"].strip()}」'
                              for line in segment['dialogue'])
         return {**segment, 'prompt': segment['prompt'].rstrip()
                 + f'\nIn-scene dialogue:\n{dialogue}\nVoice identity: {identity}'}

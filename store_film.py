@@ -79,7 +79,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
         raise ValueError('FILM_SHOP_REFERENCE_REQUIRED')
     result = {'prompt': prompt, 'duration_seconds': seconds, 'reference_asset_ids': refs,
             'visual_subject': 'customer_identity' if location or product_board or segment.get('customer_identity') else 'generic',
-            'film_profile': 'store_v2'}
+            'film_profile': 'store_v2', 'ratio': '9:16'}
     if location:
         result['shop_location'] = location
     return result
@@ -89,7 +89,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
 def validate_day_plan(plan):
     from datetime import date
 
-    if not isinstance(plan, dict) or plan.get('schema_version') not in (1, 2):
+    if not isinstance(plan, dict) or plan.get('schema_version') not in (1, 2, 3):
         raise ValueError('DAY_PLAN_SCHEMA_UNSUPPORTED')
     day = plan.get('date')
     if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or type(plan.get('rules_version')) is not int:
@@ -100,7 +100,8 @@ def validate_day_plan(plan):
     segments = plan.get('segments')
     if not isinstance(segments, list) or not 1 <= len(segments) <= 12 or any(not isinstance(s, dict) for s in segments):
         raise ValueError('DAY_PLAN_SEGMENTS_INVALID')
-    validate_beats(segments, plan.get('film_type'))
+    if plan['schema_version'] != 3:
+        validate_beats(segments, plan.get('film_type'))
     from store_editorial import validate_script
     validate_script(plan)
     for segment in segments:
@@ -125,9 +126,15 @@ def validate_day_plan(plan):
     if any(type(seconds) is not int or not 6 <= seconds <= 15 for seconds in durations):
         raise ValueError('FILM_DURATION_REQUIRED: specify an integer from 6 to 15')
     total = sum(durations)
+    if plan['schema_version'] == 3:
+        expected = [15, 15] if plan['film_purpose'] == 'service' else [15]
+        if durations != expected:
+            raise ValueError('FILM_DIALOGUE_SEGMENTS_INVALID')
+        return plan
     if plan['schema_version'] == 2:
-        if len(segments) != 1 or not plan.get('script'):
-            raise ValueError('FILM_DIALOGUE_SINGLE_SHOT_REQUIRED')
+        if (len(segments) not in (1, 2) or not plan.get('script')
+                or (len(segments) == 2 and durations != [15, 15])):
+            raise ValueError('FILM_DIALOGUE_SEGMENTS_INVALID')
         return plan
     if set(platforms) != {'xiaohongshu'}:
         card = plan.get('end_card')

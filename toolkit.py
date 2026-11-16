@@ -250,7 +250,7 @@ def main() -> int:
     sub.add_parser("enable-production", help="Authorize scheduled production and review")
     sub.add_parser("enable-youtube", help="Open ThinkNova to enable YouTube automatic publishing")
     sub.add_parser("platform-capabilities", description="Print JSON showing ordinary publishing, unattended scheduling, and receipt verification by platform.")
-    week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
+    week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {schema_version: 3, rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
     args = parser.parse_args()
     if args.command == "film":
@@ -294,7 +294,7 @@ def main() -> int:
         from store_editorial import validate_rotation, validate_plan_copy
         try:
             value = json.loads(args.input.read_text(encoding='utf-8-sig'))
-            validate_rotation(value['rows'], value.get('history', []), value['shop_profile'])
+            validate_rotation(value['rows'], value.get('history', []), value['shop_profile'], value.get('schema_version', 1))
             validate_plan_copy(value)
             for row in value['rows']:
                 validate_plan_copy(row, targets=value.get('platforms', ()))

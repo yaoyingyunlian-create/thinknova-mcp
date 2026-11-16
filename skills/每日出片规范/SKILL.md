@@ -3,6 +3,9 @@ name: daily-film-standard
 description: 给客户排一周的片、做每天那一条之前必须先读。管三件事：店铺档案怎么建、这周做什么片（店主一句话 → 一周计划）、每条片必须做到什么。一条提示词怎么写看「镜头提示词」，怎么拼看「门店成片」。
 ---
 
+> 新版日计划（schema_version=3）写脚本和排片前读取 `rules/store-film-rules-v3.md`。七种片型、两人画内对白、产品一段 / 服务两段和 14 天查重以该版本为准。旧计划继续按原版本续跑。
+> For v3 day plans, read `rules/store-film-rules-v3.md` for formats, dialogue and rotation. Resume existing plans with their original schema.
+
 # 每日出片规范
 
 > 目标：店主每周只说一句「这礼拜我要做什么」，你排出一周的片，每天做一条给他看。店主不说，就按角度表轮着做。

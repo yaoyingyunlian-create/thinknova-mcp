@@ -1,7 +1,7 @@
 """Opt-in Windows/Codex/YouTube controlled pilot. No AI-generated shell commands."""
 from __future__ import annotations
 import argparse
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import getpass
 import hashlib
 import json
@@ -122,6 +122,10 @@ def quoted_generation_args(client, tool, args, balance):
     credits=quote.get('estimated_credits')
     if quote.get('quote_only') is not True or quote.get('creates_task') is not False or quote.get('reserves_credits') is not False or type(credits) is not int or credits<0:
         raise RuntimeError('MCP_QUOTE_INVALID_RESPONSE')
+    if tool in ('animate_image', 'generate_video') and 'ratio' in args:
+        specification = quote.get('configured_video_specification') or quote.get('specification') or {}
+        if not isinstance(specification, dict) or specification.get('ratio') != args['ratio']:
+            raise RuntimeError('MCP_VIDEO_QUOTE_RATIO_MISMATCH')
     return {**args,'max_credits':credits}
 
 
@@ -250,7 +254,15 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             raise RuntimeError('DAY_PLAN_WEEK_REQUIRED')
         history_path = STATE / f"topics-{grant['channel_id']}-{grant['project_key']}.json"
         history = json.loads(history_path.read_text(encoding='utf-8')) if history_path.is_file() else []
-        validate_rotation(rows, history, shop.get('editorial') or {})
+        if plan.get('schema_version') == 3:
+            rows = [dict(row) for row in rows]
+            selected = next((row for row in rows if row['date'] == plan['date']), None)
+            if selected:
+                selected.update(visual_batch=plan['visual_batch'], customer_identity=plan['customer_identity'])
+                previous = (date.fromisoformat(plan['date']) - timedelta(days=1)).isoformat()
+                if any(row['date'] == previous and row.get('customer_identity') == plan['customer_identity'] for row in history):
+                    raise RuntimeError('FILM_CUSTOMER_REPEATED')
+        validate_rotation(rows, history, shop.get('editorial') or {}, plan.get('schema_version', 1))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
@@ -289,7 +301,12 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         if key not in steps:
             steps[f'quote_credits_{index}'] = str(args['max_credits'])
             checkpoint()
-            steps[key] = client.tool('animate_image', args)['task_id']
+            created = client.tool('animate_image', args)
+            steps[key] = created['task_id']
+            applied = created.get('applied_reference_asset_ids')
+            if isinstance(applied, list) and applied and all(
+                    isinstance(ref, str) and re.fullmatch(r'asset_[A-Za-z0-9_-]{1,32}', ref) for ref in applied):
+                steps[f'applied_refs_{index}'] = ':'.join(applied[:3])
             checkpoint()
         deadline = time.monotonic() + 900
         while True:
@@ -322,9 +339,11 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
            'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips}
     if plan.get('speech_language'):
         job['speech_language'] = plan['speech_language']
-    if plan['schema_version'] == 2:
+    if plan['schema_version'] in (2, 3):
         job['short_dialogue_seconds'] = sum(segment['duration_seconds'] for segment in plan['segments'])
-        job['closing_overlay'] = [plan['shop_name'], plan['featured_service']]
+        job['closing_overlay'] = plan.get('closing_overlay') or [plan['shop_name'], plan['featured_service']]
+        job['dialogue_segment_count'] = len(plan['segments'])
+        job['film_schema_version'] = plan['schema_version']
     elif set(plan['platforms']) == {'xiaohongshu'}:
         job['platform'] = 'xiaohongshu'
     else:
@@ -357,7 +376,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         atomic(history_path, sorted([*history, editorial_row], key=lambda row: row['date'])[-120:])
     atomic(publish_job, publish_payload)
     summary = {'status': 'awaiting_review', 'output': str(output), 'publish_job': str(publish_job),
-               'run_no': run_no, 'quoted_credits': total}
+               'run_no': run_no, 'quoted_credits': total,
+               'contact_sheet': str(output.with_name(output.stem + '_sheet.jpg')),
+               'check_report': str(output) + '.check.txt' if Path(str(output) + '.check.txt').is_file() else None,
+               'segments': [{'task_id': steps[f'task_{index}'],
+                             'dialogue': segment.get('dialogue'), 'subtitles': segment.get('subs', []),
+                             'applied_reference_asset_ids': steps[f'applied_refs_{index}'].split(':')
+                             if f'applied_refs_{index}' in steps else None}
+                            for index, segment in enumerate(plan['segments'])]}
     atomic(directory / 'review-ready.json', summary)
     if grant.get('auto_publish'):
         steps['stage'] = 'ready_to_publish'
@@ -517,7 +543,7 @@ def daily_film(project, day, work_slot=1):
         grant = payload.get('data') or {}
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
-        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version': 2})
+        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version': 3})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -570,7 +596,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 return
         else:
             try:
-                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version': 2})
+                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version': 3})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})
