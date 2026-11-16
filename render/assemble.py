@@ -108,7 +108,9 @@ def check_store_source(ff, fp, source, clip_number):
                               capture_output=True, check=True, timeout=30)
     dimensions = (json.loads(measured.stdout).get('streams') or [{}])[0]
     width, height = dimensions.get('width', 0), dimensions.get('height', 0)
-    if not height or abs(width / height - 9 / 16) > 0.003:
+    # Encoding alignment can produce near-portrait dimensions such as 768x1344.
+    # Allow at most 2% relative drift; the existing cover step crops to 9:16.
+    if not 0 < width < height or abs(width * 16 / (height * 9) - 1) > 0.02:
         raise Stop(f'FILM_SOURCE_NOT_PORTRAIT: clip {clip_number} ({width}x{height})', 2)
     if not source.lower().endswith(IMAGE_EXT):
         sample = subprocess.run([ff, '-nostdin', '-v', 'info', '-i', source, '-t', '3',

@@ -53,6 +53,21 @@ class StoreFilmTests(unittest.TestCase):
             receipt = json.loads(Path(str(output) + '.film.json').read_text(encoding='utf-8'))
             self.assertEqual(receipt['machine_check'], 'pass')
 
+    def test_store_source_accepts_aligned_portrait_but_rejects_wrong_ratio(self):
+        from render.assemble import Stop, check_store_source
+        for width, height, accepted in [(768, 1344, True), (720, 1280, True),
+                                        (768, 1024, False), (1344, 768, False)]:
+            measured = Mock(stdout=json.dumps({'streams': [{'width': width, 'height': height}]}))
+            scan = Mock(returncode=0, stderr='')
+            with self.subTest(size=(width, height)), unittest.mock.patch(
+                    'render.assemble.subprocess.run', side_effect=[measured, scan]) as run:
+                if accepted:
+                    check_store_source('ffmpeg', 'ffprobe', 'video.mp4', 1)
+                    self.assertEqual(run.call_count, 2)
+                else:
+                    with self.assertRaisesRegex(Stop, 'FILM_SOURCE_NOT_PORTRAIT'):
+                        check_store_source('ffmpeg', 'ffprobe', 'video.mp4', 1)
+
     def test_portrait_quote_rejects_silent_landscape(self):
         from automation import quoted_generation_args
         from unittest.mock import Mock
