@@ -83,7 +83,7 @@ def get_opts(argv):
          "--lufs": "-14", "--lufs-tol": "2", "--max-tp": "-1", "--max-silence-pct": "10",
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
-         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--shop-name": None, "--featured-service": None}
+         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
     flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview"}
     pos, on, i = [], set(), 0
     while i < len(argv):
@@ -119,8 +119,12 @@ def s1_spec(meta, o):
         fps = 0.0
     INFO.append("resolution %dx%d | duration %.1fs | %.0f fps | audio %s" % (w, h, dur, fps, "yes" if a else "no"))
     ew, eh = int(o["--width"]), int(o["--height"])
+    if o.get('--store-boundaries') is not None:
+        ew, eh = 1080, 1920
     if (w, h) != (ew, eh):
-        if (h > w) == (eh > ew):
+        if o.get('--store-boundaries') is not None:
+            fail('FILM_STORE_RESOLUTION', f'expected {ew}x{eh}; got {w}x{h}')
+        elif (h > w) == (eh > ew):
             warn("S1a", "resolution %dx%d is not the expected %dx%d" % (w, h, ew, eh))
         else:
             fail("S1a", "orientation is wrong (%dx%d, expected %dx%d)" % (w, h, ew, eh))
@@ -315,8 +319,11 @@ def s6_speech(ff, path, dur, o):
         for previous, following in zip(segments, segments[1:]):
             if not dialogue_film and following.start < o["outro_start"] and following.start - previous.end > 0.5:
                 fail('FILM_SENTENCE_PAUSE', f'{previous.end:.2f}–{following.start:.2f}s exceeds 0.5s')
+        boundaries = o.get('segment_boundaries', [])
         for start, end in speech_gaps(words, o["outro_start"]):
-            if end - start > (2 if dialogue_film else 1):
+            if end - start > 1 and any(start <= cut <= end for cut in boundaries):
+                fail('FILM_SEGMENT_SPEECH_GAP', f'{end - start:.2f}s silence across a segment boundary ({start:.2f}–{end:.2f}s)')
+            elif end - start > (2 if dialogue_film else 1):
                 fail('FILM_SPEECH_GAP', f'no recognized speech for {end - start:.2f}s ({start:.2f}–{end:.2f}s)')
         if o.get('v3_dialogue'):
             from captions import parse_srt
@@ -377,6 +384,17 @@ def main():
     if not pos:
         print(__doc__)
         return 1
+    if o.get('--store-boundaries') is not None:
+        try:
+            boundaries = json.loads(o['--store-boundaries'])
+            if not isinstance(boundaries, list) or any(
+                type(cut) not in (int, float) or not 0 < cut < float('inf') for cut in boundaries
+            ):
+                raise ValueError
+        except ValueError:
+            print('FILM_SEGMENT_BOUNDARIES_INVALID: expected a JSON array of positive cut times')
+            return 1
+        o['segment_boundaries'] = boundaries
     path = pos[0]
     if not os.path.isfile(path):
         print("File not found: %s" % path)

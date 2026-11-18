@@ -72,6 +72,13 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 - Ego Lite 日常协作独立使用。打开平台、检查登录、准备草稿和按客户当次确认执行普通发布时，无需等待 ThinkNova 平台规则发布、后台账号映射或无人值守验收。真正发布前核对当前登录的目标账号、作品和文案，并取得当次确认。平台现场的登录、披露及审核要求照常执行。
 - Ego Lite interactive work can browse, check sign-in, prepare drafts and publish with per-post confirmation, independently of ThinkNova rule publication, account mapping or unattended acceptance. Confirm the signed-in destination, asset and copy before publishing. Follow the platform's live requirements.
 
+- 浏览器发布使用同一个通过质检的有声竖屏成片。编辑器选原始比例或 9:16，发布后核对链接、比例、人物和声音。超过现场时长限制或掉登录时只暂停该平台。发布结果不明时先找回原作品；裁切异常仅在当前授权覆盖删除和补发时处理一次。
+- 逐平台留下回执。运行 `python browser_receipt.py init receipt.json final.mp4 plan.json`，计划含 `project_key`、`local_date`、`targets`（平台到账号映射）。随后运行 `python browser_receipt.py record receipt.json 平台 event.json`。通过回读的成功事件包含 `status: "published"`、`post_url`、带时区的 `published_at`、`portrait`、`sound` 和 `subject_visible`。登录失效写 `login_required` 和脱敏 `failure_reason`。无监控凭据时保留本地记录，有凭据后用 `python browser_receipt.py sync receipt.json` 补报。
+- For browser publication, select original/9:16 and read back each post. Start a browser receipt with `browser_receipt.py init` before attempting any destination. Use `record` for each result and `sync` to retry reporting. Keep unknown outcomes for reconciliation. Posting, deletion and retry follow the current authorization.
+- 上传前看开场、中间和结尾的预览帧。选择平台的短视频入口，封面选人物或产品清楚的一帧；不添加平台滤镜、贴纸、音乐或自动字幕，有 AI 披露选项时按平台要求开启。使用送审确认过的各平台文案，超出平台限制时只删末尾标签，涉及其他修改重新确认。现场限制不符时记入回执。
+- Inspect the opening, middle and closing preview frames. Use each platform's short-video entry and a clear cover. Skip editor filters, stickers, music and automatic captions, and apply AI disclosure when required. Use the approved platform copy; trim trailing hashtags if the platform requires it and confirm other edits again. Record any platform limit that prevents publication.
+
+
 - 普通发布统一入口：python publish/dispatch.py job.json --platform 平台 --dry 生成清单并本地预检；得到该作品/账号/时间的明确确认后使用 --execute --user-confirmed。清单冻结实际传给发布器的配置；保留回执和回读差异。unknown/submitted_unverified 不能写成已发布，不得删除尝试标记重跑。
 - 所有 --dry 均只做本地检查，不登录、不上传、不创建草稿。安装不强制演练上传；首条可以在本地检查通过和明确授权后直接真发。原发布脚本缺少模式时也不得执行。
 

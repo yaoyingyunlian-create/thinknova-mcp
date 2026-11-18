@@ -132,7 +132,7 @@ def resolve(base, path):
     return path if os.path.isabs(path) else os.path.normpath(os.path.join(base, path))
 
 
-def split_text(text, cjk_limit=MAX_CJK):
+def split_text(text, cjk_limit=MAX_CJK, protected=()):
     """One string -> short one-line subtitles, cut at punctuation, then by length."""
     out = []
     for part in SPLIT.split(text.strip()):
@@ -141,6 +141,13 @@ def split_text(text, cjk_limit=MAX_CJK):
         while len(part) > limit:
             cut = part.rfind(" ", 0, limit + 1)
             cut = cut if cut > 0 else limit
+            for term in protected:
+                for match in re.finditer(re.escape(term), part):
+                    if match.start() < cut < match.end():
+                        if match.start() == 0:
+                            raise Stop('FILM_SUBTITLE_BRAND_TOO_WIDE: ' + term, 2)
+                        cut = match.start()
+                        break
             out.append(part[:cut].strip())
             part = part[cut:].strip()
         if part:
@@ -570,6 +577,8 @@ def run_delivery_check(ff, fp, video, srt, options):
             cmd += ['--explainer-preview']
         if options.get('no_outro'):
             cmd += ['--no-outro']
+        if 'segment_boundaries' in options:
+            cmd += ['--store-boundaries', json.dumps(options['segment_boundaries'])]
         if options.get('film_schema_version') == 3:
             cmd += ['--v3-dialogue']
         if options.get('film_profile') == 'store_v2':
@@ -776,6 +785,11 @@ def main():
     try:
         parts, cues, t = [], [], 0.0
         pace_report = []
+        segment_boundaries = []
+        protected_names = ()
+        if job.get('film_rules_revision') == '2.4':
+            names = (job.get('shop_name'), job.get('brand_name'), job.get('featured_service'))
+            protected_names = tuple(dict.fromkeys(name.strip() for name in names if isinstance(name, str) and name.strip()))
         caption_alignment_pending = False
         caption_alignment_used = False
         for i, c in enumerate(job["clips"]):
@@ -813,7 +827,7 @@ def main():
             ):
                 raise Stop('SUBTITLE_SECONDARY_COUNT_MISMATCH: subs2 must match subs', 2)
             if store_film and secondary is None:
-                lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8)]
+                lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8, protected=protected_names)]
             if lines and not verified_srt:
                 shot_cues = None
                 if job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
@@ -835,6 +849,8 @@ def main():
                         cue['text2'] = translation
                 cues.extend(shot_cues)
             t += dur
+            if i + 1 < len(job['clips']):
+                segment_boundaries.append(t)
         card_span = None
         if job.get("end_card"):
             shot, dur = end_card(ff, job["end_card"], len(parts), wk)
@@ -900,6 +916,8 @@ def main():
         if job.get('short_dialogue_seconds'):
             options.update(short_dialogue_seconds=job['short_dialogue_seconds'], outro_start=card_span[0],
                            film_schema_version=job.get('film_schema_version'))
+        if job.get('film_rules_revision') == '2.4':
+            options['segment_boundaries'] = segment_boundaries
         if store_film:
             options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,

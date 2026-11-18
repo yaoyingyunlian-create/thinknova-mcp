@@ -37,6 +37,10 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 
 ## 二、九宫格选题和每日计划
 
+起稿前写三行：具体受众和困扰、已核实的顾客价值、希望观众采取的行动。账号未写自查时，逐项检查：第一句有具体困扰或真实感受、至少两句有顾客好处、有真实顾客体验才引用、不用台词描述可见动作或罗列服务、每条事实可追溯。把脚本意图、自查证据和缺料清单一起交运营。缺顾客原话时略去效果表述，继续能做的片型。
+Before drafting, record audience/problem, confirmed benefits and the intended action. Use the project's checklist. Send missing facts to operations, and omit any unsupported experience claim.
+
+
 店铺档案 editorial 保存至少三项人群、场景、痛点、特色和常见问题，问题含稳定 ID 与次数，另记录生意类型和活动日期。每周用三行（人群、痛点或问题）和三个特色列形成九宫格，挑七格。相邻两天换行、列和拍法，每周至少四种拍法、至少两条回答前三热门问题。同格查 28 天，开场句、开场画面和同格同拍法查 56 天。活动到期排除价格和过期主题。
 
 拍法可选顾客心里话、剧情、趣味剧情、探店、过程揭秘、前后对比、问答、产品特写、折扣和一天或一单。用 python toolkit.py validate-week 校验选题池，每天只准备一条可执行日计划。工具包负责报价、取件和拼片，异常写入运行诊断。

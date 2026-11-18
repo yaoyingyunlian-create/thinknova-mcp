@@ -10,6 +10,65 @@ from store_film import generation_arguments, validate_beats
 
 
 class StoreFilmTests(unittest.TestCase):
+    def test_browser_receipt_preserves_each_platform_and_is_idempotent(self):
+        from browser_receipt import initialize, record
+        from render.assemble import file_digest
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            film = root / 'final.mp4'
+            film.write_bytes(b'checked video fixture')
+            proof = Path(str(film) + '.film.json')
+            proof.write_text(json.dumps({'machine_check': 'pass', 'sha256': file_digest(film)}), encoding='utf-8')
+            receipt = root / 'receipt.json'
+            plan = {'project_key': 'shop', 'local_date': '2026-11-17',
+                    'targets': {'instagram': '@shop', 'tiktok': '@shop'}}
+            with unittest.mock.patch('browser_receipt.check_media'):
+                initialize(receipt, film, plan)
+                with self.assertRaisesRegex(ValueError, 'BROWSER_PUBLICATION_RECEIPT_CONFLICT'):
+                    initialize(receipt, film, dict(plan, targets={'instagram': '@other'}))
+                film.write_bytes(b'changed')
+                with self.assertRaisesRegex(ValueError, 'BROWSER_PUBLICATION_FILM_CHECK_REQUIRED'):
+                    initialize(receipt, film, plan)
+            record(receipt, 'tiktok', {'status': 'login_required', 'failure_reason': 'Session expired'})
+            with self.assertRaisesRegex(ValueError, 'BROWSER_PUBLICATION_EVIDENCE_REQUIRED'):
+                record(receipt, 'instagram', {'status': 'published'})
+            event = {'status': 'published', 'post_url': 'https://www.instagram.com/reel/test/',
+                     'published_at': '2026-11-17T22:00:00+08:00', 'portrait': True,
+                     'sound': True, 'subject_visible': True}
+            value = record(receipt, 'instagram', event)
+            self.assertEqual(value['platforms']['tiktok']['status'], 'login_required')
+            self.assertEqual(value['revision'], 3)
+            self.assertEqual(record(receipt, 'instagram', event), value)
+
+    def test_new_film_checks_keep_brand_name_whole_and_require_full_hd(self):
+        from render import check
+        from render.assemble import split_text
+
+        self.assertEqual(split_text('\u6211\u628a\u8fd9\u4efd\u793c\u7269\u9001\u5230\u9752\u5c71\u82b1\u5e97', cjk_limit=9,
+                                    protected=('\u9752\u5c71\u82b1\u5e97',)), ['\u6211\u628a\u8fd9\u4efd\u793c\u7269\u9001\u5230', '\u9752\u5c71\u82b1\u5e97'])
+        _, _, options = check.get_opts(['--store-boundaries', '[15]'])
+        metadata = {'streams': [{'codec_type': 'video', 'width': 720, 'height': 1280, 'r_frame_rate': '30/1'}],
+                    'format': {'duration': '30'}}
+        with unittest.mock.patch.object(check, 'fail') as failure, unittest.mock.patch.object(check, 'INFO', []):
+            check.s1_spec(metadata, options)
+        failure.assert_any_call('FILM_STORE_RESOLUTION', 'expected 1080x1920; got 720x1280')
+
+    def test_gap_across_segment_boundary_uses_one_second_limit(self):
+        from types import SimpleNamespace
+        from render import check
+
+        words = [SimpleNamespace(word='first', start=0, end=14.3),
+                 SimpleNamespace(word='second', start=15.7, end=30)]
+        segments = [SimpleNamespace(words=[word], start=word.start, end=word.end) for word in words]
+        _, _, options = check.get_opts(['--planned-film-seconds', '30'])
+        options.update(film=True, store_film=True, outro_start=30, segment_boundaries=[15])
+        with unittest.mock.patch('speech_review.recognize', return_value=(segments, SimpleNamespace(language='zh'))), \
+             unittest.mock.patch('speech_review.speech_pace', return_value=4.5), \
+             unittest.mock.patch.object(check, 'INFO', []), unittest.mock.patch.object(check, 'fail') as failure:
+            check.s6_speech('ffmpeg', 'fixture.mp4', 30, options)
+        self.assertEqual(failure.call_args.args[0], 'FILM_SEGMENT_SPEECH_GAP')
+
     def test_manifest_uses_same_text_and_binary_rules(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

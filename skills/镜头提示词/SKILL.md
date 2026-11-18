@@ -56,6 +56,10 @@ Natural hands with five fingers. Slow, steady camera.
 
 ## 五、图生视频提示词示例
 
+同一段有台词时不切到手、物品或背影；讲解种草可按片型规则加一个约 3 秒的生活镜头，并保留原对白音轨。不要写固定秒数切镜。同一条片的首帧和每段视频复用同一套已确认的人物三视图；付费前核对每段报价回读，送审时抽帧对齐对白检查口型、人物和产品。
+
+During speech, keep the speaker's mouth visible. An explainer can use one roughly three-second lifestyle cutaway under the same speech track. Avoid fixed cut intervals. Reuse the same confirmed character boards in every segment's first frame and video. Verify applied references in each quote, then compare frames to the spoken lines during review.
+
 - 画面：花店柜台前，顾客把相册推到两人中间；店员对照照片拿出一枝粉玫瑰。竖屏中景保留两人和手部动作。
 - 顾客（翻到照片，有点犹豫）对店员说：「我妈平常穿得很素，送粉玫瑰会不会太亮？」
 - 店员（把浅粉和深粉放在一起）对顾客说：「试试浅粉吧，衬她常穿的米白色，摆在家里也好看。」
