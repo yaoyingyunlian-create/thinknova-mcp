@@ -75,6 +75,7 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 - 浏览器发布使用同一个通过质检的有声竖屏成片。编辑器选原始比例或 9:16，发布后核对链接、比例、人物和声音。超过现场时长限制或掉登录时只暂停该平台。发布结果不明时先找回原作品；裁切异常仅在当前授权覆盖删除和补发时处理一次。
 - 逐平台留下回执。运行 `python browser_receipt.py init receipt.json final.mp4 plan.json`，计划含 `project_key`、`local_date`、`targets`（平台到账号映射）。随后运行 `python browser_receipt.py record receipt.json 平台 event.json`。通过回读的成功事件包含 `status: "published"`、`post_url`、带时区的 `published_at`、`portrait`、`sound` 和 `subject_visible`。登录失效写 `login_required` 和脱敏 `failure_reason`。无监控凭据时保留本地记录，有凭据后用 `python browser_receipt.py sync receipt.json` 补报。
 - For browser publication, select original/9:16 and read back each post. Start a browser receipt with `browser_receipt.py init` before attempting any destination. Use `record` for each result and `sync` to retry reporting. Keep unknown outcomes for reconciliation. Posting, deletion and retry follow the current authorization.
+- 试跑时按 [浏览器发布回执试跑](rules/browser-receipt-pilot.md) 核对版本、目标账号和上报结果。For pilot acceptance, use the browser receipt checklist and verify the returned receipt ID in the dashboard.
 - 上传前看开场、中间和结尾的预览帧。选择平台的短视频入口，封面选人物或产品清楚的一帧；不添加平台滤镜、贴纸、音乐或自动字幕，有 AI 披露选项时按平台要求开启。使用送审确认过的各平台文案，超出平台限制时只删末尾标签，涉及其他修改重新确认。现场限制不符时记入回执。
 - Inspect the opening, middle and closing preview frames. Use each platform's short-video entry and a clear cover. Skip editor filters, stickers, music and automatic captions, and apply AI disclosure when required. Use the approved platform copy; trim trailing hashtags if the platform requires it and confirm other edits again. Record any platform limit that prevents publication.
 
@@ -172,6 +173,8 @@ The runner currently gates only shots whose plan contains 小程序: local ASR r
 
 ## 门店成片默认流程 / Store film workflow
 
+- 新版门店剧本先读 [主规则与模板](rules/store-film-rules-v52.md)，再用 [品类展示表](rules/store-film-category-v52.md) 对应一行。逐句留分类、来源、画面和机位。缺已授权原话时选能做的普通片型，记录缺项。趣味设定仍暂停。旧计划按原规则及任务号恢复。
+- For new store scripts, read the version 52 rules and category table. Record each line's classification, source, shot and camera. Choose an ordinary format when no approved quote is available. Resume existing plans under their saved rules.
 - 门店片读取 skills/门店成片/SKILL.md。新品类产品片和服务片使用两段，各 15 秒，默认片尾叠字。讲解种草用 3–4 段、总长 45–60 秒。仅把质检通过的成片列入待审清单。
 - 首条样片用 publish/dispatch.py 的 --dry 准备各平台清单和哈希，客户确认后用 --approve-review HASH --user-confirmed 登记。普通发布继续按当前版本确认。已明确启用无人值守发布后，按当前授权和质检结果执行。
 - Mac 转写由 FFmpeg 解码后交给本机 Whisper。需要本地语音模型缓存。模型缺失或音频解码失败时记录待处理。

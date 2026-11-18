@@ -41,6 +41,22 @@ class StoreFilmTests(unittest.TestCase):
             self.assertEqual(value['revision'], 3)
             self.assertEqual(record(receipt, 'instagram', event), value)
 
+    def test_browser_receipt_reports_verified_server_ack_and_safe_failure(self):
+        from browser_receipt import sync
+        from unittest.mock import patch
+
+        with patch('monitoring.TOKEN') as token, patch('secure_state.load'), patch('automation_client.Client') as client:
+            token.is_file.return_value = False
+            self.assertEqual(sync({}), {'sync': 'local_only', 'reason_code': 'MONITORING_CREDENTIAL_REQUIRED'})
+            token.is_file.return_value = True
+            endpoint = client.return_value.post
+            endpoint.side_effect = RuntimeError('DEVICE_HTTP_422')
+            self.assertEqual(sync({}), {'sync': 'queued', 'reason_code': 'DEVICE_HTTP_422'})
+            endpoint.side_effect = None
+            receipt_id = 'a' * 64
+            endpoint.return_value = ({'data': {'accepted': True, 'receipt_id': receipt_id}}, {})
+            self.assertEqual(sync({}), {'sync': 'synced', 'receipt_id': receipt_id})
+
     def test_new_film_checks_keep_brand_name_whole_and_require_full_hd(self):
         from render import check
         from render.assemble import split_text

@@ -66,6 +66,35 @@ class EditorialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'QUESTION_ANSWER_REQUIRED'):
             dialogue_v21_lines({'segments': [{'dialogue': [question, dict(answer, speaker='customer')]}]})
 
+    def test_v52_requires_exact_quotes_and_allows_solo_explainer(self):
+        from store_editorial import validate_dialogue_v3
+
+        segments = []
+        for index, chars in enumerate(('花草叶', '开合关', '香色瓣')):
+            lines = []
+            for turn, char in enumerate(chars):
+                speaker = 'customer' if index == 0 and turn == 0 else 'staff'
+                kind = ('question', 'answer', 'statement')[turn] if index == 0 else 'statement'
+                lines.append({'speaker': speaker, 'listener': ('staff' if speaker == 'customer' else 'customer')
+                              if index == 0 else 'camera', 'kind': kind, 'action': 'holds product',
+                              'emotion': 'interested', 'text': char * 20 + ('？' if kind == 'question' else '。'),
+                              'classification': '好处或原因', 'source_ref': 'F1', 'visual': 'Face visible',
+                              'camera': 'Medium shot'})
+            segments.append({'duration_seconds': 15, 'dialogue': lines, 'subs': [line['text'] for line in lines],
+                             'prompt': '对着镜头讲解' if index else 'Two people chat'})
+        quote = segments[0]['dialogue'][0]
+        quote.update(classification='原话', source_ref='Q1')
+        plan = {'script_rules_revision': '52', 'dialogue_rules_revision': '2.4',
+                'film_type': 'explainer', 'film_purpose': 'product', 'shop_name': '花店', 'featured_service': '鲜花',
+                'script': {'template': 'two_person_dialogue', 'voice_identity': 'voice'}, 'customer_identity': 'short-hair',
+                'closing_overlay': ['鲜花'], 'segments': segments, 'week_rows': [{'format': 'explainer'}],
+                'script_sources': {'Q1': quote['text'], 'F1': '包装明确标注用法'}, 'category_direction': '食品｜包装',
+                'dialogue_classification_counts': {'麻烦': 0, '好处或原因': 8, '原话': 1, '情境': 0}}
+        validate_dialogue_v3(plan)
+        plan['script_sources']['Q1'] = '不是已核实的原话'
+        with self.assertRaisesRegex(ValueError, 'DAY_PLAN_CUSTOMER_QUOTE_INVALID'):
+            validate_dialogue_v3(plan)
+
     def test_copy_requires_fields_and_rejects_platform_prohibitions(self):
         variant = {'title': '下班后想放松的新加坡顾客', 'tags': ['新加坡', '头疗'],
                    'marketing_copy': {'audience_or_pain': '下班总是很累？', 'solution': 'Miorae 做头疗',

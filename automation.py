@@ -271,7 +271,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                         or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
                                for row in history)):
                     raise RuntimeError('FILM_CUSTOMER_REPEATED')
-        validate_rotation(rows, history, shop.get('editorial') or {}, plan.get('schema_version', 1))
+        validate_rotation(rows, history, shop.get('editorial') or {}, plan.get('schema_version', 1),
+                          plan.get('script_rules_revision'))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
@@ -426,6 +427,9 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         summary['script_review'] = plan['script_review']
     if 'missing_information' in plan:
         summary['missing_information'] = plan['missing_information']
+    if 'dialogue_classification_counts' in plan:
+        summary['dialogue_classification_counts'] = plan['dialogue_classification_counts']
+        summary['category_direction'] = plan['category_direction']
     atomic(directory / 'review-ready.json', summary)
     if grant.get('auto_publish'):
         steps['stage'] = 'ready_to_publish'
@@ -586,7 +590,7 @@ def daily_film(project, day, work_slot=1):
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
         payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version':
-            5 if grant.get('day_plan_request_version') == 5 else 4})
+            grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6) else 4})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -640,7 +644,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
         else:
             try:
                 response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version':
-                    5 if grant.get('day_plan_request_version') == 5 else 4})
+                    grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6) else 4})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})

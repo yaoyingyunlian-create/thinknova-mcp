@@ -103,11 +103,18 @@ def sync(value):
         from monitoring import TOKEN
         import secure_state
         if not TOKEN.is_file():
-            return 'local_only'
+            return {'sync': 'local_only', 'reason_code': 'MONITORING_CREDENTIAL_REQUIRED'}
         response, _ = Client(secure_state.load(TOKEN)).post('/mcp/device/browser-publication', value, execution=False)
-        return 'synced' if response.get('data', {}).get('accepted') is True else 'queued'
-    except (RuntimeError, OSError, ValueError, KeyError):
-        return 'queued'
+        data = response.get('data') or {}
+        receipt_id = data.get('receipt_id')
+        if data.get('accepted') is True and isinstance(receipt_id, str) and re.fullmatch(r'[a-f0-9]{64}', receipt_id):
+            return {'sync': 'synced', 'receipt_id': receipt_id}
+    except RuntimeError as exc:
+        if re.fullmatch(r'DEVICE_HTTP_\d{3}', str(exc)):
+            return {'sync': 'queued', 'reason_code': str(exc)}
+    except (OSError, ValueError, KeyError):
+        pass
+    return {'sync': 'queued', 'reason_code': 'BROWSER_PUBLICATION_SYNC_PENDING'}
 
 
 def main():
@@ -134,7 +141,7 @@ def main():
     except (OSError, ValueError, KeyError, TypeError) as exc:
         parser.exit(2, f'Could not record receipt: {exc}\n')
     result = sync(value)
-    print(json.dumps({'sync': result, 'receipt': str(args.receipt), 'platforms': value['platforms']}, ensure_ascii=False))
+    print(json.dumps({**result, 'receipt': str(args.receipt), 'platforms': value['platforms']}, ensure_ascii=False))
     return 0
 
 
