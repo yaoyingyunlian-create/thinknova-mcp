@@ -18,6 +18,11 @@ description: 片段都生成好之后，拼成片、验收、交给店主之前�
 get_balance 的 quote_request 把这条片要的首帧和每段视频逐项报出来（视频带 `duration_seconds`），合计一句话告诉店主。在店主给过的每日上限内直接做；超了才问。网络重试沿用原请求号。
 
 ## 二、怎么拼
+
+新版 2.4 产品片和服务片都用两段 15 秒，每段 55–62 字。手写 job 填 `film_profile: "store_v2"`、`film_schema_version: 3`、`film_rules_revision: "2.4"`、`dialogue_segment_count: 2` 和 `short_dialogue_seconds: 30`。用 `closing_overlay` 在最后 2.5 秒叠加已确认信息，`closing_overlay_top` 可在 150–380 调整。字幕按转写对齐，不确定时留本机预览。可在 `srt` 指定已经核对的成片字幕时间，拼片将保持片段原速。模板见 `render/templates/store-film-v24.example.json`。
+
+For revision 2.4, both product and service films use two 15-second segments. Use a closing overlay and verify captions against speech before delivery. Manual explainer fixtures may use `explainer_preview: true` with 3–5 clips and a total of 45–60 seconds; this is a preview workflow. A clip's `cutaway: {file, start, dur, at}` changes picture only. The source dialogue remains the audio track.
+
 现有日计划由工具包生成拼片配置。手工准备画内对白片时，产品填一段，15 秒服务片填两段；服务片用 `dialogue_segment_count: 2` 和 `short_dialogue_seconds: 30`，单段用该段的报价时长。用 `closing_overlay` 把确认过的信息叠在最后 2.5 秒，画内对白片不填写 `end_card`。旧的六拍模板仅适用于旧计划。
 ```
 .venv/bin/python render/assemble.py job.json --json

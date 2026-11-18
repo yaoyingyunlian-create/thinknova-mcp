@@ -1,0 +1,16 @@
+{
+  "out": "final.mp4",
+  "film_profile": "store_v2",
+  "film_schema_version": 3,
+  "film_rules_revision": "2.4",
+  "film_type": "story",
+  "dialogue_segment_count": 2,
+  "short_dialogue_seconds": 30,
+  "shop_name": "花店",
+  "featured_service": "花束",
+  "closing_overlay": ["花店"],
+  "clips": [
+    {"file": "clip1.mp4", "subs": ["填写实际对白"]},
+    {"file": "clip2.mp4", "subs": ["填写实际对白"]}
+  ]
+}

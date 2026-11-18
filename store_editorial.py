@@ -149,9 +149,10 @@ def validate_dialogue_v3(plan):
             or not all(isinstance(line, str) and line.strip() and len(line.encode('utf-8')) <= 120 for line in overlay)
             or overlay[0] != expected_overlay):
         raise ValueError('FILM_DIALOGUE_PROFILE_INVALID')
-    revision21 = plan.get('dialogue_rules_revision') == '2.1'
+    revision21 = plan.get('dialogue_rules_revision') in ('2.1', '2.4')
     if revision21:
         dialogue_v21_lines(plan)
+    low, high = (55, 62) if plan.get('dialogue_rules_revision') == '2.4' else (60, 70)
     for index, segment in enumerate(plan['segments'], 1):
         dialogue = segment.get('dialogue')
         if (not isinstance(dialogue, list) or len(dialogue) not in (3, 4)
@@ -172,8 +173,8 @@ def validate_dialogue_v3(plan):
             spoken.append(line['text'])
         actual = ''.join(char for char in ''.join(spoken) if unicodedata.category(char)[0] in 'LN')
         length = len(actual)
-        if len(speakers) != 2 or not 60 <= length <= 70:
-            raise ValueError(f'FILM_DIALOGUE_WORD_COUNT: segment {index}, got {length}; expected 60–70 with both speakers')
+        if len(speakers) != 2 or not low <= length <= high:
+            raise ValueError(f'FILM_DIALOGUE_WORD_COUNT: segment {index}, got {length}; expected {low}–{high} with both speakers')
         captions = segment.get('subs')
         if not isinstance(captions, list) or not all(isinstance(item, str) for item in captions):
             raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')

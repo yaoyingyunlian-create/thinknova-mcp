@@ -229,11 +229,57 @@ def film_review(job_path, recheck=False):
     return {**package, 'review_package': str(output)}
 
 
+def prepare_reference(source: Path, output: Path, min_edge: int = 256, max_edge: int = 5760) -> dict:
+    """Prepare a derived image without modifying or uploading the original."""
+    from io import BytesIO
+    from PIL import Image, ImageOps
+
+    formats = {'.png': 'PNG', '.jpg': 'JPEG', '.jpeg': 'JPEG', '.webp': 'WEBP'}
+    max_bytes = 10 * 1024 * 1024
+    if not 1 <= min_edge <= max_edge <= 5760:
+        raise ValueError('INVALID_REFERENCE_EDGE_LIMITS')
+    if source.resolve() == output.resolve() or output.exists():
+        raise ValueError('REFERENCE_OUTPUT_EXISTS')
+    with Image.open(source) as original:
+        if original.format not in formats.values() or getattr(original, 'n_frames', 1) != 1:
+            raise ValueError('REFERENCE_IMAGE_UNSUPPORTED')
+        image = ImageOps.exif_transpose(original)
+        width, height = image.size
+        result = {'status': 'ready', 'source': str(source.resolve()), 'original_width': width, 'original_height': height}
+        if min_edge <= min(width, height) and max(width, height) <= max_edge and source.stat().st_size <= max_bytes:
+            return {**result, 'path': str(source.resolve()), 'width': width, 'height': height, 'derived': False}
+        if max(width, height) > max_edge:
+            raise ValueError('REFERENCE_EDGE_TOO_LARGE')
+        if min(width, height) >= min_edge:
+            raise ValueError('REFERENCE_UPLOAD_TOO_LARGE')
+        size = tuple((edge * min_edge + min(width, height) - 1) // min(width, height) for edge in (width, height))
+        if max(size) > max_edge:
+            raise ValueError('REFERENCE_ASPECT_RATIO_CANNOT_BE_PRESERVED')
+        encoding = formats.get(output.suffix.lower())
+        if not encoding:
+            raise ValueError('REFERENCE_OUTPUT_FORMAT_INVALID')
+        image = image.resize(size, Image.Resampling.LANCZOS)
+        if encoding == 'JPEG':
+            image = image.convert('RGB')
+        buffer = BytesIO()
+        image.save(buffer, format=encoding)
+        if buffer.tell() > max_bytes:
+            raise ValueError('REFERENCE_UPLOAD_TOO_LARGE')
+        with output.open('xb') as stream:
+            stream.write(buffer.getvalue())
+        return {**result, 'path': str(output.resolve()), 'width': size[0], 'height': size[1], 'derived': True}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
     sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
+    reference_parser = sub.add_parser("prepare-reference", help="Resize an undersized reference image locally without overwriting it")
+    reference_parser.add_argument("source", type=Path)
+    reference_parser.add_argument("--output", required=True, type=Path)
+    reference_parser.add_argument("--min-edge", type=int, default=256)
+    reference_parser.add_argument("--max-edge", type=int, default=5760)
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
     film_parser.add_argument("--recheck", action="store_true")
@@ -253,6 +299,15 @@ def main() -> int:
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {schema_version: 3, rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
     args = parser.parse_args()
+    if args.command == "prepare-reference":
+        try:
+            result = prepare_reference(args.source, args.output, args.min_edge, args.max_edge)
+        except (OSError, ValueError, ImportError) as exc:
+            detail = str(exc)
+            result = {'status': 'blocked', 'error': detail if re.fullmatch(r'[A-Z0-9_]+', detail)
+                      else 'REFERENCE_IMAGE_PREPARATION_FAILED'}
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result['status'] == 'ready' else 2
     if args.command == "film":
         try:
             result = film_review(args.job, args.recheck)

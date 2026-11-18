@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "bfa2630aa8c3e5f9a40fe1b396b23ce06d92bcec99b7683d0977217c8f7bc493",
+  "revision": "bf0f0c81bc8b9800cf239ec2341795369effede784c68b4c95a8284347a73dc8",
   "files": [
     {
       "path": ".gitignore",
@@ -25,7 +25,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "8be5707b13a9c797c4cb834de08de6a215b3b133ad9da6811ac63ea7f12c4788"
+      "sha256": "e283957a3c74491fcd8e88393451e8ad0836c88fade3909dd719bbffe1bccc4e"
     },
     {
       "path": "automation_client.py",
@@ -209,7 +209,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "5a2100a8dc84d322ea128b78c07af71003d97e028421caad9b6e426c1db10d84"
+      "sha256": "c2b62c88e435bb18d7d56695513555064738561c690ad4fbc1624b8e7b2895e5"
     },
     {
       "path": "render/captions.py",
@@ -217,7 +217,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "d533ab32b1f141260f1c0d8795929c3f8530b34c98e14b1bf8c2aa32fdbdb549"
+      "sha256": "fde2204df609209e57c967118a362bdfd9f2f59281bc6956acbcd330eb09a24a"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -256,6 +256,10 @@
       "sha256": "2bf3cacfc178fca6a5a699c2238de39204a494a09ec2603cda17271c13dd1de3"
     },
     {
+      "path": "render/templates/store-film-v24.example.json",
+      "sha256": "51abca8039f6cc66d12e1a64d568a9e8a7edf0fecd1de2dcadf804b85799a23a"
+    },
+    {
       "path": "render/templates/\u95e8\u5e97\u6210\u7247_6\u62cd.json",
       "sha256": "e48bf5e228a58fc3189ebbce9ee95046723e749c0035fe5e949de19efed6b739"
     },
@@ -269,7 +273,7 @@
     },
     {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
-      "sha256": "fc72afd89d5e18c668c69bee38d345cd4ecbeadc98334e79fcc9b9723141752c"
+      "sha256": "a3cb492d22abe07a6a04e4d6e2a5bff76e1a1ad00c8dac60aebe02ee576eee05"
     },
     {
       "path": "secure_state.py",
@@ -301,23 +305,23 @@
     },
     {
       "path": "skills/\u6bcf\u65e5\u51fa\u7247\u89c4\u8303/SKILL.md",
-      "sha256": "45bf32d53b8c55ddb0d354f64f665ba907c5a5bf1b64ee8a6de1ae9bee21bd31"
+      "sha256": "c95264ef5f44ef7bc3627c8cfcdda7cb111e27f2ddfa50f2edd1a3570a64682f"
     },
     {
       "path": "skills/\u955c\u5934\u63d0\u793a\u8bcd/SKILL.md",
-      "sha256": "1327c7e33619cca482aafd9a2b80522bd55a03049e7ac1749b8ebcd9152a1760"
+      "sha256": "ce375b0a051d66a6fa61476588dac5919962b464371269132b1e36c80bac53d9"
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "1765e806105c9716738977eb6bfc14082a526d78fe0e0404c63aef58f3e3a6cc"
+      "sha256": "db11b3700eb41af86f90b47b88f064e0af8489ddde6d04ea560eb7a5be6b86ed"
     },
     {
       "path": "store_editorial.py",
-      "sha256": "375f8462983684dc841eb64ab6d613ca0b3229ee1d1793a8edaead77ae180c35"
+      "sha256": "baa2561253cafbada3c47066a24aab7e1d38c23ead28e1b670af81d1b37bd808"
     },
     {
       "path": "store_film.py",
-      "sha256": "06ca7db5a773799e43ad985dd3e1e5209e84bf048800ccf09d9747e50655a1cf"
+      "sha256": "3a9ec153631def09efe7e5c7d1a1edba44e759094f15749b2ae1824164bc3709"
     },
     {
       "path": "test_automation.py",
@@ -361,7 +365,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "fcd6e899d7464324138335f0735438f3e553189bb92e8bd095eda4c231509a73"
+      "sha256": "1211c3e03ae5b0de7bc1c8ebbfb77583f8d1399336edc5d1f411948c58ed0e0b"
     },
     {
       "path": "test_subtitle_layout.py",
@@ -369,7 +373,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "e441a3146cd0196f7632b66ada9fbe2764eefe779d426258ab568804a2af554f"
+      "sha256": "6b6b1c366026768b754be1d12ab15b138dae1557888dc1c2593db56c234c9053"
     },
     {
       "path": "update.py",

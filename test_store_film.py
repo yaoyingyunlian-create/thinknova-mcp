@@ -94,6 +94,44 @@ class StoreFilmTests(unittest.TestCase):
         args = generation_arguments(segment, {'front': ['asset_first']}, allowed)
         self.assertEqual(args['reference_asset_ids'], ['asset_first', 'asset_customer', 'asset_staff'])
 
+    def test_reference_preparation_upscales_without_overwriting(self):
+        from PIL import Image
+        from toolkit import prepare_reference
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source, output = root / 'source.png', root / 'prepared.png'
+            Image.new('RGB', (225, 300), 'red').save(source)
+            original = source.read_bytes()
+            result = prepare_reference(source, output)
+            self.assertTrue(result['derived'])
+            self.assertEqual((result['width'], result['height']), (256, 342))
+            self.assertEqual(source.read_bytes(), original)
+            with Image.open(output) as image:
+                self.assertEqual(image.size, (256, 342))
+            with self.assertRaisesRegex(ValueError, 'REFERENCE_OUTPUT_EXISTS'):
+                prepare_reference(source, output)
+            self.assertFalse(prepare_reference(output, root / 'not-needed.png')['derived'])
+
+    def test_closing_overlay_valid_without_card_or_platform(self):
+        from render.assemble import Stop, validate_job
+        job = {'film': True, 'explainer_preview': True, 'out': 'film.mp4',
+               'clips': [{'file': 'clip.mp4'}] * 5, 'closing_overlay': ['ThinkNova']}
+        validate_job(job)
+        validate_job({key: value for key, value in job.items() if key != 'closing_overlay'})
+        with self.assertRaisesRegex(Stop, 'FILM_CLOSING_OVERLAY_INVALID'):
+            validate_job(dict(job, end_card={'lines': ['Old card']}))
+
+    def test_caption_alignment_preserves_text_and_gap(self):
+        from types import SimpleNamespace
+        from render.assemble import align_captions
+        words = [SimpleNamespace(word='你好', start=0.2, end=0.8),
+                 SimpleNamespace(word='再见', start=2.0, end=2.3)]
+        spoken = [SimpleNamespace(words=words)]
+        cues = align_captions(['你好！', '再见。'], spoken, 10)
+        self.assertEqual(cues[0], {'text': '你好！', 'start': 10.2, 'end': 10.8})
+        self.assertEqual(cues[1]['start'], 12.0)
+        self.assertIsNone(align_captions(['你好！', '明天见。'], spoken, 10))
+
     def test_portrait_quote_rejects_silent_landscape(self):
         from automation import quoted_generation_args
         from unittest.mock import Mock

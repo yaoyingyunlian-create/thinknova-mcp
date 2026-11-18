@@ -186,6 +186,28 @@ def time_subs(lines, chunks, offset):
     return out
 
 
+def align_captions(lines, spoken, offset):
+    # Compare normalized transcribed and reviewed text, while keeping the original caption spelling.
+    import unicodedata
+    def letters(text):
+        return ''.join(char.casefold() for char in text if unicodedata.category(char)[0] in 'LN')
+    tokens = [(letters(word.word), word.start, word.end) for span in spoken for word in (span.words or [])]
+    tokens = [token for token in tokens if token[0]]
+    expected = [letters(line) for line in lines]
+    if not all(expected) or ''.join(token[0] for token in tokens) != ''.join(expected):
+        return None
+    timings = [(start, stop) for token, start, stop in tokens for _ in token]
+    offset_chars, cues = 0, []
+    for line, normalized in zip(lines, expected):
+        last = offset_chars + len(normalized) - 1
+        start, end = timings[offset_chars][0], timings[last][1]
+        if not start < end or (cues and start + offset < cues[-1]['end'] - 0.02):
+            return None  # ASR cannot resolve a boundary inside the same timed word.
+        cues.append({'text': line, 'start': start + offset, 'end': end + offset})
+        offset_chars = last + 1
+    return cues
+
+
 def norm_shot(ff, fp, base, c, idx, wk):
     """One shot -> 1080x1920, 30 fps, 48 kHz stereo, exact length."""
     if not c.get("file"):
@@ -239,6 +261,25 @@ def norm_shot(ff, fp, base, c, idx, wk):
     run_ff(ff, inp + ["-filter_complex", pic + ";" + aud, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18",
                       "-preset", "veryfast", "-r", str(FPS), "-c:a", "aac", "-b:a", "192k", "-ar", str(SR), out], "shot %d" % (idx + 1))
     return out, dur
+
+
+def apply_cutaway(ff, fp, base, shot, duration, cutaway, index, work):
+    if not isinstance(cutaway, dict) or set(cutaway) != {'file', 'start', 'dur', 'at'}:
+        raise Stop(f'FILM_CUTAWAY_INVALID: clip {index + 1}', 2)
+    start, length, at = (cutaway[key] for key in ('start', 'dur', 'at'))
+    if (not isinstance(cutaway['file'], str) or not cutaway['file'].strip()
+            or any(type(value) not in (int, float) or not math.isfinite(value) for value in (start, length, at))
+            or start < 0 or length <= 0.1 or at < 0 or at + length > duration):
+        raise Stop(f'FILM_CUTAWAY_RANGE_INVALID: clip {index + 1}', 2)
+    insert, _ = norm_shot(ff, fp, base, {'file': cutaway['file'], 'start': start, 'dur': length,
+                                        'audio': 'mute'}, 1000 + index, work)
+    output = os.path.join(work, f'cutaway_{index:03d}.mp4')
+    filters = (f'[1:v]setpts=PTS+{at:.6f}/TB[insert];'
+               f'[0:v][insert]overlay=eof_action=pass:repeatlast=0:enable=gte(t\\,{at:.6f})[picture]')
+    run_ff(ff, ['-i', shot, '-i', insert, '-filter_complex', filters, '-map', '[picture]', '-map', '0:a:0',
+                '-t', f'{duration:.6f}', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
+                '-c:a', 'copy', output], f'cutaway {index + 1}')
+    return output
 
 
 def dialogue_pace_adjustment(rate, language, duration, intervals, max_duration=None):
@@ -376,6 +417,8 @@ def write_ass(path, job, cues, card_span, font):
         head += row.replace("{f}", font)
     head += (style % ("Badge", 30, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 3, 7, 60)).replace("{f}", font)
     head += (style % ("Card", 110, "&H00232D3C", "&H00232D3C", "&H00FFFFFF", 0, 5, 0)).replace("{f}", font)
+    head += (style % ("Closing", 68, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 6, 8,
+                      job.get('closing_overlay_top', 220))).replace("{f}", font)
     head += u"\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     rows = []
     for index, cue in enumerate(cues, 1):
@@ -403,9 +446,18 @@ def write_ass(path, job, cues, card_span, font):
     if job.get("badge"):
         rows.append(u"Dialogue: 0,%s,%s,Badge,,0,0,0,,%s" % (ass_time(0), ass_time(card_span[0] if card_span else job["_total"]), ass_escape(job["badge"])))
     if card_span:
-        lines = [ass_escape(x) for x in job["end_card"].get("lines", [])]
+        overlay = job.get('closing_overlay')
+        card_style = 'Closing' if overlay else 'Card'
+        if overlay:
+            try:
+                lines = [safe_subtitle_text(x, W, H, 68, job.get('closing_overlay_top', 220), 6, max_lines=1)
+                         for x in overlay]
+            except ValueError as exc:
+                raise Stop('FILM_CLOSING_OVERLAY_INVALID: shorten the closing text', 2) from exc
+        else:
+            lines = [ass_escape(x) for x in job['end_card'].get('lines', [])]
         if lines:
-            rows.append(u"Dialogue: 0,%s,%s,Card,,0,0,0,,%s" % (ass_time(card_span[0]), ass_time(card_span[1]), u"\\N".join(lines)))
+            rows.append(u"Dialogue: 0,%s,%s,%s,,0,0,0,,%s" % (ass_time(card_span[0]), ass_time(card_span[1]), card_style, u"\\N".join(lines)))
     with io.open(path, "w", encoding="utf-8") as f:
         f.write(head + u"\n".join(rows) + u"\n")
 
@@ -453,8 +505,16 @@ def validate_job(job):
             raise Stop('INVALID_JOB: %s must be a finite number >= %s' % (field, minimum))
     if 'film' in job and not isinstance(job['film'], bool):
         raise Stop('INVALID_JOB: film must be boolean')
-    if job.get('film') and not (job.get('film_profile') == 'store_v2' and job.get('platform') == 'xiaohongshu') and not job.get('short_dialogue_seconds') and (not isinstance(job.get('end_card'), dict) or not job['end_card'].get('lines')):
-        raise Stop('FILM_OUTRO_REQUIRED: supply a closing card with text')
+    if job.get('explainer_preview') and (not job.get('film') or job.get('film_profile')
+            or not 3 <= len(job.get('clips', [])) <= 5):
+        raise Stop('FILM_EXPLAINER_PREVIEW_INVALID: use film=true with three to five clips', 2)
+    if 'closing_overlay' in job:
+        lines = job['closing_overlay']
+        top = job.get('closing_overlay_top', 220)
+        if (job.get('end_card') or not isinstance(lines, list) or not 1 <= len(lines) <= 3
+                or not all(isinstance(line, str) and line.strip() and len(line) <= 24 for line in lines)
+                or type(top) is not int or not 150 <= top <= 380):
+            raise Stop('FILM_CLOSING_OVERLAY_INVALID: use short lines in the upper safe area', 2)
     if 'speech_language' in job and not isinstance(job['speech_language'], str):
         raise Stop('INVALID_JOB: speech_language must be text')
     for index, clip in enumerate(job['clips']):
@@ -501,6 +561,10 @@ def run_delivery_check(ff, fp, video, srt, options):
         cmd += ['--film', '--outro-start', str(options['outro_start'])]
         if options.get('short_dialogue_seconds'):
             cmd += ['--planned-film-seconds', str(options['short_dialogue_seconds'])]
+        if options.get('explainer_preview'):
+            cmd += ['--explainer-preview']
+        if options.get('no_outro'):
+            cmd += ['--no-outro']
         if options.get('film_schema_version') == 3:
             cmd += ['--v3-dialogue']
         if options.get('film_profile') == 'store_v2':
@@ -645,6 +709,8 @@ def recheck(receipt, overwrite):
                 raise Stop('SUBTITLE_DIGEST_MISMATCH', 2)
         else:
             temp_srt = None
+        if options.get('caption_alignment_pending'):
+            raise Stop('FILM_CAPTION_ALIGNMENT_PENDING: reassemble with verified subtitle timing', 2)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, video, temp_srt, options)
         if not passed:
             if os.path.isfile(sheet):
@@ -666,7 +732,8 @@ def main():
         return recheck(argv[1], overwrite)
     job, base = load_job(argv)
     store_film = job.get('film_profile') == 'store_v2'
-    if store_film and job.get('srt'):
+    verified_srt = bool(job.get('film_rules_revision') == '2.4' and job.get('srt'))
+    if store_film and job.get('srt') and not verified_srt:
         raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
     if store_film:
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
@@ -683,8 +750,6 @@ def main():
         for key in ('shop_name', 'featured_service'):
             if not isinstance(job.get(key), str) or not job[key].strip():
                 raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
-        if job.get('srt'):
-            raise Stop('FILM_SUBTITLE_INPUT_INVALID: use sentence-aligned subs and subs2')
     validate_job(job)
     if not job.get("out") or not job.get("clips"):
         raise Stop("job needs \"out\" and at least one entry in \"clips\".")
@@ -706,6 +771,8 @@ def main():
     try:
         parts, cues, t = [], [], 0.0
         pace_report = []
+        caption_alignment_pending = False
+        caption_alignment_used = False
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
             if store_film:
@@ -714,7 +781,9 @@ def main():
                 source = resolve(base, c['file'])
                 check_store_source(ff, fp, source, i + 1)
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
-            if store_film:
+            if job.get('explainer_preview') and not 9.95 <= dur <= 15.05:
+                raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} is outside 10-15 seconds', 2)
+            if store_film and not verified_srt:
                 dialogue = bool(job.get('short_dialogue_seconds'))
                 try:
                     shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i,
@@ -728,6 +797,8 @@ def main():
                 pace_report.append(pace)
             if job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
                 raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)
+            if 'cutaway' in c:
+                shot = apply_cutaway(ff, fp, base, shot, dur, c['cutaway'], i, wk)
             parts.append(shot)
             lines = c.get("subs") or (split_text(c["text"]) if c.get("text") else [])
             secondary = c.get('subs2')
@@ -738,8 +809,20 @@ def main():
                 raise Stop('SUBTITLE_SECONDARY_COUNT_MISMATCH: subs2 must match subs', 2)
             if store_film and secondary is None:
                 lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8)]
-            if lines:
-                shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
+            if lines and not verified_srt:
+                shot_cues = None
+                if job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
+                    try:
+                        from speech_review import recognize
+                        spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
+                                              word_timestamps=True, vad_filter=True)
+                        shot_cues = align_captions(lines, spoken, t)
+                    except (RuntimeError, ImportError):
+                        pass
+                    caption_alignment_pending |= shot_cues is None
+                    caption_alignment_used |= shot_cues is not None
+                if shot_cues is None:
+                    shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
                 if secondary is not None:
                     if len(shot_cues) != len(secondary):
                         raise Stop('SUBTITLE_SECONDARY_TIMELINE_MISMATCH', 2)
@@ -761,7 +844,8 @@ def main():
                     or job.get('end_card') or not job.get('closing_overlay')):
                 raise Stop('FILM_DIALOGUE_SEGMENTS_INVALID', 2)
             card_span = (max(0, t - 2.5), t)
-            job['end_card'] = {'lines': job['closing_overlay']}
+        elif job.get('closing_overlay'):
+            card_span = (max(0.1, t - 2.5), t)
         job["_total"] = t
         if job.get('srt'):
             cues=parse_srt(resolve(base,job['srt']))
@@ -786,6 +870,8 @@ def main():
             cur = add_music(ff, cur, music, job.get("music_db", -22), t, wk)
         srt = None
         words = u"".join(c["text"] for c in cues) + u"".join(job.get("end_card", {}).get("lines", [])) + (job.get("badge") or u"")
+        if job.get('closing_overlay'):
+            words += ' '.join(job['closing_overlay'])
         if words:
             font = pick_font(job, words)
             print("Subtitles, font %s ..." % font)
@@ -803,17 +889,26 @@ def main():
         STAGE = "check"
         print("Checking ...")
         options = {'outro_start': (card_span[0] if card_span else t) if job.get('film') else None,
-                   'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur')}
+                   'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur'),
+                   'no_outro': bool(job.get('film') and not card_span),
+                   'explainer_preview': bool(job.get('explainer_preview'))}
         if job.get('short_dialogue_seconds'):
             options.update(short_dialogue_seconds=job['short_dialogue_seconds'], outro_start=card_span[0],
                            film_schema_version=job.get('film_schema_version'))
         if store_film:
             options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
-                  'subtitle_timing': 'provided' if job.get('srt') else ('estimated' if cues else 'not_applicable')}
+                  'subtitle_timing': ('review_required' if caption_alignment_pending else 'aligned' if caption_alignment_used
+                                      else 'provided' if job.get('srt') else 'estimated' if cues else 'not_applicable')}
         if store_film:
             result['speech_pace'] = pace_report
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
+        if caption_alignment_pending and job.get('film'):
+            passed = False
+            message = 'The spoken words could not be matched to the reviewed captions; reassemble with verified timing.'
+            diagnostics.append({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'message': message})
+            report += '\n  [FILM_CAPTION_ALIGNMENT_PENDING] ' + message
+            options['caption_alignment_pending'] = True
         if not passed:
             if job.get('film'):
                 return save_pending(ff, out, srt, sheet, final_out, options, result, diagnostics, report)

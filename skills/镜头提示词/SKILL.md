@@ -39,7 +39,7 @@ Natural hands with five fingers. Slow, steady camera.
 
 ## 二、参考图顺序
 
-第一张是当前镜头的真实首帧。两人同框无产品时，第二、三张是顾客、店员各自的三视图。画面有主推产品时，第二张是人物板，第三张是产品板；两人都要锁定时，人物板用经确认的两人合版。素材均须获当前项目授权，少一张就报告其角色。
+第一张是当前镜头的真实首帧。两人同框无产品时，第二、三张是顾客、店员各自的三视图。画面有主推产品时，第二张是人物板，第三张是产品板；两人都要锁定时，人物板用经确认的两人合版。素材均须获当前项目授权，少一张就报告其角色。报价返回 `MCP_REFERENCE_DIMENSIONS_INVALID` 且原图太小时，用工具包的 `python toolkit.py prepare-reference 原图.png --output 派生图.png --min-edge 256 --max-edge 5760` 等比放大；按报价返回的边长调整参数。原图保留。上传派生图并确认项目素材权限后，用新素材 ID 重跑只读报价。
 
 ## 三、人物锁定
 片里的人一律是 AI 生成的虚构角色，可以露脸。只有店主给了本人照片并同意，才用真人。
@@ -49,6 +49,8 @@ Natural hands with five fingers. Slow, steady camera.
 4. 生成后逐镜看：脸、衣服、发型、手不一样的镜头不用。
 
 ## 四、台词和声音
+
+新版普通门店片每段按句子顺序给两三个机位。长句放到能看清说话人的画面，细节特写只接一句短话。口音使用正向描述，例如「自然的新马华语口音」。虚构人物使用授权三视图，产品只需授权产品照片。第三个位置可用于宠物或其他需要锁定的主体。
 
 采用画内两人对白。可在人物介绍里写两个人各自的声音特征，整片保持一致。动作和对白按自然顺序写，给每句注明说话人、对方、动作与情绪。每段用一问一答组织台词，沿用 v2.1 的字数要求。对白不要写进首帧或字幕像素。
 
@@ -88,4 +90,4 @@ Natural hands with five fingers. Slow, steady camera.
 
 ## English summary
 
-Use natural, in-scene dialogue with speaker, action, emotion and listener. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references.
+Use natural, in-scene dialogue with speaker, action, emotion and listener. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references. For an undersized local image, run `toolkit.py prepare-reference input.png --output prepared.png` with the edge limits from the quote. Upload and authorize the derivative before quoting with its new asset ID.

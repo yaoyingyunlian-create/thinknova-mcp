@@ -56,7 +56,9 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     roles = segment.get('reference_roles')
     if roles is not None:
         if roles not in (['first_frame', 'customer', 'staff'], ['first_frame', 'customer', 'product'],
-                          ['first_frame', 'staff', 'product'], ['first_frame', 'cast', 'product']):
+                          ['first_frame', 'staff', 'product'], ['first_frame', 'cast', 'product'],
+                          ['first_frame', 'customer', 'subject'], ['first_frame', 'staff', 'subject'],
+                          ['first_frame', 'cast', 'subject']):
             raise ValueError('FILM_REFERENCE_ROLES_INVALID')
         boards = segment.get('reference_boards') or {}
         if not isinstance(boards, dict):
@@ -149,7 +151,7 @@ def validate_day_plan(plan):
         raise ValueError('FILM_DURATION_REQUIRED: specify an integer from 6 to 15')
     total = sum(durations)
     if plan['schema_version'] == 3:
-        expected = [15, 15] if plan['film_purpose'] == 'service' else [15]
+        expected = [15, 15] if plan['film_purpose'] == 'service' or plan.get('dialogue_rules_revision') == '2.4' else [15]
         if durations != expected:
             raise ValueError('FILM_DIALOGUE_SEGMENTS_INVALID')
         return plan

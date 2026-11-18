@@ -84,7 +84,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -222,7 +222,7 @@ def s3_audio(ff, path, dur, o):
 
 # S4 ---------------------------------------------------------------------------
 def s4_cuts(ff, path, dur, o):
-    need = 0 if o.get("store_film") else 6 if o.get("film") else int(o["--min-cuts"])
+    need = 0 if o.get("store_film") or o.get("explainer_preview") else 6 if o.get("film") else int(o["--min-cuts"])
     if need <= 0:
         return
     result = subprocess.run([ff, "-v", "info", "-i", path, "-vf", "select='gt(scene,0.3)',showinfo",
@@ -399,19 +399,23 @@ def main():
     dur = s1_spec(meta, o)
     o["film"] = "--film" in on
     o["store_film"] = "--store-film" in on
+    o["explainer_preview"] = "--explainer-preview" in on
     o["v3_dialogue"] = "--v3-dialogue" in on
     if o["film"]:
         planned = o.get('--planned-film-seconds')
         if planned is not None:
             if not planned.isdecimal() or int(planned) not in (*range(6, 16), 30) or abs(dur - int(planned)) > 1:
                 fail('FILM_DURATION', 'duration differs from the authorized short-film specification')
+        elif o['explainer_preview']:
+            if not 45 <= dur <= 60:
+                fail('FILM_DURATION', 'explainer preview requires 45–60 seconds')
         elif not 30 <= dur <= 40:
             fail("FILM_DURATION", "duration %.2fs is outside 30–40s" % dur)
         try:
             o["outro_start"] = float(o["--outro-start"])
         except (TypeError, ValueError):
             o["outro_start"] = 0
-        if not 0 < o["outro_start"] < dur and not (o["store_film"] and abs(o["outro_start"] - dur) <= 0.15):
+        if not 0 < o["outro_start"] < dur and not ((o["store_film"] or '--no-outro' in on) and abs(o["outro_start"] - dur) <= 0.15):
             fail("FILM_OUTRO_REQUIRED", "pass the actual outro start in seconds")
             o["outro_start"] = dur
     s2_opening(ff, path)

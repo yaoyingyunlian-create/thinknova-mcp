@@ -268,7 +268,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
-        if plan.get('dialogue_rules_revision') == '2.1':
+        if plan.get('dialogue_rules_revision') in ('2.1', '2.4'):
             day = date.fromisoformat(plan['date'])
             recent_lines = [line for row in history if 0 < (day - date.fromisoformat(row['date'])).days <= 7
                             for line in row.get('dialogue_lines', [])]
@@ -284,11 +284,13 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
-        if plan.get('dialogue_rules_revision') == '2.1':
+        if plan.get('dialogue_rules_revision') in ('2.1', '2.4'):
             roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
             segment = {**segment, 'reference_roles': roles,
                        'reference_boards': {**(shop.get('reference_boards') or {}), **(segment.get('reference_boards') or {})}}
         args = generation_arguments(scripted_segment(segment, plan.get("script"), shop), shop_assets, authorized)
+        if plan.get('dialogue_rules_revision') == '2.4':
+            args['film_rules_revision'] = '2.4'
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
             args['project_key'] = grant['project_key']
@@ -355,6 +357,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         job['closing_overlay'] = plan.get('closing_overlay') or [plan['shop_name'], plan['featured_service']]
         job['dialogue_segment_count'] = len(plan['segments'])
         job['film_schema_version'] = plan['schema_version']
+        if plan.get('dialogue_rules_revision') == '2.4':
+            job['film_rules_revision'] = '2.4'
     elif set(plan['platforms']) == {'xiaohongshu'}:
         job['platform'] = 'xiaohongshu'
     else:
@@ -554,7 +558,7 @@ def daily_film(project, day, work_slot=1):
         grant = payload.get('data') or {}
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
-        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version': 3})
+        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version': 4})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -607,7 +611,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 return
         else:
             try:
-                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version': 3})
+                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version': 4})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})
