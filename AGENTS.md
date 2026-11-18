@@ -24,7 +24,7 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 ## 规则与更新 / Rules and updates
 
 - 必须执行：MCP 的账户、素材授权、报价和预算校验，工具包的成片质检，以及对应平台已发布的 hard_constraints。平台规则发布状态、后台账号映射、无人值守授权和验收是对应平台的无人值守开通条件。
-- 客户可改：选题、人物、风格、常用素材、字幕语言、平台安排和制作偏好。用 get_content_rules 读取当前项目的 effective_rules，用 expected_version 保存合并后的规则。运营建议与技能默认值用于补充缺项。只在客户选择固定角色、镜头需要保持同一人物时使用三视图和角色禁项。
+- 客户可改：选题、人物、风格、常用素材、字幕语言、平台安排和制作偏好。用 get_content_rules 读取当前项目的 effective_rules，用 expected_version 保存合并后的规则。账号已写明的创作要求和自查逐条执行，技能只补缺项。自查为每项附上实际台词或镜头证据。素材权限、预算和质检硬约束继续生效。只在客户选择固定角色、镜头需要保持同一人物时使用三视图和角色禁项。
 - 客户本地偏好放在客户工作目录的 AGENTS.local.md 或项目规则中。官方仓库的 AGENTS.md、技能和脚本由 ThinkNova 更新。发现新版自动更新；遇到源码改动或更新失败，用 bootstrap.py recover --workspace 客户目录，按结果里的 active_toolkit 继续。原目录和客户文件保留。GitHub 离线时，完整性通过的安装可继续使用，版本记为未知。
 - 同一生成请求沿用原参数和请求号。成片通过后集中交审；缺必要素材或预算时只说明具体缺项。平台发布故障分别记录。
 

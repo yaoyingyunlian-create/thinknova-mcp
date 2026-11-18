@@ -399,6 +399,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                              'applied_reference_asset_ids': steps[f'applied_refs_{index}'].split(':')
                              if f'applied_refs_{index}' in steps else None}
                             for index, segment in enumerate(plan['segments'])]}
+    if 'script_review' in plan:
+        summary['script_review'] = plan['script_review']
     atomic(directory / 'review-ready.json', summary)
     if grant.get('auto_publish'):
         steps['stage'] = 'ready_to_publish'

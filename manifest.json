@@ -1,7 +1,7 @@
 {
   "version": "thinknova-automation-toolkit-v3.1.18",
   "text_line_endings": "lf",
-  "revision": "bf0f0c81bc8b9800cf239ec2341795369effede784c68b4c95a8284347a73dc8",
+  "revision": "4d8eab076a650814dc031369b2dd0cf8cf8f3231d64df1472d31783ad66b0806",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "4852711cf6be3f5351bacc6e0cbc467f9a3b5eec383d5c701129ce520ce37ef8"
+      "sha256": "b3dbb116929d728dba1b1a83360da3dadd2c50f2196411607257224f9c765b2e"
     },
     {
       "path": "AUTOMATION.md",
@@ -25,7 +25,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "e283957a3c74491fcd8e88393451e8ad0836c88fade3909dd719bbffe1bccc4e"
+      "sha256": "7a0b63f5277f58a69d59cb8617d07fe7d3e6f0de4c7f2758e2ebde7ee73b8ada"
     },
     {
       "path": "automation_client.py",
@@ -209,7 +209,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "c2b62c88e435bb18d7d56695513555064738561c690ad4fbc1624b8e7b2895e5"
+      "sha256": "b40117037be24043f92ac02ea4654dd37d3a77a90352c0350399ebe3bbda32bd"
     },
     {
       "path": "render/captions.py",
@@ -269,7 +269,7 @@
     },
     {
       "path": "rules/store-film-rules-v3.md",
-      "sha256": "1360da6fcd867d54c5d5bd8ea7c198dcc50f3c0e978d9db8e46d713331d895e3"
+      "sha256": "18e73d30394caaa150c80fda4ddab75f94c34a79d05f96130c954680e9ce8732"
     },
     {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
@@ -289,7 +289,7 @@
     },
     {
       "path": "skills/\u53e3\u8bed\u53f0\u8bcd/SKILL.md",
-      "sha256": "1ecef9328c7b74aca2dc7727e723efa5bdfdab65fd3158198937274455d27107"
+      "sha256": "62eee61228a24dfd1f0bfbd736d1d8fc17582bc6dd732c4535458fd39b6caf6a"
     },
     {
       "path": "skills/\u5b66\u4e60\u89c4\u5219/SKILL.md",
@@ -305,11 +305,11 @@
     },
     {
       "path": "skills/\u6bcf\u65e5\u51fa\u7247\u89c4\u8303/SKILL.md",
-      "sha256": "c95264ef5f44ef7bc3627c8cfcdda7cb111e27f2ddfa50f2edd1a3570a64682f"
+      "sha256": "b819bb01f4ac6b3a1ea79b4420ead36303304bcdf7acec8424fe15c7d23abfd8"
     },
     {
       "path": "skills/\u955c\u5934\u63d0\u793a\u8bcd/SKILL.md",
-      "sha256": "ce375b0a051d66a6fa61476588dac5919962b464371269132b1e36c80bac53d9"
+      "sha256": "33ff138e756352de09aaef24865387eac935d41fdedf20fbdfc100d5a6f4e0b7"
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",

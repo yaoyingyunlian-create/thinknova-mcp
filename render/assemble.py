@@ -521,6 +521,11 @@ def validate_job(job):
         prefix = 'clips[%d]' % index
         if not isinstance(clip, dict) or not isinstance(clip.get('file'), str) or not clip['file']:
             raise Stop('INVALID_JOB: %s.file must be a nonempty file path' % prefix)
+        if job.get('film_rules_revision') == '2.4' and 'cutaway' in clip:
+            cutaway = clip['cutaway']
+            limit = cutaway.get('dur') if isinstance(cutaway, dict) else None
+            if type(limit) not in (int, float) or not math.isfinite(limit) or not 0.1 < limit <= 2:
+                raise Stop('FILM_DIALOGUE_CUTAWAY_DURATION: detail cutaway may last at most two seconds', 2)
         for key in ('start', 'tail', 'dur'):
             if key in clip: number(clip[key], prefix + '.' + key, 0.101 if key == 'dur' else 0)
         if clip.get('fit', 'cover') not in ('cover', 'contain') or clip.get('audio', 'keep') not in ('keep', 'mute'):

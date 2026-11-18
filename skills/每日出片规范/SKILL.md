@@ -3,8 +3,8 @@ name: daily-film-standard
 description: 给客户排一周的片、做每天那一条之前必须先读。管三件事：店铺档案怎么建、这周做什么片（店主一句话 → 一周计划）、每条片必须做到什么。一条提示词怎么写看「镜头提示词」，怎么拼看「门店成片」。
 ---
 
-> 新版日计划（schema_version=3）写脚本和排片前读取 `rules/store-film-rules-v3.md`。七种片型、两人画内对白、产品一段 / 服务两段和 14 天查重以该版本为准。旧计划继续按原版本续跑。
-> For v3 day plans, read `rules/store-film-rules-v3.md` for formats, dialogue and rotation. Resume existing plans with their original schema.
+> 写脚本前读取当前项目的 `get_content_rules.effective_rules`。先逐条照账号创作规则和自查执行；`rules/store-film-rules-v3.md` 只补账号未写的项。已保存的计划按原版本续跑。
+> Read the project’s effective rules first and apply its checklist. Use the bundled rules for missing items. Resume saved plans using their original revision.
 
 # 每日出片规范
 
@@ -43,12 +43,12 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 
 ## 三、片型与画内对白
 
-按 v2.1 的七片型选题。产品一段 15 秒，服务两段各 15 秒。每段两人面对面说话，一问一答、3～4 句及 60～70 字。原样记录对白并同步字幕。参考图依照「镜头提示词」预检。
+账号没有指定时采用内置七片型和对白写作默认值。新版普通产品和服务片两段各 15 秒，每段一问一答、3～4 句，默认 55～62 字。原样记录对白并同步字幕。参考图依照「镜头提示词」预检。
 
 ## 四、制作与提交
 
 1. 报价与建单都带 `duration_seconds: 15` 和 `ratio: "9:16"`，逐段检查三张参考图实际生效。预算不足时指出差额。
-2. 保留两个人在场的真实互动。第一秒有动作，台词遵循 v2.1。用工具包拼片及检查，把成片、逐段对白、实际参考图和检查原文送审。
+2. 保留两个人在场的真实互动。第一秒有动作，台词遵循当前账号规则并通过当前片型校验。用工具包拼片及检查，把成片、逐段对白、实际参考图和检查原文送审。
 3. 店铺、产品及授权事实从当前项目读取。对白不念价格和带单位的数字。字幕和片尾信息由工具包叠加。
 
 ## 五、标题和文案
@@ -64,4 +64,4 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 
 ## English summary
 
-Use the v2.1 rules for the seven formats and two-person dialogue. Quote each 15-second segment, verify all three approved references are applied, and use the toolkit for assembly, quality checks and the review package.
+Use the project’s editorial rules. The bundled format and dialogue defaults fill gaps. Quote each 15-second segment, verify all three approved references are applied, and use the toolkit for assembly, quality checks and the review package.

@@ -50,9 +50,9 @@ Natural hands with five fingers. Slow, steady camera.
 
 ## 四、台词和声音
 
-新版普通门店片每段按句子顺序给两三个机位。长句放到能看清说话人的画面，细节特写只接一句短话。口音使用正向描述，例如「自然的新马华语口音」。虚构人物使用授权三视图，产品只需授权产品照片。第三个位置可用于宠物或其他需要锁定的主体。
+新版普通门店片每段按句子顺序给两三个机位。有台词时要能看清说话人的嘴。每段细节特写最多一次、最长 2 秒，只盖在一句话的后半句上。口音使用正向描述，例如「自然的新马华语口音」。虚构人物使用授权三视图，产品只需授权产品照片。第三个位置可用于宠物或其他需要锁定的主体。
 
-采用画内两人对白。可在人物介绍里写两个人各自的声音特征，整片保持一致。动作和对白按自然顺序写，给每句注明说话人、对方、动作与情绪。每段用一问一答组织台词，沿用 v2.1 的字数要求。对白不要写进首帧或字幕像素。
+采用画内两人对白。可在人物介绍里写两个人各自的声音特征，整片保持一致。动作和对白按自然顺序写，给每句注明说话人、对方、动作与情绪。每段用一问一答组织台词，按账号字数要求写作并满足当前片型校验。对白不要写进首帧或字幕像素。
 
 ## 五、图生视频提示词示例
 
@@ -90,4 +90,4 @@ Natural hands with five fingers. Slow, steady camera.
 
 ## English summary
 
-Use natural, in-scene dialogue with speaker, action, emotion and listener. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references. For an undersized local image, run `toolkit.py prepare-reference input.png --output prepared.png` with the edge limits from the quote. Upload and authorize the derivative before quoting with its new asset ID.
+Keep the speaker’s mouth visible during speech. Use at most one detail cutaway per segment, no longer than two seconds and only over the latter half of a spoken line. Use natural in-scene dialogue. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references. For an undersized local image, run `toolkit.py prepare-reference input.png --output prepared.png` with the edge limits from the quote. Upload and authorize the derivative before quoting with its new asset ID.
