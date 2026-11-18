@@ -152,8 +152,13 @@ def validate_dialogue_v3(plan):
     revision21 = plan.get('dialogue_rules_revision') in ('2.1', '2.4')
     if revision21:
         dialogue_v21_lines(plan)
-    low, high = (55, 62) if plan.get('dialogue_rules_revision') == '2.4' else (60, 70)
     for index, segment in enumerate(plan['segments'], 1):
+        low, high = (55, 62) if plan.get('dialogue_rules_revision') == '2.4' else (60, 70)
+        if plan.get('film_type') == 'explainer':
+            seconds = segment.get('duration_seconds')
+            if type(seconds) is not int or not 10 <= seconds <= 15:
+                raise ValueError('FILM_EXPLAINER_DURATION_INVALID')
+            low, high = (low * seconds + 14) // 15, high * seconds // 15
         dialogue = segment.get('dialogue')
         if (not isinstance(dialogue, list) or len(dialogue) not in (3, 4)
                 or re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|对着镜头|^\s*\d+(?:[.,]\d+)?\s*[-–—~～至到]\s*\d+(?:[.,]\d+)?\s*(?:s\b|秒)', str(segment.get('prompt', '')), re.I | re.M)):

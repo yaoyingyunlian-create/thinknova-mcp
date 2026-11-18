@@ -54,15 +54,36 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     if not isinstance(first, str) or not ASSET.fullmatch(first):
         raise ValueError('FILM_FIRST_FRAME_REQUIRED')
     roles = segment.get('reference_roles')
+    if roles is not None and not isinstance(roles, list):
+        raise ValueError('FILM_REFERENCE_ROLES_INVALID')
+    boards = segment.get('reference_boards') or {}
+    if not isinstance(boards, dict):
+        raise ValueError('FILM_REFERENCE_BOARDS_INVALID')
+    photos = {field: value for field, value in (
+        ('product_photo_asset_id', segment.get('product_photo_asset_id')),
+        ('product_sheet_asset_id', segment.get('product_sheet_asset_id')),
+        ('reference_boards.product', boards.get('product')),
+    ) if value is not None}
+    product_board = next(iter(photos.values()), None) if (roles and 'product' in roles
+                    or segment.get('customer_product') or any('.' not in field for field in photos)) else None
+    if product_board is not None:
+        if any(value != product_board for value in photos.values()):
+            raise ValueError('FILM_PRODUCT_PHOTO_CONFLICT: ' + ', '.join(photos))
+        if (not isinstance(product_board, str) or not ASSET.fullmatch(product_board)
+                or product_board not in authorized_assets):
+            raise ValueError('FILM_PRODUCT_PHOTO_NOT_AUTHORIZED: ' + next(iter(photos)))
+        if product_board in (first, board):
+            raise ValueError('FILM_PRODUCT_PHOTO_MUST_BE_DISTINCT')
+    if (segment.get('customer_product') or (roles and 'product' in roles)) and not product_board:
+        raise ValueError('FILM_PRODUCT_PHOTO_REQUIRED')
     if roles is not None:
         if roles not in (['first_frame', 'customer', 'staff'], ['first_frame', 'customer', 'product'],
                           ['first_frame', 'staff', 'product'], ['first_frame', 'cast', 'product'],
                           ['first_frame', 'customer', 'subject'], ['first_frame', 'staff', 'subject'],
                           ['first_frame', 'cast', 'subject']):
             raise ValueError('FILM_REFERENCE_ROLES_INVALID')
-        boards = segment.get('reference_boards') or {}
-        if not isinstance(boards, dict):
-            raise ValueError('FILM_REFERENCE_BOARDS_INVALID')
+        if 'product' in roles:
+            boards = {**boards, 'product': product_board}
         missing = [role for role in roles[1:] if not boards.get(role)]
         if missing:
             raise ValueError('FILM_REFERENCE_BOARD_REQUIRED: ' + ', '.join(missing))
@@ -73,15 +94,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
                    'Keep existing product packaging print; do not add scene text.')
         if len(prompt.encode('utf-8')) > 3500:
             raise ValueError('FILM_PROMPT_TOO_LONG')
-    product_board = segment.get('product_sheet_asset_id')
-    if segment.get('customer_product') and not product_board:
-        raise ValueError('FILM_PRODUCT_SHEET_REQUIRED')
-    if product_board is not None:
-        if (not isinstance(product_board, str) or not ASSET.fullmatch(product_board)
-                or product_board not in authorized_assets):
-            raise ValueError('FILM_PRODUCT_SHEET_NOT_AUTHORIZED')
-        if product_board in (first, board):
-            raise ValueError('FILM_PRODUCT_SHEET_MUST_BE_DISTINCT')
+    if product_board is not None and (roles is None or 'product_sheet_asset_id' in photos):
         prompt += (
             ' Preserve the product shape, color, logo and existing packaging print from the reference. '
             'Do not add unrelated text or invent a usage action.'
@@ -89,7 +102,8 @@ def generation_arguments(segment, shop_assets, authorized_assets):
         length = len(prompt.encode('utf-8'))
         if length > 3500:
             raise ValueError(f'FILM_PROMPT_TOO_LONG: {length}/3500 UTF-8 bytes')
-    refs = list(dict.fromkeys([first, *(asset for asset in (board, product_board) if asset), *refs]))
+    extras = [asset for asset in (board, product_board) if asset]
+    refs = list(dict.fromkeys([first, *refs, *extras] if roles is not None else [first, *extras, *refs]))
     if len(refs) > 3:
         raise ValueError('FILM_REFERENCE_LIMIT_EXCEEDED: first frame and each sheet count toward the three-image limit')
     if any(ref not in authorized_assets for ref in refs):
@@ -151,6 +165,11 @@ def validate_day_plan(plan):
         raise ValueError('FILM_DURATION_REQUIRED: specify an integer from 6 to 15')
     total = sum(durations)
     if plan['schema_version'] == 3:
+        if plan.get('film_type') == 'explainer':
+            if plan.get('dialogue_rules_revision') != '2.4':
+                raise ValueError('DAY_PLAN_SCHEMA_UNSUPPORTED')
+            validate_explainer_durations(durations)
+            return plan
         expected = [15, 15] if plan['film_purpose'] == 'service' or plan.get('dialogue_rules_revision') == '2.4' else [15]
         if durations != expected:
             raise ValueError('FILM_DIALOGUE_SEGMENTS_INVALID')
@@ -171,3 +190,10 @@ def validate_day_plan(plan):
     if not 30 <= total <= 40:
         raise ValueError('DAY_PLAN_FILM_DURATION: target 30–40 seconds including the end card')
     return plan
+
+
+def validate_explainer_durations(durations):
+    if (len(durations) not in (3, 4)
+            or any(type(value) is not int or not 10 <= value <= 15 for value in durations)
+            or not 45 <= sum(durations) <= 60):
+        raise ValueError('FILM_EXPLAINER_DURATION_INVALID: 3–4 segments, 10–15 seconds each, 45–60 seconds total')

@@ -9,3 +9,6 @@ google-auth>=2.23
 google-auth-oauthlib>=1.1
 # Optional: local speech-to-text for render/captions.py transcribe and render/check.py --speech
 faster-whisper>=1.0
+# Local Chinese caption comparison. Displayed captions retain the script spelling.
+opencc-python-reimplemented>=0.1.7
+pypinyin>=0.51

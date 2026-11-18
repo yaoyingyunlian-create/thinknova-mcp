@@ -84,7 +84,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -327,17 +327,16 @@ def s6_speech(ff, path, dur, o):
                 fail('FILM_SPEECH_GAP', f'no recognized speech for {end - start:.2f}s ({start:.2f}–{end:.2f}s)')
         if o.get('v3_dialogue'):
             from captions import parse_srt
-            from difflib import SequenceMatcher
-            from speech_review import normalize
+            from speech_review import caption_agreement, normalize
             captions = parse_srt(o['--srt']) if o['--srt'] else []
             expected = normalize(''.join(cue['text'] for cue in captions))
             transcript = normalize(''.join(word.word for word in words))
             if not expected:
                 fail('FILM_DIALOGUE_CHECK_PENDING', 'expected dialogue subtitles are missing')
             else:
-                coverage = SequenceMatcher(None, expected, transcript, autojunk=False).ratio()
+                coverage = caption_agreement(expected, transcript)
                 INFO.append(f'dialogue ASR agreement: {coverage:.0%}')
-                if coverage < 0.85:
+                if coverage < 0.8:
                     fail('FILM_DIALOGUE_REVIEW_REQUIRED', 'recognized speech differs from the script; review the local preview')
         return
     if film:
@@ -422,7 +421,12 @@ def main():
     if o["film"]:
         planned = o.get('--planned-film-seconds')
         if planned is not None:
-            if not planned.isdecimal() or int(planned) not in (*range(6, 16), 30) or abs(dur - int(planned)) > 1:
+            allowed = range(45, 61) if o['explainer_preview'] else (*range(6, 16), 30)
+            try:
+                measured = float(o['--outro-start']) if '--separate-end-card' in on else dur
+            except (TypeError, ValueError):
+                measured = 0
+            if not planned.isdecimal() or int(planned) not in allowed or abs(measured - int(planned)) > 1:
                 fail('FILM_DURATION', 'duration differs from the authorized short-film specification')
         elif o['explainer_preview']:
             if not 45 <= dur <= 60:

@@ -191,6 +191,51 @@ class StoreFilmTests(unittest.TestCase):
         self.assertEqual(cues[1]['start'], 12.0)
         self.assertIsNone(align_captions(['你好！', '明天见。'], spoken, 10))
 
+    def test_caption_alignment_tolerates_chinese_variants_and_uses_audio_windows(self):
+        from types import SimpleNamespace
+        from render.assemble import align_captions, recognized_caption_windows
+
+        def speech(text):
+            return [SimpleNamespace(words=[SimpleNamespace(word=text, start=0.5, end=2.5)])]
+
+        cases = [('新车吗', '新車嗎'), ('头奖', '投獎'), ('欢迎来做头疗', '欢迎来做头')]
+        for original, heard in cases:
+            with self.subTest(script=original, heard=heard):
+                self.assertEqual(align_captions([original], speech(heard), 3)[0]['text'], original)
+        self.assertIsNone(align_captions(['顾客想了解头疗'], speech('明天天气非常不错'), 0))
+        self.assertEqual(recognized_caption_windows(speech('明天天气非常不错'), 2), [(0.5, 2)])
+        self.assertEqual(recognized_caption_windows([], 2), [])
+        without_timestamp = [SimpleNamespace(words=[SimpleNamespace(word='头疗', start=None, end=None)])]
+        self.assertIsNone(align_captions(['头疗'], without_timestamp, 0))
+        self.assertEqual(recognized_caption_windows(without_timestamp, 2), [])
+
+    def test_product_photo_aliases_share_one_reference_slot(self):
+        segment = {'prompt': 'Show the product', 'duration_seconds': 15, 'first_frame_asset_id': 'asset_first',
+                   'customer_product': True, 'reference_roles': ['first_frame', 'staff', 'product'],
+                   'reference_boards': {'staff': 'asset_staff', 'product': 'asset_product'}}
+        assets = {'asset_first', 'asset_staff', 'asset_product'}
+        for field in ('product_photo_asset_id', 'product_sheet_asset_id'):
+            used = generation_arguments(dict(segment, **{field: 'asset_product'}), {}, assets)
+            self.assertEqual(used['reference_asset_ids'], ['asset_first', 'asset_staff', 'asset_product'])
+        self.assertEqual(generation_arguments(segment, {}, assets)['reference_asset_ids'],
+                         ['asset_first', 'asset_staff', 'asset_product'])
+        with self.assertRaisesRegex(ValueError, 'FILM_PRODUCT_PHOTO_CONFLICT'):
+            generation_arguments(dict(segment, product_photo_asset_id='asset_other'), {}, assets)
+        with self.assertRaisesRegex(ValueError, 'FILM_PRODUCT_PHOTO_NOT_AUTHORIZED'):
+            generation_arguments(segment, {}, assets - {'asset_product'})
+        service = dict(segment, customer_product=False, reference_roles=None)
+        self.assertEqual(generation_arguments(service, {}, assets)['reference_asset_ids'], ['asset_first'])
+
+    def test_explainer_render_uses_supported_segment_combinations(self):
+        from render.assemble import Stop, validate_job
+
+        job = {'out': 'film.mp4', 'film': True, 'film_type': 'explainer', 'closing_overlay': ['ThinkNova']}
+        for durations in ([15, 15, 15], [10, 11, 12, 12], [15] * 4):
+            validate_job(dict(job, clips=[{'file': 'shot.mp4', 'dur': duration} for duration in durations]))
+        for durations in ([15, 15, 14], [10] * 5, [9, 15, 15, 15]):
+            with self.assertRaisesRegex(Stop, 'FILM_EXPLAINER_DURATION_INVALID'):
+                validate_job(dict(job, clips=[{'file': 'shot.mp4', 'dur': duration} for duration in durations]))
+
     def test_portrait_quote_rejects_silent_landscape(self):
         from automation import quoted_generation_args
         from unittest.mock import Mock
@@ -217,3 +262,60 @@ class StoreFilmTests(unittest.TestCase):
                               None, {}, checkpoint)
         self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_balance', 'get_balance'])
         checkpoint.assert_not_called()
+
+    def test_explainer_checks_remaining_budget_after_all_quotes(self):
+        client = Mock()
+        client.tool.return_value = {'generation_quote': {
+            'quote_only': True, 'creates_task': False, 'reserves_credits': False, 'estimated_credits': 60,
+            'configured_video_specification': {'ratio': '9:16', 'duration_seconds': 15},
+        }}
+        client.post.return_value = ({'data': {'remaining_credits': 179}}, {})
+        day = '2026-11-18'
+        segment = {'prompt': 'A store scene', 'duration_seconds': 15, 'first_frame_asset_id': 'asset_first'}
+        claim = {'grant': {'daily_budget': 250}, 'run_no': 'run_test', 'usage_date': day}
+        plan = {'date': day, 'rules_version': 2, 'film_type': 'explainer',
+                'shop_name': 'Store', 'featured_service': 'Flowers', 'segments': [segment] * 3}
+        rules = {'version': 2, 'effective_rules': {'authorized_asset_ids': ['asset_first'],
+                 'shop_profile': {'name': 'Store', 'featured_service': 'Flowers'}}}
+        checkpoint = Mock()
+        with self.assertRaisesRegex(RuntimeError, 'DAY_PLAN_OVER_BUDGET'):
+            execute_store_day(client, claim, plan, 250, rules, {'quote_mode_supported': True, 'available_credits': 250},
+                              None, {}, checkpoint)
+        self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_balance'] * 3)
+        checkpoint.assert_not_called()
+
+    def test_explainer_resume_passes_each_planned_duration_to_assembly(self):
+        import hashlib
+        from unittest.mock import patch
+
+        day = '2026-11-18'
+        durations = [10, 11, 12, 12]
+        segments = [{'prompt': 'A store scene', 'duration_seconds': duration, 'first_frame_asset_id': 'asset_first'}
+                    for duration in durations]
+        plan = {'date': day, 'rules_version': 2, 'film_type': 'explainer', 'schema_version': 3,
+                'dialogue_rules_revision': '2.4', 'film_purpose': 'service', 'shop_name': 'Store',
+                'featured_service': 'Flowers', 'segments': segments}
+        steps = {}
+        claim = {'grant': {'daily_budget': 250}, 'run_no': 'run_test', 'usage_date': day}
+        rules = {'version': 2, 'effective_rules': {'authorized_asset_ids': ['asset_first'],
+                 'shop_profile': {'name': 'Store', 'featured_service': 'Flowers'}}}
+        client = Mock()
+        client.tool.return_value = {'status': 'succeeded'}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for index, segment in enumerate(segments):
+                segment['reference_boards'] = {'customer': 'asset_customer', 'staff': 'asset_staff'}
+                steps[f'task_{index}'] = f'task_old_{index}'
+                steps[f'quote_credits_{index}'] = '40'
+                (root / f'shot{index}.mp4').touch()
+            rules['effective_rules']['authorized_asset_ids'].extend(('asset_customer', 'asset_staff'))
+            steps['day_plan_sha256'] = hashlib.sha256(json.dumps(plan, sort_keys=True,
+                                                               ensure_ascii=False).encode('utf-8')).hexdigest()
+            with patch('automation.validate_media'), patch('automation.subprocess.run',
+                    return_value=Mock(returncode=2, stdout='{}')):
+                with self.assertRaisesRegex(RuntimeError, 'FILM_CHECK_FAILED'):
+                    execute_store_day(client, claim, plan, 250, rules, {'available_credits': 0}, root, steps, Mock())
+            job = json.loads((root / 'assemble.json').read_text(encoding='utf-8'))
+            self.assertEqual([clip['planned_seconds'] for clip in job['clips']], durations)
+            self.assertEqual(job['short_dialogue_seconds'], 45)
+        self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_task'] * 4)

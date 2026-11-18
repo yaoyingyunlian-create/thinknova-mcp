@@ -35,7 +35,7 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 - get_content_rules 返回的 effective_rules 是规则来源；本地仅保留 version、rules_schema_version、读取时间和摘要，不能覆盖服务器。
 - needs_onboarding=true 时主动按 missing_fields 提问，每轮最多三问，从目标、受众、平台开始；已回答不再问。没有素材、不出人和无禁忌均可明确记录，不能捏造答案。
 - 将新回答与已有完整规则合并，用 save_content_rules 携带 expected_version 保存；版本冲突重新读取，不能盲目覆盖。成功后更新本地摘要。
-- 默认 pre_publish：按已确认内容方案与预算继续制作，发布前确认。pre_generation：先审脚本再生成。所有模式都先说明方案和预计积分；价格未知则查询或说明，不能编造、扩大预算。
+- 默认 pre_publish：按已确认内容方案与预算制作，首条样片送审。pre_generation：先审脚本再生成。所有模式都先说明预计积分；价格未知先查询。仅启用制作或普通发布时，成片仍须确认。
 - 首次访谈和规则读写不扣积分、不建任务；不以服务器默认审核方式存在就判断访谈已完成。
 - schema v2 可保存 shop_profile 和 style_profile。邀请客户提供喜欢/不喜欢的视频参考，分析真实可读素材的开场、节奏、字幕、口吻与画面；读取不到就说明。参考数量不设最低要求，不假称看过；用户核对后保存。样片属于收费计划，先明确预算。
 
@@ -82,7 +82,7 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 - 普通发布统一入口：python publish/dispatch.py job.json --platform 平台 --dry 生成清单并本地预检；得到该作品/账号/时间的明确确认后使用 --execute --user-confirmed。清单冻结实际传给发布器的配置；保留回执和回读差异。unknown/submitted_unverified 不能写成已发布，不得删除尝试标记重跑。
 - 所有 --dry 均只做本地检查，不登录、不上传、不创建草稿。安装不强制演练上传；首条可以在本地检查通过和明确授权后直接真发。原发布脚本缺少模式时也不得执行。
 
-- 每次真实上传/发布、改定时、再次发布前，展示作品版本、成片、标题、文案、标签、封面、平台、目标账号、时间和时区，并记录用户对该次操作的明确确认；旧的“是”不能授权另一版本/账号/操作。
+- 普通发布、改变排期或超出授权范围的补发须明确确认。首条样片展示成片、标题、文案、标签、封面、平台、目标账号和排期。样片通过时可一并明确启用无人值守发布。授权有效后，日常合格成片按批准的账号、平台和排期执行，无需逐条确认。
 - YouTube 的本地演练：python publish/youtube/upload.py job.json --dry，不登录、不上传、不预约。只有确认后执行 --execute；即使 private 也是实际上传，默认不带模式不会上传。
 - TikTok/小红书/抖音：publish.py job.json --dry 仅本地检查；真实执行必须显式 --execute，先完成当次授权。
 - Facebook/Instagram/LinkedIn/X：publish.py --job job.json --dry；确认后 --execute。脚本涵盖的平台和内容形式不同，LinkedIn 当前仅文字，不承诺未实现平台。
@@ -111,7 +111,7 @@ Controlled automation is a separate opt-in Windows/Codex/YouTube pilot, not ordi
 3. Record asset consent and role. Use at most three references; animate_image must put the actual first frame first. Report first_only honestly.
 4. Persist request/task IDs and billing facts. Network retries reuse the same ID; active tasks are polled. Terminal failure or quality changes require a new request within an authorized budget, never a presumed free retry.
 5. Use render/assemble.py for normalization, joining, captions, loudness and quality checks. Supplied SRT timing is distinct from estimated text timing. Core, browser and account readiness are separate. Check local edits, captions and speech. Upscaling does not add source detail. No fixed durations, perfect identity/voice/text guarantees or frame-freeze padding.
-6. Each real upload/publication needs explicit confirmation for that content/account/time. YouTube --dry is LOCAL only; --execute performs real upload. All --dry modes are local-only; no platform drafts or uploads. Use publish/dispatch.py to freeze per-platform copy/account/artifact manifests and check recent duplicates. Unknown outcomes require reconciliation. Stop on verification/label failures; verify whether a failed run already posted before retrying.
+6. Review the first sample and platform manifests with the customer. The customer may explicitly enable unattended publishing in the same review. With a current grant, publish later films that pass quality checks to the approved accounts and schedule without asking again. Ordinary publication requires per-post approval. Dry runs are local. Reconcile unknown outcomes before retrying.
 7. Preserve active memory sections and full archive snapshots. Maintenance only collects metrics, archives history and writes local reminders; it never starts an AI session or generates/publishes content. Do not store secrets or invent analytics/expiry dates.
 
 8. Read server platform rules: hard constraints override account preferences, which override operator recommendations. Draft rules are inactive. Keep platform-specific copy/tag manifests and seven-day variation notes; do not invent analytics.
@@ -172,10 +172,10 @@ The runner currently gates only shots whose plan contains 小程序: local ASR r
 
 ## 门店成片默认流程 / Store film workflow
 
-- 制作客户门店视频前先读 skills/门店成片/SKILL.md，复制六拍拼片模板到客户工作目录，按已有素材、规则和授权填写。门店样片使用 film 模式完成 30–40 秒成片后再送审。只把通过机器检查的成片列入待审核清单。
-- 生成后提醒客户检查完整视频和各平台的标题、正文、标签、封面、账号、发布时间。用 publish/dispatch.py 的 --dry 获取各平台清单和哈希。只有客户确认该版本后才用 --approve-review HASH --user-confirmed 登记。每次开工先检查上次待审清单并提醒，修改内容后重新审核。自动发布需要单独授权。
+- 门店片读取 skills/门店成片/SKILL.md。新品类产品片和服务片使用两段，各 15 秒，默认片尾叠字。讲解种草用 3–4 段、总长 45–60 秒。仅把质检通过的成片列入待审清单。
+- 首条样片用 publish/dispatch.py 的 --dry 准备各平台清单和哈希，客户确认后用 --approve-review HASH --user-confirmed 登记。普通发布继续按当前版本确认。已明确启用无人值守发布后，按当前授权和质检结果执行。
 - Mac 转写由 FFmpeg 解码后交给本机 Whisper。需要本地语音模型缓存。模型缺失或音频解码失败时记录待处理。
-- For store videos read the store-film skill and use the six-beat template. Run the film gate, then present the complete video and per-platform dispatch manifests for customer review. Remind customers of outstanding reviews at the next session. Record explicit approval of each manifest hash. A changed artifact or publishing payload requires review again. Automatic publication requires a separate authorization.
+- Read the store-film skill. Use two 15-second segments for ordinary product and service films, or 3–4 segments totaling 45–60 seconds for explainers. Review the first film and its platform manifests. Subsequent publishing follows the current unattended grant or the ordinary per-post review.
 
 ### YouTube 一次启用 / YouTube setup
 

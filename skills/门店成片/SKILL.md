@@ -21,21 +21,21 @@ get_balance 的 quote_request 把这条片要的首帧和每段视频逐项报�
 
 新版 2.4 产品片和服务片都用两段 15 秒，每段 55–62 字。手写 job 填 `film_profile: "store_v2"`、`film_schema_version: 3`、`film_rules_revision: "2.4"`、`dialogue_segment_count: 2` 和 `short_dialogue_seconds: 30`。用 `closing_overlay` 在最后 2.5 秒叠加已确认信息，`closing_overlay_top` 可在 150–380 调整。字幕按转写对齐，不确定时留本机预览。可在 `srt` 指定已经核对的成片字幕时间，拼片将保持片段原速。模板见 `render/templates/store-film-v24.example.json`。
 
-For revision 2.4, both product and service films use two 15-second segments. Use a closing overlay and verify captions against speech before delivery. Manual explainer fixtures may use `explainer_preview: true` with 3–5 clips and a total of 45–60 seconds; this is a preview workflow. A clip's `cutaway: {file, start, dur, at}` changes picture only. The source dialogue remains the audio track.
+For revision 2.4, ordinary product and service films use two 15-second segments. Use a closing overlay unless the customer explicitly asks for a separate card. Explainer films use 3–4 segments, each 10–15 seconds, totaling 45–60 seconds. Reuse the original dialogue track across cutaways.
 
-现有日计划由工具包生成拼片配置。手工准备画内对白片时，产品填一段，15 秒服务片填两段；服务片用 `dialogue_segment_count: 2` 和 `short_dialogue_seconds: 30`，单段用该段的报价时长。用 `closing_overlay` 把确认过的信息叠在最后 2.5 秒，画内对白片不填写 `end_card`。旧的六拍模板仅适用于旧计划。
+日计划由工具包生成拼片配置。手工讲解种草填 `film_type: "explainer"`、各段 `dur`、实际段数和合计时长。独立片尾卡仅按客户明确要求使用，此时用 `end_card`。旧的六拍模板用于旧计划。
 ```
 .venv/bin/python render/assemble.py job.json --json
 ```
 - **整段用，段与段直接接。** 台词写够了的片段不用裁。只裁两种：每段开头结尾多出来的空白（超过 1 秒才裁，量法：`ffmpeg -i clip.mp4 -af silencedetect=noise=-35dB:d=0.4 -f null -`）；某个阶段画面坏了（多了字、人走样），只剪掉那一阶段。
 - 片段里有超过 1 秒的没人声：不是去剪画面，是台词写短了——下次把这一段台词写够；这一次用配乐垫住，或把这一段带着更长的台词重新生成（先说明费用）。
 - `subs` 逐字照台词写，每屏一句、不超过 8 个非空白字符（字号 90）；长句拆成几屏。双语在旁边加 `subs2`，条数一一对应。
-- 店名或主推项必须在口播或字幕里出现至少一次（不靠片尾卡）。片尾卡按平台：小红书版不加片尾卡；其他平台 2～3 秒，店名 + 一句这家店解决什么。联系方式和地址放账号主页资料，不放进片子。
+- 口播或字幕必须含店名或主推项。到店片由店里的人说一个已核实的位置提示或预约动作，并将店名和该项信息叠在原画面末尾。完整地址和电话放账号主页。
 - 有店主批准的配乐就加 `music`，`music_db` 用 -22。
 
 ## 三、验收：全部通过才交付
-`.venv/bin/python render/check.py 成片.mp4 --film --outro-start <片尾卡开始的秒数> --sheet 输出目录`，再打开联系表逐项看：
-- [ ] 画内对白片符合计划时长（单段或两段 30 秒），竖屏 1080×1920，机器检查没有 FAIL
+使用拼片输出的质检报告与联系表。拼片会把实际片尾起点和计划时长传给质检器：
+- [ ] 画内对白片符合当前计划时长，竖屏 1080×1920，机器检查通过
 - [ ] 第一秒有人在做事，不是文字卡、不是空镜
 - [ ] 画内对白片检查至片尾叠字前，口播空档不超过 2 秒；允许自然的换人停顿。旧计划仍用自身门槛。
 - [ ] 全片是同一个人：脸、发型、衣服没变；店里的镜头看得出是这家店
@@ -65,4 +65,4 @@ For revision 2.4, both product and service films use two 15-second segments. Use
 普通发布按本条作品确认。经明确授权并已验收的无人值守发布按已授权的账号、预算和排期执行。 Ordinary publishing requires approval for the current work. Validated unattended publishing follows the confirmed authorization.
 
 ## English summary
-For in-scene dialogue, use one planned shot or two 15-second service segments. Overlay confirmed closing text on the last 2.5 seconds of the footage. At size 90 split Chinese captions to at most eight characters per screen, keeping translations aligned with the primary cues. Review the contact sheet and listen against the script for action, identities and spoken lines. The review package includes the film, each segment’s dialogue, the references confirmed by the generation receipt, and the original machine check report. Legacy plans continue to use their own timing profile.
+For ordinary in-scene dialogue, use two 15-second segments. Overlay confirmed closing text on the last 2.5 seconds by default. At size 90 split Chinese captions to at most eight characters per screen, keeping translations aligned. Review the contact sheet and listen against the script. Include the film, dialogue, applied references and the machine report. Resume legacy plans with their original timing profile.

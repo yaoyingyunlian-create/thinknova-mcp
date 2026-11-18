@@ -1,7 +1,7 @@
 """Opt-in Windows/Codex/YouTube controlled pilot. No AI-generated shell commands."""
 from __future__ import annotations
 import argparse
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timezone
 import getpass
 import hashlib
 import json
@@ -114,7 +114,7 @@ def review_spoken_terms(path, prompt):
     # ASR agreement is evidence only, never a pronunciation certificate.
 
 
-def quoted_generation_args(client, tool, args, balance):
+def quoted_generation_args(client, tool, args, balance, require_duration=False):
     # Quotes always use a read-only tool. Old/mixed deployments can omit the quote, but cannot create paid work.
     if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
     response=client.tool('get_balance',{'quote_request':{'tool':tool,'arguments':args}})
@@ -126,6 +126,8 @@ def quoted_generation_args(client, tool, args, balance):
         specification = quote.get('configured_video_specification') or quote.get('specification') or {}
         if not isinstance(specification, dict) or specification.get('ratio') != args['ratio']:
             raise RuntimeError('MCP_VIDEO_QUOTE_RATIO_MISMATCH')
+        if require_duration and specification.get('duration_seconds') != args['duration_seconds']:
+            raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_MISMATCH')
     if 'reference_roles' in args and quote.get('applied_reference_asset_ids') != args['reference_asset_ids']:
         raise RuntimeError('MCP_FILM_QUOTE_REFERENCE_MISMATCH')
     return {**args,'max_credits':credits}
@@ -254,23 +256,29 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         rows = plan.get('week_rows')
         if not isinstance(rows, list):
             raise RuntimeError('DAY_PLAN_WEEK_REQUIRED')
+        slot = plan.get('work_slot', 1)
         history_path = STATE / f"topics-{grant['channel_id']}-{grant['project_key']}.json"
         history = json.loads(history_path.read_text(encoding='utf-8')) if history_path.is_file() else []
+        history = [row for row in history if (row['date'], row.get('work_slot', 1)) != (plan['date'], slot)]
         if plan.get('schema_version') == 3:
             rows = [dict(row) for row in rows]
             selected = next((row for row in rows if row['date'] == plan['date']), None)
             if selected:
                 selected.update(visual_batch=plan['visual_batch'], customer_identity=plan['customer_identity'])
-                previous = (date.fromisoformat(plan['date']) - timedelta(days=1)).isoformat()
-                if any(row['date'] == previous and row.get('customer_identity') == plan['customer_identity'] for row in history):
+                preceding = [row for row in history if row['date'] < plan['date'] and row.get('customer_identity')]
+                previous = max(preceding, key=lambda row: (row['date'], row.get('work_slot', 1)), default={})
+                if (previous.get('customer_identity') == plan['customer_identity']
+                        or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
+                               for row in history)):
                     raise RuntimeError('FILM_CUSTOMER_REPEATED')
         validate_rotation(rows, history, shop.get('editorial') or {}, plan.get('schema_version', 1))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
+        editorial_row['work_slot'] = slot
         if plan.get('dialogue_rules_revision') in ('2.1', '2.4'):
             day = date.fromisoformat(plan['date'])
-            recent_lines = [line for row in history if 0 < (day - date.fromisoformat(row['date'])).days <= 7
+            recent_lines = [line for row in history if 0 <= (day - date.fromisoformat(row['date'])).days <= 7
                             for line in row.get('dialogue_lines', [])]
             editorial_row['dialogue_lines'] = dialogue_v21_lines(plan, recent_lines)
         for platform, entry in (rules.get('platform_rules') or {}).items():
@@ -298,7 +306,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         if f'task_{index}' in steps and price_key in steps:
             args['max_credits'] = int(steps[price_key])
         else:
-            args = quoted_generation_args(client, 'animate_image', args, balance)
+            args = quoted_generation_args(client, 'animate_image', args, balance,
+                                          require_duration=plan.get('film_type') == 'explainer')
         requests.append(args)
     total = sum(args['max_credits'] for args in requests)
     if total > min(budget, int(grant['daily_budget'])):
@@ -306,6 +315,16 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     new_total = sum(args['max_credits'] for index, args in enumerate(requests) if f'task_{index}' not in steps)
     if new_total > int(balance.get('available_credits', 0)):
         raise RuntimeError('DAY_PLAN_INSUFFICIENT_CREDITS')
+    if plan.get('film_type') == 'explainer' and new_total:
+        if all(type(balance.get(k)) is int for k in ('daily_limit', 'daily_used_or_reserved')):
+            if new_total > balance['daily_limit'] - balance['daily_used_or_reserved']:
+                raise RuntimeError('DAY_PLAN_OVER_BUDGET')
+        current, _ = client.post('/mcp/device/configuration', {})
+        remaining = (current.get('data') or {}).get('remaining_credits')
+        if type(remaining) is not int:
+            raise RuntimeError('DAY_PLAN_BUDGET_UNAVAILABLE')
+        if new_total > remaining:
+            raise RuntimeError('DAY_PLAN_OVER_BUDGET')
     steps['stage'] = 'generation'
     checkpoint()
     clips = []
@@ -342,8 +361,11 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             if not assets:
                 raise RuntimeError('VIDEO_DELIVERY_MISSING')
             download(assets[0]['download_url'], path, task_id=steps[key])
-        clips.append({'file': path.name, 'fit': 'cover', **{
-            key: segment[key] for key in ('beats', 'subs', 'subs2') if key in segment}})
+        clip = {'file': path.name, 'fit': 'cover', **{
+            key: segment[key] for key in ('beats', 'subs', 'subs2') if key in segment}}
+        if plan.get('film_type') == 'explainer':
+            clip['planned_seconds'] = segment['duration_seconds']
+        clips.append(clip)
     steps['stage'] = 'render'
     checkpoint()
     output = directory / 'final.mp4'
@@ -387,8 +409,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     publish_payload = {'video': str(output), 'film': True, 'platforms': plan['platforms']}
     if editorial_row is not None:
         publish_payload.update(marketing_standard='store_v2', copy_policies=copy_policies)
-        history = [row for row in history if row['date'] != plan['date']]
-        atomic(history_path, sorted([*history, editorial_row], key=lambda row: row['date'])[-120:])
+        atomic(history_path, sorted([*history, editorial_row], key=lambda row: (row['date'], row.get('work_slot', 1)))[-120:])
     atomic(publish_job, publish_payload)
     summary = {'status': 'awaiting_review', 'output': str(output), 'publish_job': str(publish_job),
                'run_no': run_no, 'quoted_credits': total,
@@ -564,7 +585,8 @@ def daily_film(project, day, work_slot=1):
         grant = payload.get('data') or {}
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
-        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version': 4})
+        payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version':
+            5 if grant.get('day_plan_request_version') == 5 else 4})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -617,7 +639,8 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 return
         else:
             try:
-                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version': 4})
+                response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version':
+                    5 if grant.get('day_plan_request_version') == 5 else 4})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})

@@ -6,12 +6,45 @@ import json
 import re
 import subprocess
 import sys
+import unicodedata
+from difflib import SequenceMatcher
+from functools import lru_cache
 from types import SimpleNamespace
 from pathlib import Path
 
 
 def normalize(text):
     return re.sub(r"[\W_]", "", text, flags=re.UNICODE).casefold()
+
+
+@lru_cache(maxsize=1)
+def caption_converter():
+    try:
+        from opencc import OpenCC
+        return OpenCC('t2s').convert
+    except ImportError:
+        return str
+
+
+def caption_chars(text):
+    converted = caption_converter()(unicodedata.normalize('NFKC', text)).casefold()
+    return [char for char in converted if unicodedata.category(char)[0] in 'LN']
+
+
+def caption_match(expected, actual):
+    try:
+        from pypinyin import Style, lazy_pinyin
+    except ImportError:
+        expected_keys, actual_keys = expected, actual
+    else:
+        expected_keys, actual_keys = (
+            lazy_pinyin(''.join(chars), style=Style.TONE3, errors=list) for chars in (expected, actual)
+        )
+    return SequenceMatcher(None, expected_keys, actual_keys, autojunk=False)
+
+
+def caption_agreement(expected, actual):
+    return caption_match(caption_chars(expected), caption_chars(actual)).ratio()
 
 
 def evaluate(segments, required):

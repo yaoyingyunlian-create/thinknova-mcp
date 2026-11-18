@@ -57,6 +57,7 @@ def emit(value):
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.dirname(HERE))
 from captions import ass_time, write_srt, parse_srt, safe_subtitle_text  # noqa: E402
 
 W, H, FPS, SR = 1080, 1920, 30, 48000
@@ -194,25 +195,54 @@ def time_subs(lines, chunks, offset):
 
 
 def align_captions(lines, spoken, offset):
-    # Compare normalized transcribed and reviewed text, while keeping the original caption spelling.
-    import unicodedata
-    def letters(text):
-        return ''.join(char.casefold() for char in text if unicodedata.category(char)[0] in 'LN')
-    tokens = [(letters(word.word), word.start, word.end) for span in spoken for word in (span.words or [])]
-    tokens = [token for token in tokens if token[0]]
-    expected = [letters(line) for line in lines]
-    if not all(expected) or ''.join(token[0] for token in tokens) != ''.join(expected):
+    from speech_review import caption_chars, caption_match
+
+    actual, timings = [], []
+    for span in spoken:
+        for word in span.words or []:
+            chars = caption_chars(word.word)
+            start, end = word.start, word.end
+            if (chars and isinstance(start, (int, float)) and isinstance(end, (int, float))
+                    and math.isfinite(start) and math.isfinite(end) and 0 <= start < end):
+                step = (end - start) / len(chars)
+                actual.extend(chars)
+                timings.extend((start + i * step, start + (i + 1) * step) for i in range(len(chars)))
+    expected = [caption_chars(line) for line in lines]
+    if not actual or not all(expected):
         return None
-    timings = [(start, stop) for token, start, stop in tokens for _ in token]
-    offset_chars, cues = 0, []
+    match = caption_match([char for line in expected for char in line], actual)
+    if match.ratio() < 0.8:
+        return None
+    positions = {a + i: b + i for a, b, size in match.get_matching_blocks() for i in range(size)}
+    cursor, cues = 0, []
     for line, normalized in zip(lines, expected):
-        last = offset_chars + len(normalized) - 1
-        start, end = timings[offset_chars][0], timings[last][1]
+        end_cursor = cursor + len(normalized)
+        matched = [positions[index] for index in range(cursor, end_cursor) if index in positions]
+        if not matched:
+            return None
+        start, end = timings[matched[0]][0], timings[matched[-1]][1]
         if not start < end or (cues and start + offset < cues[-1]['end'] - 0.02):
-            return None  # ASR cannot resolve a boundary inside the same timed word.
+            return None
         cues.append({'text': line, 'start': start + offset, 'end': end + offset})
-        offset_chars = last + 1
+        cursor = end_cursor
     return cues
+
+
+def recognized_caption_windows(spoken, duration):
+    windows = []
+    for span in spoken:
+        for word in span.words or []:
+            start, end = word.start, word.end
+            if not (isinstance(start, (int, float)) and isinstance(end, (int, float))
+                    and math.isfinite(start) and math.isfinite(end)):
+                continue
+            start, end = max(0, start), min(duration, end)
+            if start < end and word.word.strip():
+                if windows and start <= windows[-1][1]:
+                    windows[-1] = (windows[-1][0], max(end, windows[-1][1]))
+                else:
+                    windows.append((start, end))
+    return windows
 
 
 def norm_shot(ff, fp, base, c, idx, wk):
@@ -515,6 +545,18 @@ def validate_job(job):
     if job.get('explainer_preview') and (not job.get('film') or job.get('film_profile')
             or not 3 <= len(job.get('clips', [])) <= 5):
         raise Stop('FILM_EXPLAINER_PREVIEW_INVALID: use film=true with three to five clips', 2)
+    if job.get('film_type') == 'explainer':
+        from store_film import validate_explainer_durations
+        durations = [clip.get('planned_seconds', clip.get('dur')) if isinstance(clip, dict) else None
+                     for clip in job['clips']]
+        try:
+            validate_explainer_durations(durations)
+        except ValueError as exc:
+            raise Stop(str(exc), 2) from exc
+        if job.get('short_dialogue_seconds', sum(durations)) != sum(durations):
+            raise Stop('FILM_EXPLAINER_DURATION_INVALID: total differs from segment plan', 2)
+        if sum(isinstance(clip, dict) and 'cutaway' in clip for clip in job['clips']) > 1:
+            raise Stop('FILM_EXPLAINER_CUTAWAY_LIMIT: use one lifestyle cutaway at most', 2)
     if 'closing_overlay' in job:
         lines = job['closing_overlay']
         top = job.get('closing_overlay_top', 220)
@@ -531,8 +573,9 @@ def validate_job(job):
         if job.get('film_rules_revision') == '2.4' and 'cutaway' in clip:
             cutaway = clip['cutaway']
             limit = cutaway.get('dur') if isinstance(cutaway, dict) else None
-            if type(limit) not in (int, float) or not math.isfinite(limit) or not 0.1 < limit <= 2:
-                raise Stop('FILM_DIALOGUE_CUTAWAY_DURATION: detail cutaway may last at most two seconds', 2)
+            max_duration = 3 if job.get('film_type') == 'explainer' else 2
+            if type(limit) not in (int, float) or not math.isfinite(limit) or not 0.1 < limit <= max_duration:
+                raise Stop(f'FILM_DIALOGUE_CUTAWAY_DURATION: detail cutaway may last at most {max_duration} seconds', 2)
         for key in ('start', 'tail', 'dur'):
             if key in clip: number(clip[key], prefix + '.' + key, 0.101 if key == 'dur' else 0)
         if clip.get('fit', 'cover') not in ('cover', 'contain') or clip.get('audio', 'keep') not in ('keep', 'mute'):
@@ -573,6 +616,8 @@ def run_delivery_check(ff, fp, video, srt, options):
         cmd += ['--film', '--outro-start', str(options['outro_start'])]
         if options.get('short_dialogue_seconds'):
             cmd += ['--planned-film-seconds', str(options['short_dialogue_seconds'])]
+        if options.get('separate_end_card'):
+            cmd += ['--separate-end-card']
         if options.get('explainer_preview'):
             cmd += ['--explainer-preview']
         if options.get('no_outro'):
@@ -751,10 +796,10 @@ def main():
         raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
     if store_film:
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
-        sys.path.insert(0, os.path.dirname(HERE))
         from store_film import validate_beats
         if job.get('film_schema_version') == 3:
-            if not job.get('short_dialogue_seconds') or job.get('dialogue_segment_count') not in (1, 2):
+            counts = (3, 4) if job.get('film_type') == 'explainer' else (1, 2)
+            if not job.get('short_dialogue_seconds') or job.get('dialogue_segment_count') not in counts:
                 raise Stop('FILM_DIALOGUE_SEGMENTS_INVALID', 2)
         else:
             try:
@@ -792,6 +837,7 @@ def main():
             protected_names = tuple(dict.fromkeys(name.strip() for name in names if isinstance(name, str) and name.strip()))
         caption_alignment_pending = False
         caption_alignment_used = False
+        caption_alignment_estimated = False
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
             if store_film:
@@ -802,12 +848,16 @@ def main():
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
             if job.get('explainer_preview') and not 9.95 <= dur <= 15.05:
                 raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} is outside 10-15 seconds', 2)
+            planned_clip = c.get('planned_seconds', c.get('dur')) if job.get('film_type') == 'explainer' else None
+            if planned_clip is not None and abs(dur - planned_clip) > 0.1:
+                raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} measured {dur:.2f}s, planned {planned_clip}s', 2)
             if store_film and not verified_srt:
                 dialogue = bool(job.get('short_dialogue_seconds'))
                 try:
                     shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i,
                                                         keep_dialogue_duration=dialogue,
-                                                        planned_seconds=(job['short_dialogue_seconds'] / len(job['clips'])
+                                                        planned_seconds=(planned_clip if job.get('film_type') == 'explainer'
+                                                                         else job['short_dialogue_seconds'] / len(job['clips'])
                                                                          if dialogue else None))
                 except Stop as exc:
                     if not dialogue or not str(exc).startswith('FILM_PACE_UNAVAILABLE'):
@@ -836,10 +886,18 @@ def main():
                         spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
                                               word_timestamps=True, vad_filter=True)
                         shot_cues = align_captions(lines, spoken, t)
+                        if shot_cues is None:
+                            windows = recognized_caption_windows(spoken, dur)
+                            if windows:
+                                shot_cues = time_subs(lines, windows, t)
+                                for cue, line in zip(shot_cues, lines):
+                                    cue['text'] = line
+                                caption_alignment_estimated = True
+                        else:
+                            caption_alignment_used = True
                     except (RuntimeError, ImportError):
                         pass
                     caption_alignment_pending |= shot_cues is None
-                    caption_alignment_used |= shot_cues is not None
                 if shot_cues is None:
                     shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
                 if secondary is not None:
@@ -860,11 +918,14 @@ def main():
         if job.get('short_dialogue_seconds'):
             planned = job['short_dialogue_seconds']
             count = job.get('dialogue_segment_count', 1)
-            if (type(count) is not int or count not in (1, 2) or len(parts) != count or type(planned) is not int
-                    or (count == 1 and not 6 <= planned <= 15) or (count == 2 and planned != 30)
-                    or job.get('end_card') or not job.get('closing_overlay')):
+            explainer = job.get('film_type') == 'explainer'
+            valid = (count in (3, 4) and 45 <= planned <= 60) if explainer else (
+                (count == 1 and 6 <= planned <= 15) or (count == 2 and planned == 30))
+            if (type(count) is not int or len(job['clips']) != count or type(planned) is not int or not valid
+                    or not (job.get('end_card') or job.get('closing_overlay'))):
                 raise Stop('FILM_DIALOGUE_SEGMENTS_INVALID', 2)
-            card_span = (max(0, t - 2.5), t)
+            if card_span is None:
+                card_span = (max(0, t - 2.5), t)
         elif job.get('closing_overlay'):
             card_span = (max(0.1, t - 2.5), t)
         job["_total"] = t
@@ -912,7 +973,8 @@ def main():
         options = {'outro_start': (card_span[0] if card_span else t) if job.get('film') else None,
                    'speech_language': job.get('speech_language'), 'max_dur': job.get('max_dur'),
                    'no_outro': bool(job.get('film') and not card_span),
-                   'explainer_preview': bool(job.get('explainer_preview'))}
+                   'explainer_preview': bool(job.get('explainer_preview') or job.get('film_type') == 'explainer'),
+                   'separate_end_card': bool(job.get('end_card'))}
         if job.get('short_dialogue_seconds'):
             options.update(short_dialogue_seconds=job['short_dialogue_seconds'], outro_start=card_span[0],
                            film_schema_version=job.get('film_schema_version'))
@@ -921,7 +983,8 @@ def main():
         if store_film:
             options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
-                  'subtitle_timing': ('review_required' if caption_alignment_pending else 'aligned' if caption_alignment_used
+                  'subtitle_timing': ('review_required' if caption_alignment_pending else 'asr_estimated' if caption_alignment_estimated
+                                      else 'aligned' if caption_alignment_used
                                       else 'provided' if job.get('srt') else 'estimated' if cues else 'not_applicable')}
         if store_film:
             result['speech_pace'] = pace_report

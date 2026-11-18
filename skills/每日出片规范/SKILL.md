@@ -17,8 +17,8 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 
 1. **可以直接说的事实**（5～10 条）：这家店解决什么问题、给什么人、主推的 1～3 样、做法上的特别之处（几味料、熬几小时、做多久）、店主自己的经历。每条标「店主已确认」。确认过的以后直接用，⛔ 每条片再问一遍。
 2. **不能说的**：只记店主点名的和行业红线（疗效、保证、编的评价）。⛔ 把「待确认」写成默认禁止——没确认的去问，不是不说。
-3. **固定主角**：一个虚构的典型顾客（年龄段、职业、最烦的那件事），生成一张**三视图设定板**（同一个人的正面、侧面、背面全身，同一身衣服，白底，1:1）存进素材库，以后不换；每镜首帧都带它当参考。⛔ 只出一张半身照。照 `rules/固定角色系列短片.md` 和「镜头提示词」第三节做。
-4. **主页资料**：给店主要发的每个平台各写一版主页简介（给谁、解决什么问题、地址、怎么预约），交店主自己贴到账号主页。地址和联系方式放这里，⛔ 放进片子和每条正文。
+3. **人物三视图**：店里的人固定使用一套授权三视图。每条片换一个虚构顾客，同一条片内用同一套顾客三视图。按「镜头提示词」核对每段实际采用的参考。
+4. **到店片收尾与主页**：最后一句由店里的人说一个已核实的位置提示或预约动作，二选一。店名与这项信息进入字幕和片尾叠字。完整地址和电话放平台主页简介。
 5. **角度表**：把下面七个角度各填一行这家店自己的内容。平时讲痛点、解决什么问题、给谁；价格只在活动周讲。
 
 | # | 角度 | 片型 | 填什么 |
@@ -62,10 +62,10 @@ Before drafting, record audience/problem, confirmed benefits and the intended ac
 - 各平台分别写，写法见「门店成片」第六节的表。
 - AI 标注：只打开平台自带的 AI 标签开关，⛔ 在每条正文里再写一遍免责声明。
 
-## 六、店主只确认三次
+## 六、样片审核与后续发布
 
-普通发布按本条作品确认。经明确授权并已验收的无人值守发布按已授权的账号、预算和排期执行。 Ordinary publishing requires approval for the current work. Validated unattended publishing follows the confirmed authorization.其余你自己按本规范做完，⛔ 把台词、镜头表、检查报告逐条推给店主审。
+首条样片与各平台发布信息一起请店主确认。客户可在这一步明确开启无人值守发布。已有有效授权的合格成片按授权的账号、平台、预算和排期执行。普通发布仍按本条作品确认。
 
 ## English summary
 
-Use the project’s editorial rules. The bundled format and dialogue defaults fill gaps. Quote each 15-second segment, verify all three approved references are applied, and use the toolkit for assembly, quality checks and the review package.
+Use the project's editorial rules. Reuse the approved staff turnaround, and choose a different customer for each film. For a visit, have the staff say one verified location cue or booking action; keep the full address and phone in the profile. Quote all segments and verify applied references. Review the first film and platform copy with the customer. Later qualifying films follow the active unattended grant, when enabled.
