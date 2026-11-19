@@ -112,7 +112,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
     if location and not set(refs).intersection(shop_assets.get(location, [])):
         raise ValueError('FILM_SHOP_REFERENCE_REQUIRED')
     result = {'prompt': prompt, 'duration_seconds': seconds, 'reference_asset_ids': refs,
-            'visual_subject': 'customer_identity' if location or product_board or segment.get('customer_identity') else 'generic',
+            'visual_subject': segment.get('visual_subject') or ('customer_identity' if location or product_board or segment.get('customer_identity') else 'generic'),
             'film_profile': 'store_v2', 'ratio': '9:16'}
     if roles is not None:
         if len(refs) != 3:
@@ -132,7 +132,8 @@ def validate_day_plan(plan):
     day = plan.get('date')
     if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or type(plan.get('rules_version')) is not int:
         raise ValueError('DAY_PLAN_DATE_OR_RULES_INVALID')
-    for field in ('shop_name', 'featured_service', 'opening', 'visual_batch'):
+    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') == '59'
+                  else ('shop_name', 'featured_service', 'opening', 'visual_batch')):
         if not isinstance(plan.get(field), str) or not plan[field].strip():
             raise ValueError(f'DAY_PLAN_REQUIRED: {field}')
     segments = plan.get('segments')

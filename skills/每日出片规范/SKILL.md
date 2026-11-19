@@ -13,10 +13,10 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 
 ## 一、店铺档案（第一次连上时建一次，存 memory 和 save_content_rules）
 
-访谈只问店主张口能答的，问完你自己填好下面五样，给店主确认一次：
+复用已有资料填写档案；只有不知道卖什么时提问，下面项目不要求填满才出片：
 
-1. **可以直接说的事实**（5～10 条）：这家店解决什么问题、给什么人、主推的 1～3 样、做法上的特别之处（几味料、熬几小时、做多久）、店主自己的经历。每条标「店主已确认」。确认过的以后直接用，⛔ 每条片再问一遍。
-2. **不能说的**：只记店主点名的和行业红线（疗效、保证、编的评价）。⛔ 把「待确认」写成默认禁止——没确认的去问，不是不说。
+1. **可以直接说的事实**（有几条用几条）：这家店解决什么问题、给什么人、主推的 1～3 样、做法上的特别之处（几味料、熬几小时、做多久）、店主自己的经历。每条标「店主已确认」。确认过的以后直接用，⛔ 每条片再问一遍。
+2. **不能说的**：只记店主点名的和行业红线（疗效、保证、编的评价）。⛔ 把「待确认」写成默认禁止——未确认的不编，优先换已核实内容，不等待补齐。
 3. **人物三视图**：店里的人固定使用一套授权三视图。每条片换一个虚构顾客，同一条片内用同一套顾客三视图。按「镜头提示词」核对每段实际采用的参考。
 4. **到店片收尾与主页**：最后一句由店里的人说一个已核实的位置提示或预约动作，二选一。店名与这项信息进入字幕和片尾叠字。完整地址和电话放平台主页简介。
 5. **角度表**：先读 rules/store-film-category-v54.md 对应品类，选有资料支撑的一项。首条只准备当天方案，资料不足三项或七天未排满也可继续。已核实价格可以讲，活动按有效日期执行。
@@ -31,7 +31,7 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 | 6 | 适合谁 | 剧情 | 哪种人最该来、来了解决什么 |
 | 7 | 常见问题 | 剧情 | 顾客问得最多的一个问题 |
 
-写脚本前按「做法和原因」「看得见的东西」「顾客常遇的小事」盘点已确认事实，分别存到 `shop_profile.confirmed_facts` 的 `methods_and_reasons`、`visible_details`、`customer_situations`。资料足够即按事实写，末尾附缺项。影响准确性或授权的缺项才阻塞对应镜头。排片规则存 `editorial_instructions`，画面外观、风格、禁项存 `visual_constraints`。
+写脚本前按「做法和原因」「看得见的东西」「顾客常遇的小事」盘点已确认事实，分别存到 `shop_profile.confirmed_facts` 的 `methods_and_reasons`、`visible_details`、`customer_situations`。资料足够即按事实写，末尾附缺项。资料不足先换通用示意镜头；已有素材归属和费用授权仍在对应步骤校验。排片规则存 `editorial_instructions`，画面外观、风格、禁项存 `visual_constraints`。
 
 新版档案补充 `category`（品类）、`viewer_action`（看完做什么）、`customer_quotes`（原话、来源及公开授权）和 `missing_information`。服装拍上身走动和细节；保健品展示外包装，从已核实的需求和特色讲，避免打开或倒出；美容美发从具体困扰和服务过程讲。缺项列清单，用能核实的资料继续。
 
@@ -41,7 +41,7 @@ description: 给客户排一周的片、做每天那一条之前必须先读。�
 Before drafting, record audience/problem, confirmed benefits and the intended action. Use the project's checklist. Send missing facts to operations, and omit any unsupported experience claim.
 
 
-新版 54 按已知人群、场景、痛点和特色准备当天计划，记录选用角度与资料出处，逐日增加候选。相邻作品更换有资料支撑的角度和拍法。旧版七天计划按保存时的规则恢复。活动到期排除过期主题。
+新版 59 按已知人群、场景、痛点和特色准备当天计划，记录选用角度与资料出处，逐日增加候选。相邻作品更换有资料支撑的角度和拍法。旧版七天计划按保存时的规则恢复。活动到期排除过期主题。
 
 拍法可选顾客心里话、剧情、趣味剧情、探店、过程揭秘、前后对比、问答、产品特写、折扣和一天或一单。用 python toolkit.py validate-week 校验选题池，每天只准备一条可执行日计划。工具包负责报价、取件和拼片，异常写入运行诊断。
 
@@ -69,3 +69,7 @@ Before drafting, record audience/problem, confirmed benefits and the intended ac
 ## English summary
 
 Use the project's editorial rules. Reuse the approved staff turnaround, and choose a different customer for each film. For a visit, have the staff say one verified location cue or booking action; keep the full address and phone in the profile. Quote all segments and verify applied references. Review the first film and platform copy with the customer. Later qualifying films follow the active unattended grant, when enabled.
+
+
+修订59执行补充：新脚本以 rules/store-film-rules-v59.md 为准，品类表不变。只知道产品或服务也先出片，店名可空。缺照片由工具包准备示意首帧和必要人物图；有授权实图优先引用。缺原话用店员陈述已核实信息，讲解首尾同样适用，不编造体验。创作自查重写一次后建议项记警告。质量政策由服务器返回；58政策下语速、停顿、低运动及30%～80%吻合度不拦交付，转写未知修复一次后记警告，实际严重错配进入有界恢复。费用包含素材和重做，不突破已有预算。旧计划保留原契约。
+Revision 59 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.

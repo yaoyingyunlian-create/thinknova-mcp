@@ -61,7 +61,7 @@ def run_check(video, srt, allow_silent=False):
     if not os.path.isfile(CHECK):
         log("render/check.py not found; repair the toolkit before uploading.")
         return 2
-    cmd = [sys.executable, CHECK, video]
+    cmd = [sys.executable, CHECK, video, *jobfile.quality_check_args(video)]
     if srt:
         cmd += ["--srt", srt]
     if allow_silent: cmd += ["--allow-silent"]

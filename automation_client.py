@@ -5,8 +5,22 @@ import re
 from pathlib import Path
 import urllib.request
 import urllib.error
+import threading
+from contextlib import contextmanager
+from functools import wraps
 
 BASE = 'https://api.thinknova.top'
+
+
+def keep_run_alive(function):
+    @wraps(function)
+    def wrapped(client, claim, *args, **kwargs):
+        method = getattr(type(client), 'keepalive', None)
+        if method is None:
+            return function(client, claim, *args, **kwargs)
+        with method(client, claim['run_no']):
+            return function(client, claim, *args, **kwargs)
+    return wrapped
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -15,6 +29,24 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 
 
 class Client:
+    @contextmanager
+    def keepalive(self, run_no):
+        stopped = threading.Event()
+        def renew():
+            while not stopped.wait(60):
+                try:
+                    # Empty steps merge with the server's existing state; no prompts or secrets.
+                    self.receipt(run_no, {})
+                except Exception:
+                    return  # Creation and publication still recheck the authoritative authorization.
+        thread = threading.Thread(target=renew, name='ThinkNova-run-lease', daemon=True)
+        thread.start()
+        try:
+            yield
+        finally:
+            stopped.set()
+            thread.join(timeout=2)
+
     def __init__(self, secrets: dict):
         self.secrets = secrets; self.session = None; self.lease = ''; self.sequence = 0
         self.opener = urllib.request.build_opener(NoRedirect())

@@ -95,3 +95,7 @@ During speech, keep the speaker's mouth visible. An explainer can use one roughl
 ## English summary
 
 Keep the speaker’s mouth visible during speech. Use at most one detail cutaway per segment, no longer than two seconds and only over the latter half of a spoken line. Use natural in-scene dialogue. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references. For an undersized local image, run `toolkit.py prepare-reference input.png --output prepared.png` with the edge limits from the quote. Upload and authorize the derivative before quoting with its new asset ID.
+
+
+修订59执行补充：新脚本以 rules/store-film-rules-v59.md 为准，品类表不变。只知道产品或服务也先出片，店名可空。缺照片由工具包准备示意首帧和必要人物图；有授权实图优先引用。缺原话用店员陈述已核实信息，讲解首尾同样适用，不编造体验。创作自查重写一次后建议项记警告。质量政策由服务器返回；58政策下语速、停顿、低运动及30%～80%吻合度不拦交付，转写未知修复一次后记警告，实际严重错配进入有界恢复。费用包含素材和重做，不突破已有预算。旧计划保留原契约。
+Revision 59 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.

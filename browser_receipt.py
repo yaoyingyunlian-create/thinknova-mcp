@@ -56,6 +56,11 @@ def initialize(path, film, plan):
         raise ValueError('BROWSER_PUBLICATION_PROJECT_INVALID')
     value = {'project_key': project, 'local_date': local_date, 'film_sha256': digest, 'revision': 1,
              'platforms': {name: {'target_account': account, 'status': 'pending'} for name, account in targets.items()}}
+    if proof.get('quality_policy_version') == '58':
+        codes = [item['code'] for item in proof.get('warnings', [])
+                 if isinstance(item, dict) and re.fullmatch(r'[A-Za-z0-9_]{1,64}', item.get('code', ''))]
+        for row in value['platforms'].values():
+            row['quality'] = {'version':'58', 'speech_status':proof.get('speech_status', 'unknown'), 'warning_codes':list(dict.fromkeys(codes))[:32]}
     path.parent.mkdir(parents=True, exist_ok=True)
     with state_lock(path):
         if path.exists():
@@ -85,6 +90,8 @@ def record(path, platform, event):
             raise ValueError('BROWSER_PUBLICATION_REASON_REQUIRED')
         previous = rows[platform]
         current = {'target_account': previous['target_account'], **event}
+        if 'quality' in previous:
+            current['quality'] = previous['quality']
         if previous['status'] == 'published' and event['status'] not in ('published', 'crop_incorrect'):
             raise ValueError('BROWSER_PUBLICATION_ALREADY_RECORDED')
         if previous.get('retried'):

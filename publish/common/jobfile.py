@@ -28,10 +28,29 @@ import json
 import os
 import sys
 import subprocess
+import hashlib
 from pathlib import Path
 
 PATH_KEYS = ("video", "srt", "cover")
 PATH_LIST_KEYS = ("images",)
+
+
+def quality_check_args(video):
+    proof = Path(str(video) + '.film.json')
+    if not proof.is_file():
+        return []
+    try:
+        value = json.loads(proof.read_text(encoding='utf-8'))
+        with open(video, 'rb') as stream:
+            hasher = hashlib.sha256()
+            for block in iter(lambda: stream.read(1024 * 1024), b''):
+                hasher.update(block)
+            digest = hasher.hexdigest()
+        if value.get('machine_check') == 'pass' and value.get('sha256') == digest and value.get('quality_policy_version') == '58':
+            return ['--quality-58']
+    except (OSError, ValueError):
+        pass
+    return []
 
 
 def setup_console():
@@ -113,7 +132,7 @@ def local_preflight(job):
         checker=Path(__file__).resolve().parents[2]/'render/check.py'
         if not checker.is_file():
             print('CHECKER_MISSING');return 2
-        command=[sys.executable,str(checker),video]
+        command=[sys.executable,str(checker),video, *quality_check_args(video)]
         if job.get('srt'):command += ['--srt',job['srt']]
         if job.get('allow_silent') is True:command += ['--allow-silent']
         result=subprocess.run(command,capture_output=True,timeout=180)

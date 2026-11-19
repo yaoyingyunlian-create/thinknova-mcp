@@ -43,7 +43,7 @@ For revision 2.4, ordinary product and service films use two 15-second segments.
 - [ ] 画面里没有模型自己加的字；字幕和声音逐句对得上（`render/speech_review.py` 核店名、产品名）
 - [ ] 没有编出来的价格、优惠、评价、效果
 
-⛔ 自己给自己判通过：机器检查有 FAIL 就改；WARN 原样告诉店主，不改写成「不是问题」。
+⛔ 自己给自己判通过：按服务器质量政策处理：真正不可用的 FAIL 修复；WARN 记录并随成片交付，不增加确认步骤。WARN 原样告诉店主，不改写成「不是问题」。
 有一项不过：先用已有片段重新剪（不花钱）；要重新生成就先说明费用。
 
 ## 四、交付时给什么
@@ -66,3 +66,7 @@ For revision 2.4, ordinary product and service films use two 15-second segments.
 
 ## English summary
 For ordinary in-scene dialogue, use two 15-second segments. Overlay confirmed closing text on the last 2.5 seconds by default. At size 90 split Chinese captions to at most eight characters per screen, keeping translations aligned. Review the contact sheet and listen against the script. Include the film, dialogue, applied references and the machine report. Resume legacy plans with their original timing profile.
+
+
+修订59执行补充：新脚本以 rules/store-film-rules-v59.md 为准，品类表不变。只知道产品或服务也先出片，店名可空。缺照片由工具包准备示意首帧和必要人物图；有授权实图优先引用。缺原话用店员陈述已核实信息，讲解首尾同样适用，不编造体验。创作自查重写一次后建议项记警告。质量政策由服务器返回；58政策下语速、停顿、低运动及30%～80%吻合度不拦交付，转写未知修复一次后记警告，实际严重错配进入有界恢复。费用包含素材和重做，不突破已有预算。旧计划保留原契约。
+Revision 59 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.

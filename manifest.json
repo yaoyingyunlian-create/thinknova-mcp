@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.19",
+  "version": "thinknova-automation-toolkit-v3.1.20",
   "text_line_endings": "lf",
-  "revision": "91a6a47fae718d76372d6305dbc0abb04687156b777e8c05a526bb634d555ca6",
+  "revision": "04adb7792fd00c09a54c97e4821f758b78fd6ea11d3705b025a1d83865585137",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "9b2858441d491506a859d6e2a185047bbd521bed618629b1649e9694b2c58726"
+      "sha256": "96fd3ce997e54f76895d6758eb02659f0ba5c5e964679a46c383ae9e86b8e575"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,11 @@
     },
     {
       "path": "README.md",
-      "sha256": "3888544cb32734783fb997b21bf271611d78a74a071f7c0ce9fb2ab3ac3ae1bf"
+      "sha256": "78fe11fb306bd3ba0ea39ea7b70795ff06b7ddb9d7b2820bbfbfd32dfd72ab78"
+    },
+    {
+      "path": "SPARSE_DELIVERY.md",
+      "sha256": "8592213e66f578e3b4c2c0d84098f6140e6d0a2e4b7991a3d104d11c0c4e9a84"
     },
     {
       "path": "analytics.py",
@@ -25,11 +29,11 @@
     },
     {
       "path": "automation.py",
-      "sha256": "645ba3614cf05d24ffae284575babca14e950c802b6f10acf457caa7d2fa692d"
+      "sha256": "5ebcbde4740cf0a79f0f32b1354eb94cb4cafe04042c08b6d25f09490ac89651"
     },
     {
       "path": "automation_client.py",
-      "sha256": "1982594824fa6d1bd1aa7c4736455e0665517aa97b12b73c9122b4c696b1126b"
+      "sha256": "fe7218c0618a1e1bb90a119e4593ce9b63746fc784d06d278458ca0694afb788"
     },
     {
       "path": "automation_plan.schema.json",
@@ -41,11 +45,23 @@
     },
     {
       "path": "browser_receipt.py",
-      "sha256": "b2b01d56b86602fa286905665650294d793209cbc78c86a1a456d5c7f0be7c05"
+      "sha256": "424751c029425a5e27ce492a2f0f35cafa2637feb0c6b0ac8498d7dcf16631bd"
     },
     {
       "path": "build_manifest.py",
-      "sha256": "8c1ecfaa34bb276d3e4f3f8427e795967339113adda6b9168bb7059773716588"
+      "sha256": "d28fd97e39a588e8b8137320f80e327c78c5ecb1201bf03b5009df8b1b9d0364"
+    },
+    {
+      "path": "clip_recovery.py",
+      "sha256": "8c331f716e147fa90667c68b8128f5c9594c9ed654d323ab2346c70283102745"
+    },
+    {
+      "path": "day_preparation.py",
+      "sha256": "867a5555f210e2b9c2cb696adb470422f557b74bcc88e368fd162ef63d962e8a"
+    },
+    {
+      "path": "dialogue_encoding.py",
+      "sha256": "694975cf75d0e44e730b5d5d01d40fe45c7c20259028724422d81caac95fb68c"
     },
     {
       "path": "drafts.py",
@@ -58,6 +74,10 @@
     {
       "path": "file_integrity.py",
       "sha256": "3e3564fe112c65a2a195e8c4a52af43b9a474d38ab4cc1094f2c75b5fc8e9b5b"
+    },
+    {
+      "path": "film_inventory.py",
+      "sha256": "18749865c0297c5d59aa87257a62b4884a8cc15bb35f197815a5d1b56e629d71"
     },
     {
       "path": "generation_quality.py",
@@ -105,7 +125,7 @@
     },
     {
       "path": "publish/common/jobfile.py",
-      "sha256": "a6fd06569d839885bd05e3011f9a07f849d56592d1250ecc558d76ac2445136f"
+      "sha256": "0c6decb8e1cb7fef3813aaf0b675f25b0345710056f5202dd4e1dd4dca953373"
     },
     {
       "path": "publish/common/social.py",
@@ -113,7 +133,7 @@
     },
     {
       "path": "publish/dispatch.py",
-      "sha256": "54e1ce2e9397757ec83b9bdc7b63564f1355242331dc4aed9dc780d36ea66575"
+      "sha256": "05d5e5ee91834ff6aba222918c43a06a40b0f5275e3a6da6d60e670123601502"
     },
     {
       "path": "publish/douyin/check.py",
@@ -197,7 +217,7 @@
     },
     {
       "path": "publish/youtube/upload.py",
-      "sha256": "240b271eb93e1e1ccf6fa31944514ab502ed3d8897a20357fd70d93276088a3c"
+      "sha256": "a98b4769e88037db951e8dc9c5cb42d40ef5b4437d6036eed1e940e934571172"
     },
     {
       "path": "publish/youtube/yt_captions.py",
@@ -208,12 +228,16 @@
       "sha256": "261819a9bfbe0591ded9d7644ece1328cd8fdb464789034a2a0a06ec719bbdca"
     },
     {
+      "path": "quality_policy.py",
+      "sha256": "2bbeb4429bcc0c9716d2900ba9fb06640d9d60db43468b7abfc01477a07ec87f"
+    },
+    {
       "path": "render/assemble.example.json",
       "sha256": "5a395619e50d2477befca5903d7da41e82e84ea6de8ec7fece0cb32668171ac8"
     },
     {
       "path": "render/assemble.py",
-      "sha256": "a4a606e779527fa711cd91bd2e38fd11708df971ae341edd263cb1e5d080cb71"
+      "sha256": "e6471e32e20f7fd75b8d5323e60d1fb8e1fd0b5564827349c8f1fedf54024ddb"
     },
     {
       "path": "render/captions.py",
@@ -221,7 +245,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "acc3f33808d9689e6690e252adc7be9da1d0c6470778f4f868f7d72919af8593"
+      "sha256": "7bed7cbedb26257092d55e0ae8e1bcaab969570cb6a227bb641999de460df52a"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -296,6 +320,10 @@
       "sha256": "964ca5102350ca6bcbf5e9a9d02d88af4795b2a3faf0d040e2493952f30c4955"
     },
     {
+      "path": "rules/store-film-rules-v59.md",
+      "sha256": "093068526e4b9090bf7006dfd8f22c539c6d607b2d7160ff5e5a14064ad2e566"
+    },
+    {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
       "sha256": "a3cb492d22abe07a6a04e4d6e2a5bff76e1a1ad00c8dac60aebe02ee576eee05"
     },
@@ -305,7 +333,7 @@
     },
     {
       "path": "skills/\u5168\u5e73\u53f0\u5185\u5bb9\u8fd0\u8425/SKILL.md",
-      "sha256": "baa17f7260f44c21c3102d6d36b4d2b2603fbd99fe76bda4c81fadf32f4a9ff9"
+      "sha256": "9cf9c209c9161b7ece74e9abf004d890ebf80be23dd57ece9e94164c36ce7b92"
     },
     {
       "path": "skills/\u5168\u7247\u7559\u5b58\u8282\u594f/SKILL.md",
@@ -329,23 +357,27 @@
     },
     {
       "path": "skills/\u6bcf\u65e5\u51fa\u7247\u89c4\u8303/SKILL.md",
-      "sha256": "4bbd6cbdc3712a2c0df9d3b09ef1cb310d57770a14a2e91700645a0b052dee60"
+      "sha256": "81a185b635dd0989cb62a5f003aa9b2578876dc5f4772487a2dab47f92779e3f"
     },
     {
       "path": "skills/\u955c\u5934\u63d0\u793a\u8bcd/SKILL.md",
-      "sha256": "512fec3048cd1f206e1a016b01940b90877866260f90efd8ffdb09272c192291"
+      "sha256": "1399f9254c3c86ecf67c491ac9b705d88eaff22daabfb10e0a5f617d438db377"
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "6ff744d9570e57ed78d9a2c23904448ee4fa496a0687ca8f8e43e36590b575e5"
+      "sha256": "9e560e473b95e9276e17ec4329ae0fe881da162b078d89bfe6d45ceed5f51dd2"
+    },
+    {
+      "path": "speech_recovery.py",
+      "sha256": "d8a8a474f41d638d3d593d9b693e2c0218ac3734e4d53e796fd33577d139cf77"
     },
     {
       "path": "store_editorial.py",
-      "sha256": "23afba64680e2c1d97304b6aee07c3cf5dc8ea9786ba05c12ee190895eb82a9f"
+      "sha256": "a80a43ca82952dbddada9faecd2a4a284a28d4ff0b67e5ad0ed6ec26eef1fc81"
     },
     {
       "path": "store_film.py",
-      "sha256": "70ec99e616882424928e6cb6dc9af0891ad5fdb5b3750ac7840e6d53d869a20d"
+      "sha256": "9f14b66fcc108c716b7c138ded46fcc0fb9fbff9651cca42e2f18f5803c4575f"
     },
     {
       "path": "test_automation.py",
@@ -374,6 +406,10 @@
     {
       "path": "test_render_pipeline.py",
       "sha256": "14dcbf5b03e6634bfde80f3a6661d3cbd0c10862bcc69b2f493cb5dddf17e7bd"
+    },
+    {
+      "path": "test_sparse_delivery.py",
+      "sha256": "671a9c99716bcae0ec7f2c3f877e5a430cf1de5f76e30d70075eac28c5d843d5"
     },
     {
       "path": "test_speech_review.py",

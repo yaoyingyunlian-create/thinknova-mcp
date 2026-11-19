@@ -1,8 +1,16 @@
+# v3.1.20：少资料出片 / Sparse creation
+
+只知道产品或服务且有已批准预算时即可制作；没有店名、照片或顾客原话不等待补齐。新版设备日计划请求版本8，先自动准备素材，再通过服务端绑定到当前运行，继续原生成、制作和发布流程。费用预估包含图片与视频，实际任务仍逐项报价，恢复保留原请求号。
+Known product/service + approved funds are sufficient to start. Missing shop names, photos or quotes become a delivery checklist. Day-plan request version 8 materializes generated image slots under the existing run and budget. It does not broaden asset or publication authorization.
+
+质检政策58由服务器按账户灰度下发。转写修复一次仍失败时明确记录unknown，在有效自动发布授权内继续；严重音频错配、全静音、坏片及错误规格仍拦截。默认账户保持legacy，具体灰度及验收见运营说明。
+Policy 58 is server-selected. Unknown recognition after bounded repair is recorded, never mislabeled verified. Severe mismatch or unusable media still block. Accounts without the policy remain on legacy checks. No real customer-device or platform acceptance is implied by a local upgrade.
+
 # ThinkNova 自动化工具包 (ThinkNova Automation Toolkit) - render & publish
 
 > 给 AI 助手：先读 AGENTS.md。For AI assistants: read AGENTS.md first.
 
-门店新计划使用 rules/store-film-rules-v54.md 和 rules/store-film-category-v54.md。读取服务器 effective_rules 的默认值，缺项按 stage_missing_fields 在对应步骤处理。MCP 账户页可确认项目素材权限。
+门店新计划使用 rules/store-film-rules-v59.md 和 rules/store-film-category-v54.md。读取服务器 effective_rules 的默认值，缺项按 stage_missing_fields 在对应步骤处理。MCP 账户页可确认项目素材权限。
 
 New store plans use the version 54 rules and category angles. Use the server's effective defaults and handle stage_missing_fields when entering that stage. Project asset permission can be confirmed on the MCP account page.
 

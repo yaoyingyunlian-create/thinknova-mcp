@@ -43,6 +43,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import quality_policy
 
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -317,6 +320,25 @@ def apply_cutaway(ff, fp, base, shot, duration, cutaway, index, work):
                 '-t', f'{duration:.6f}', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18',
                 '-c:a', 'copy', output], f'cutaway {index + 1}')
     return output
+
+
+def trim_store_blank(ff, shot, duration, work, index, count):
+    windows = speech_chunks(ff, shot, duration)
+    if not windows:
+        return shot, duration, None
+    start = max(0, windows[0][0] - 0.25) if index > 0 else 0
+    end = min(duration, windows[-1][1] + 0.25) if index + 1 < count else duration
+    if start <= 0.02 and duration - end <= 0.02:
+        return shot, duration, None
+    if end - start < 0.5:
+        return shot, duration, None
+    target = os.path.join(work, f'trimmed_{index:03d}.mp4')
+    run_ff(ff, ['-i', shot, '-filter_complex',
+                f'[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[v];'
+                f'[0:a]atrim=start={start}:end={end},asetpts=PTS-STARTPTS[a]',
+                '-map','[v]','-map','[a]','-c:v','libx264','-preset','veryfast','-crf','18',
+                '-c:a','aac',target], 'trim boundary blanks')
+    return target, end - start, {'clip':index + 1,'start_trim':start,'end_trim':duration - end}
 
 
 def dialogue_pace_adjustment(rate, language, duration, intervals, max_duration=None):
@@ -631,6 +653,8 @@ def run_delivery_check(ff, fp, video, srt, options):
             cmd += ['--store-film', '--shop-name', options['shop_name'], '--featured-service', options['featured_service']]
         if options['speech_language']:
             cmd += ['--lang', options['speech_language']]
+    if (options.get('quality_policy') or {}).get('version') == '58':
+        cmd += ['--quality-58']
     if srt:
         cmd += ['--srt', srt]
     if options['max_dur']:
@@ -643,10 +667,10 @@ def run_delivery_check(ff, fp, video, srt, options):
         report, code = '  [FILM_CHECK_TIMEOUT] Film check timed out.', 2
     print(report, file=sys.stderr)
     diagnostics = [{'code': code, 'message': message}
-                   for code, message in re.findall(r'^  \[([^]]+)\] (.+)$', report, re.M)]
+                   for code, message in re.findall(r'^  \[([A-Za-z0-9_]+)\] (.+)$', report, re.M)]
     sheet = os.path.splitext(video)[0] + '_sheet.jpg'
     if code == 0 and not os.path.isfile(sheet):
-        code = 2
+        code = 0 if (options.get('quality_policy') or {}).get('version') == '58' else 2
         diagnostics.append({'code': 'CONTACT_SHEET_FAILED', 'message': 'No visual review artifact.'})
     if code and not diagnostics:
         diagnostics.append({'code': 'CHECK_FAILED', 'message': f'Film check exited with code {code}.'})
@@ -669,7 +693,8 @@ def deliver(video, srt, sheet, output, options, result, warnings, overwrite, rep
             stream.write(report)
         with open(receipt, 'w', encoding='utf-8') as stream:
             json.dump({'sha256': file_digest(video), 'state': 'awaiting_review',
-                       'machine_check': 'pass', 'outro_start': options['outro_start']}, stream)
+                       'machine_check': 'pass', 'outro_start': options['outro_start'],
+                       **quality_policy.receipt(options.get('quality_policy', {}), warnings)}, stream)
     # Clear any previous receipt before replacing the artifacts. A partial delivery
     # cannot inherit a passing receipt from an earlier output.
     if overwrite and os.path.isfile(target_receipt):
@@ -679,7 +704,8 @@ def deliver(video, srt, sheet, output, options, result, warnings, overwrite, rep
         os.replace(srt, target_srt)
     elif overwrite and os.path.isfile(target_srt):
         os.remove(target_srt)
-    os.replace(sheet, target_sheet)
+    if os.path.isfile(sheet):
+        os.replace(sheet, target_sheet)
     if film:
         os.replace(report_file, target_report)
         os.replace(receipt, target_receipt)
@@ -795,6 +821,7 @@ def main():
     verified_srt = bool(job.get('film_rules_revision') == '2.4' and job.get('srt'))
     if store_film and job.get('srt') and not verified_srt:
         raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
+    relaxed = (job.get('quality_policy') or {}).get('version') == '58'
     if store_film:
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
         from store_film import validate_beats
@@ -807,7 +834,7 @@ def main():
                 validate_beats(job.get('clips', []), job.get('film_type'))
             except ValueError as exc:
                 raise Stop(str(exc), 2) from exc
-        for key in ('shop_name', 'featured_service'):
+        for key in (('featured_service',) if job.get('script_rules_revision') == '59' else ('shop_name', 'featured_service')):
             if not isinstance(job.get(key), str) or not job[key].strip():
                 raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
     validate_job(job)
@@ -826,6 +853,9 @@ def main():
     if music and not os.path.isfile(music):
         raise Stop("Music file not found: %s (remove \"music\" to make the video without music)" % music)
     wk = tempfile.mkdtemp(prefix="assemble_", dir=os.path.dirname(os.path.abspath(out)))
+    repair_marker = os.path.join(base, 'speech-runtime-recovery.json')
+    if relaxed and os.path.isfile(repair_marker):
+        shutil.copyfile(repair_marker, os.path.join(wk, 'speech-runtime-recovery.json'))
     final_out = out
     out = os.path.join(wk, 'delivery.mp4')
     try:
@@ -845,14 +875,19 @@ def main():
                 if c.get('fit', 'cover') != 'cover':
                     raise Stop(f'FILM_SOURCE_FILL_UNSUPPORTED: clip {i + 1}', 2)
                 source = resolve(base, c['file'])
-                check_store_source(ff, fp, source, i + 1)
+                try:
+                    check_store_source(ff, fp, source, i + 1)
+                except Stop as error:
+                    if not relaxed or not str(error).startswith(('FILM_SOURCE_NOT_PORTRAIT', 'FILM_SOURCE_BLACK_BARS')):
+                        raise
+                    pace_report.append({'clip':i + 1,'status':'portrait_reframed','reason':str(error)})
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
-            if job.get('explainer_preview') and not 9.95 <= dur <= 15.05:
+            if not relaxed and job.get('explainer_preview') and not 9.95 <= dur <= 15.05:
                 raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} is outside 10-15 seconds', 2)
             planned_clip = c.get('planned_seconds', c.get('dur')) if job.get('film_type') == 'explainer' else None
-            if planned_clip is not None and abs(dur - planned_clip) > 0.1:
+            if not relaxed and planned_clip is not None and abs(dur - planned_clip) > 0.1:
                 raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} measured {dur:.2f}s, planned {planned_clip}s', 2)
-            if store_film and not verified_srt:
+            if store_film and not verified_srt and not relaxed:
                 dialogue = bool(job.get('short_dialogue_seconds'))
                 try:
                     shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i,
@@ -865,8 +900,12 @@ def main():
                         raise
                     pace = {'clip': i + 1, 'status': 'pending', 'reason': str(exc)}
                 pace_report.append(pace)
-            if job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
+            if not relaxed and job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
                 raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)
+            if relaxed:
+                shot, dur, trimming = trim_store_blank(ff, shot, dur, wk, i, len(job['clips']))
+                if trimming:
+                    pace_report.append({'status':'boundary_trimmed', **trimming})
             if 'cutaway' in c:
                 shot = apply_cutaway(ff, fp, base, shot, dur, c['cutaway'], i, wk)
             parts.append(shot)
@@ -884,6 +923,8 @@ def main():
                 if job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
                     try:
                         from speech_review import recognize
+                        if relaxed:
+                            from speech_recovery import recognize
                         spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
                                               word_timestamps=True, vad_filter=True)
                         shot_cues = align_captions(lines, spoken, t)
@@ -982,15 +1023,17 @@ def main():
         if job.get('film_rules_revision') == '2.4':
             options['segment_boundaries'] = segment_boundaries
         if store_film:
-            options.update(film_profile='store_v2', shop_name=job['shop_name'], featured_service=job['featured_service'])
+            options.update(film_profile='store_v2', shop_name=job.get('shop_name',''), featured_service=job['featured_service'], quality_policy=job.get('quality_policy', {}))
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
-                  'subtitle_timing': ('review_required' if caption_alignment_pending else 'asr_estimated' if caption_alignment_estimated
+                  'subtitle_timing': ('estimated_unverified' if relaxed and caption_alignment_pending else 'review_required' if caption_alignment_pending else 'asr_estimated' if caption_alignment_estimated
                                       else 'aligned' if caption_alignment_used
                                       else 'provided' if job.get('srt') else 'estimated' if cues else 'not_applicable')}
         if store_film:
             result['speech_pace'] = pace_report
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
-        if caption_alignment_pending and job.get('film'):
+        if relaxed and caption_alignment_pending:
+            diagnostics.append({'code':'SPEECH_CHECK_PENDING', 'message':'Subtitle timing is estimated; recognition unavailable.'})
+        if caption_alignment_pending and job.get('film') and not relaxed:
             passed = False
             message = 'The spoken words could not be matched to the reviewed captions; reassemble with verified timing.'
             diagnostics.append({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'message': message})

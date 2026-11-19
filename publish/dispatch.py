@@ -101,6 +101,7 @@ def film_review(path, value, approval=None, confirmed=False):
     proof = json.loads(receipt.read_text(encoding='utf-8'))
     if proof.get('machine_check') != 'pass' or proof.get('sha256') != video['sha256']:
         raise RuntimeError('FILM_CHECK_REQUIRED')
+    value['quality'] = {key:proof[key] for key in ('quality_policy_version','warnings','speech_status','checks_completed') if key in proof}
     record = path.with_name(f'{path.name}.{value["platform"]}.review.json')
     signature = value['manifest_sha256']
     previous = json.loads(record.read_text(encoding='utf-8')) if record.exists() else {}

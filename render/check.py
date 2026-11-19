@@ -54,10 +54,13 @@ except Exception:
     pass
 
 FAILS, WARNS, INFO = [], [], []
+RELAXED = False
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from quality_policy import HARD_CODES
 
 
 def fail(code, msg):
-    FAILS.append((code, msg))
+    (WARNS if RELAXED and code not in HARD_CODES else FAILS).append((code, msg))
 
 
 def warn(code, msg):
@@ -84,7 +87,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -207,6 +210,8 @@ def s3_audio(ff, path, dur, o):
     if dur > 0:
         pct = total / dur * 100.0
         INFO.append("silence %.1fs = %.1f%%" % (total, pct))
+        if RELAXED and pct >= 95:
+            fail("S3_NEAR_SILENT", "at least 95% of the film is silent below -40 dB")
         if pct >= float(o["--max-silence-pct"]):
             warn("S3b", "silence is %.1f%% of the video (limit %s%%)" % (pct, o["--max-silence-pct"]))
 
@@ -294,6 +299,8 @@ def speech_gaps(words, end):
 
 def s6_speech(ff, path, dur, o):
     from speech_review import recognize, speech_pace
+    if RELAXED:
+        from speech_recovery import recognize
     film = o.get("film")
     try:
         segments, info = recognize(path, o["--model"], o["--lang"], ff,
@@ -336,7 +343,9 @@ def s6_speech(ff, path, dur, o):
             else:
                 coverage = caption_agreement(expected, transcript)
                 INFO.append(f'dialogue ASR agreement: {coverage:.0%}')
-                if coverage < 0.8:
+                if RELAXED and coverage < 0.3:
+                    fail("FILM_DIALOGUE_MISMATCH", "dialogue agreement is below 30%; wrong speech must be repaired")
+                elif coverage < 0.8:
                     fail('FILM_DIALOGUE_REVIEW_REQUIRED', 'recognized speech differs from the script; review the local preview')
         return
     if film:
@@ -379,7 +388,10 @@ def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         print(__doc__)
         return 0
+    global RELAXED
+    FAILS.clear(); WARNS.clear(); INFO.clear()
     pos, on, o = get_opts(sys.argv[1:])
+    RELAXED = "--quality-58" in on
     if not pos:
         print(__doc__)
         return 1
@@ -426,7 +438,7 @@ def main():
                 measured = float(o['--outro-start']) if '--separate-end-card' in on else dur
             except (TypeError, ValueError):
                 measured = 0
-            if not planned.isdecimal() or int(planned) not in allowed or abs(measured - int(planned)) > 1:
+            if not planned.isdecimal() or int(planned) not in allowed or abs(measured - int(planned)) > (max(2, int(planned) * 0.1) if RELAXED else 1):
                 fail('FILM_DURATION', 'duration differs from the authorized short-film specification')
         elif o['explainer_preview']:
             if not 45 <= dur <= 60:
@@ -440,6 +452,20 @@ def main():
         if not 0 < o["outro_start"] < dur and not ((o["store_film"] or '--no-outro' in on) and abs(o["outro_start"] - dur) <= 0.15):
             fail("FILM_OUTRO_REQUIRED", "pass the actual outro start in seconds")
             o["outro_start"] = dur
+    if RELAXED and dur > 0:
+        try:
+            decoded = subprocess.run([ff, '-nostdin', '-v', 'error', '-xerror', '-i', path,
+                                      '-map', '0:v:0', '-map', '0:a:0?', '-f', 'null', '-'],
+                                     capture_output=True, timeout=180)
+            if decoded.returncode:
+                fail('MEDIA_DECODE_FAILED', 'the film is not completely decodable')
+            _, black = run([ff, '-nostdin', '-v', 'info', '-i', path,
+                            '-vf', 'blackdetect=d=0.5:pix_th=0.1', '-an', '-f', 'null', '-'])
+            black_seconds = sum(float(x) for x in re.findall(r'black_duration:([0-9.]+)', black))
+            if black_seconds >= dur * 0.95:
+                fail('MEDIA_BLACK', 'at least 95% of the film is black')
+        except (OSError, subprocess.SubprocessError):
+            fail('MEDIA_DECODE_FAILED', 'full media decoding did not complete')
     s2_opening(ff, path)
     if o.get('--planned-film-seconds') is not None and o['store_film']:
         check_dialogue_motion(ff, path, o["outro_start"])

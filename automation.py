@@ -15,7 +15,7 @@ import subprocess
 import sys
 import time
 from local_state import state_lock, LocalStateBusy
-from automation_client import Client
+from automation_client import Client, keep_run_alive
 from media_download import download, validate_media
 import secure_state
 from generation_quality import prepare_prompt
@@ -115,6 +115,9 @@ def review_spoken_terms(path, prompt):
 
 
 def quoted_generation_args(client, tool, args, balance, require_duration=False):
+    from dialogue_encoding import validate_text
+    if 'prompt' in args:
+        validate_text(args['prompt'], args.get('dialogue_language'))
     # Quotes always use a read-only tool. Old/mixed deployments can omit the quote, but cannot create paid work.
     if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
     response=client.tool('get_balance',{'quote_request':{'tool':tool,'arguments':args}})
@@ -133,6 +136,7 @@ def quoted_generation_args(client, tool, args, balance, require_duration=False):
     return {**args,'max_credits':credits}
 
 
+@keep_run_alive
 def execute(client: Client, claim: dict, day_plan=None, budget=None):
     run_no=claim['run_no'];grant=claim['grant']
     if not re.fullmatch(r'run_[a-f0-9]{24}',run_no):raise RuntimeError('INVALID_RUN_ID')
@@ -155,6 +159,12 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
         if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
         if day_plan is not None:
+            if (day_plan.get('script_rules_revision') == '59' and day_plan.get('asset_preparation')
+                    and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
+                from day_preparation import prepare_assets
+                day_plan = prepare_assets(client, claim, day_plan, directory, budget,
+                                          quoted_generation_args, atomic)
+                steps.update(claim.get('steps') or {})
             return execute_store_day(client, claim, day_plan, budget, rules, balance, directory, steps, checkpoint)
         plan_path=directory/'content.json'
         steps['stage']='planning';checkpoint()
@@ -222,6 +232,9 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         except Exception:pass
     except Exception as exc:
         code=str(exc) if re.fullmatch('[A-Z0-9_]{1,64}',str(exc)) else 'LOCAL_RUN_FAILED'
+        if code in ('RECOVERY_TASK_PENDING', 'DAY_PLAN_ASSET_PENDING'):
+            checkpoint('pending', code)
+            return {'status':'running', 'stage':'recovery', 'run_no':run_no}
         receipt_path=directory/'job.json.receipt.json'
         if receipt_path.exists():
             receipt=json.loads(receipt_path.read_text(encoding='utf-8'))
@@ -240,12 +253,22 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if (plan['rules_version'] != rules['version'] or plan['date'] != claim.get('usage_date')
             or plan.get('project_key') != grant.get('project_key')):
         raise RuntimeError('DAY_PLAN_STALE')
-    digest = hashlib.sha256(json.dumps(plan, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()
+    identity_plan = {key:value for key,value in plan.items() if key not in ('preparation_credits','preparation_costs')}
+    digest = hashlib.sha256(json.dumps(identity_plan, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()
     if steps.get('day_plan_sha256') not in (None, digest):
         raise RuntimeError('DAY_PLAN_CHANGED')
     authorized = set(rules['effective_rules'].get('authorized_asset_ids') or [])
-    shop = rules['effective_rules'].get('shop_profile') or {}
-    shop_assets = shop.get('location_assets') or {}
+    if plan.get('script_rules_revision') == '59':
+        authorized.update((plan.get('asset_bindings') or {}).values())
+    shop = dict(rules['effective_rules'].get('shop_profile') or {})
+    if plan.get('script_rules_revision') == '59':
+        shop['name'] = shop.get('name') or ''
+        shop['featured_service'] = shop.get('featured_service') or shop.get('products') or ''
+        shop['voice_identity'] = shop.get('voice_identity') or plan.get('script', {}).get('voice_identity', '')
+    shop_assets = dict(shop.get('location_assets') or {})
+    if plan.get('script_rules_revision') == '59':
+        for segment in plan['segments']:
+            shop_assets.setdefault(segment.get('shop_location', 'generic'), []).append(segment['first_frame_asset_id'])
     if shop.get('name') != plan['shop_name'] or shop.get('featured_service') != plan['featured_service']:
         raise RuntimeError('DAY_PLAN_SHOP_PROFILE_MISMATCH')
     editorial_row = None
@@ -273,10 +296,12 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                 if (previous.get('customer_identity') == plan['customer_identity']
                         or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
                                for row in history)):
-                    raise RuntimeError('FILM_CUSTOMER_REPEATED')
-        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') == '54' else shop.get('editorial')
+                    if plan.get('script_rules_revision') != '59':
+                        raise RuntimeError('FILM_CUSTOMER_REPEATED')
+                    plan.setdefault('warnings', []).append('SCRIPT_CHARACTER_ROTATION_ADVICE_UNMET')
+        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59') else shop.get('editorial')
         validate_rotation(rows, history, editorial or {}, plan.get('schema_version', 1),
-                          plan.get('script_rules_revision'))
+                          plan.get('script_rules_revision'), plan.setdefault('warnings', []))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
@@ -297,13 +322,15 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
-        if plan.get('dialogue_rules_revision') in ('2.1', '2.4'):
+        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') != '59':
             roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
             segment = {**segment, 'reference_roles': roles,
                        'reference_boards': {**(shop.get('reference_boards') or {}), **(segment.get('reference_boards') or {})}}
         args = generation_arguments(scripted_segment(segment, plan.get("script"), shop), shop_assets, authorized)
         if plan.get('dialogue_rules_revision') == '2.4':
             args['film_rules_revision'] = '2.4'
+        if plan.get('script_rules_revision') == '59':
+            args['dialogue_language'] = 'zh' if re.search(r'[\u3400-\u9fff]', ''.join(segment.get('subs', []))) else plan.get('speech_language', 'en')
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
             args['project_key'] = grant['project_key']
@@ -315,7 +342,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                                           require_duration=plan.get('film_type') == 'explainer')
         requests.append(args)
     total = sum(args['max_credits'] for args in requests)
-    if total > min(budget, int(grant['daily_budget'])):
+    if total + int(plan.get('preparation_credits', 0)) > min(budget, int(grant['daily_budget'])):
         raise RuntimeError('DAY_PLAN_OVER_BUDGET')
     new_total = sum(args['max_credits'] for index, args in enumerate(requests) if f'task_{index}' not in steps)
     if new_total > int(balance.get('available_credits', 0)):
@@ -366,6 +393,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             if not assets:
                 raise RuntimeError('VIDEO_DELIVERY_MISSING')
             download(assets[0]['download_url'], path, task_id=steps[key])
+        if (plan.get('quality_policy') or {}).get('version') == '58':
+            from clip_recovery import recover_clip
+            budget_used = total + int(plan.get('preparation_credits', 0)) + sum(
+                int(value) for key, value in steps.items() if key.startswith('recovery_cost_'))
+            path, assessment = recover_clip(client, claim, plan, index, args, path, steps, checkpoint,
+                                            quoted_generation_args, download, atomic, budget_used, budget_limit=budget)
+            if assessment.get('warning'):
+                plan.setdefault('warnings', []).append({'code':assessment['warning'], 'clip':index})
         clip = {'file': path.name, 'fit': 'cover', **{
             key: segment[key] for key in ('beats', 'subs', 'subs2') if key in segment}}
         if plan.get('film_type') == 'explainer':
@@ -376,7 +411,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     output = directory / 'final.mp4'
     job_path = directory / 'assemble.json'
     job = {'out': output.name, 'film_profile': 'store_v2', 'film_type': plan['film_type'],
-           'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips}
+           'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips,
+           'script_rules_revision': plan.get('script_rules_revision'), 'quality_policy': plan.get('quality_policy', {})}
     if plan.get('speech_language'):
         job['speech_language'] = plan['speech_language']
     if plan['schema_version'] in (2, 3):
@@ -391,13 +427,29 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     else:
         job['end_card'] = plan['end_card']
     atomic(job_path, job)
+    inventory_file = directory / 'inventory-source.json'
+    inventory = json.loads(inventory_file.read_text(encoding='utf-8')) if inventory_file.exists() else None
+    if inventory:
+        from film_inventory import copy_artifacts
+        copy_artifacts(inventory['video'], output)
+        plan['platforms'] = inventory['platforms']
     if not output.exists():
         result = subprocess.run([sys.executable, str(ROOT / 'render/assemble.py'), str(job_path), '--json'],
                                 cwd=directory, capture_output=True, encoding='utf-8', errors='replace', timeout=900)
         if result.returncode:
             report = json.loads(result.stdout)
             atomic(directory / 'film-check.json', report)
-            raise RuntimeError('FILM_CHECK_FAILED')
+            if (plan.get('quality_policy') or {}).get('version') == '58':
+                from film_inventory import reserve, copy_artifacts
+                inventory = reserve(STATE, grant['project_key'], plan['date'], plan['platforms'], run_no, plan['rules_version'])
+                if inventory:
+                    atomic(inventory_file, inventory)
+                    copy_artifacts(inventory['video'], output)
+                    plan['platforms'] = inventory['platforms']
+                    steps['inventory_source_run'] = inventory['source_run_no']
+                    checkpoint()
+            if not inventory:
+                raise RuntimeError('FILM_CHECK_FAILED')
     from publish.dispatch import film_review
     film_review(job_path, {'job': {'film': True}, 'artifacts': [
         {'role': 'video', 'file': str(output), 'sha256': hashlib.sha256(output.read_bytes()).hexdigest()}],
@@ -417,7 +469,11 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         atomic(history_path, sorted([*history, editorial_row], key=lambda row: (row['date'], row.get('work_slot', 1)))[-120:])
     atomic(publish_job, publish_payload)
     summary = {'status': 'awaiting_review', 'output': str(output), 'publish_job': str(publish_job),
-               'run_no': run_no, 'quoted_credits': total,
+               'project_key':grant.get('project_key'), 'source_date':plan['date'], 'rules_version':plan['rules_version'],
+               'activity_content':bool((plan.get('editorial_profile') or {}).get('activity')),
+               'valid_until':((plan.get('editorial_profile') or {}).get('activity') or {}).get('end'),
+               'run_no': run_no, 'quoted_credits': total + int(plan.get('preparation_credits', 0)) + sum(
+                   int(value) for key, value in steps.items() if key.startswith('recovery_cost_')),
                'contact_sheet': str(output.with_name(output.stem + '_sheet.jpg')),
                'check_report': str(output) + '.check.txt' if Path(str(output) + '.check.txt').is_file() else None,
                'segments': [{'task_id': steps[f'task_{index}'],
@@ -437,6 +493,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if 'content_angle' in plan:
         summary['content_angle'] = plan['content_angle']
         summary['first_frame_prompts'] = [segment.get('first_frame_prompt') for segment in plan['segments']]
+    if inventory:
+        summary.update(delivery_source='inventory', source_run_no=inventory['source_run_no'],
+                       source_date=inventory['review']['source_date'], segments=inventory['review'].get('segments', []))
+    summary['quality_policy'] = plan.get('quality_policy', {})
+    proof_file = Path(str(output) + '.film.json')
+    proof = json.loads(proof_file.read_text(encoding='utf-8'))
+    summary['warnings'] = [*plan.get('warnings', []), *proof.get('warnings', [])]
+    summary['speech_status'] = proof.get('speech_status', 'unknown')
     atomic(directory / 'review-ready.json', summary)
     if grant.get('auto_publish'):
         steps['stage'] = 'ready_to_publish'
@@ -597,7 +661,7 @@ def daily_film(project, day, work_slot=1):
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
         payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version':
-            grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7) else 4})
+            grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -644,20 +708,33 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
         path = STATE / 'plans' / grant['project_key'] / (f'{day}.json' if slot == 1 else f'{day}-{slot}.json')
         if path.is_file():
             try:
-                raw_plan = json.loads(path.read_text(encoding='utf-8-sig'))
+                from dialogue_encoding import read_json
+                raw_plan = read_json(path)
             except (OSError, ValueError):
                 atomic(reminder, {'date': day, 'error_code': 'DAY_PLAN_FILE_INVALID'})
                 return
         else:
             try:
                 response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version':
-                    grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7) else 4})
+                    grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})
                 return
             result = response.get('data') or {}
             status = result.get('status')
+            if status == 'preparing':
+                claim = client.claim('produce', slot)
+                if not claim.get('due'):
+                    return
+                from day_preparation import prepare_assets
+                directory = STATE / 'runs' / claim['run_no']
+                directory.mkdir(parents=True, exist_ok=True)
+                raw_plan = prepare_assets(client, claim, result['plan'], directory, int(grant['daily_budget']), quoted_generation_args, atomic)
+                plan = validate_day_plan(raw_plan)
+                atomic(path, plan)
+                execute(client, claim, day_plan=plan, budget=int(grant['daily_budget']))
+                return
             if status != 'ready':
                 if status not in ('processing', 'not_due'):
                     atomic(reminder, {
