@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.18",
+  "version": "thinknova-automation-toolkit-v3.1.19",
   "text_line_endings": "lf",
-  "revision": "94b5f2d9c6875dc8321d49441b3484cbdf87fdcc6b39e0e945722e2ed1eb261d",
+  "revision": "91a6a47fae718d76372d6305dbc0abb04687156b777e8c05a526bb634d555ca6",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "23f82c2ed34c3c1ec5043e56186954234302c1b3d5385231735d004940b1dfbf"
+      "sha256": "9b2858441d491506a859d6e2a185047bbd521bed618629b1649e9694b2c58726"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "4c56bfa38ced02dec145e2a3fc0c1dcec849cba19c98109797c1f0c38c1db76b"
+      "sha256": "3888544cb32734783fb997b21bf271611d78a74a071f7c0ce9fb2ab3ac3ae1bf"
     },
     {
       "path": "analytics.py",
@@ -25,7 +25,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "a6ad05302df000bb0a26c3e92a6f407ce3593dcbdba6ef08a4aec7ebeb727bde"
+      "sha256": "645ba3614cf05d24ffae284575babca14e950c802b6f10acf457caa7d2fa692d"
     },
     {
       "path": "automation_client.py",
@@ -45,7 +45,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "190dd8e3f710cf4531e90fcb40d669689dbe6a9c206b6e1b9fbf8a5e3d6734e7"
+      "sha256": "8c1ecfaa34bb276d3e4f3f8427e795967339113adda6b9168bb7059773716588"
     },
     {
       "path": "drafts.py",
@@ -213,7 +213,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "6b7c824beb0095b132010e7703a3e316da88288dd28eb6909e766d1296d288e7"
+      "sha256": "a4a606e779527fa711cd91bd2e38fd11708df971ae341edd263cb1e5d080cb71"
     },
     {
       "path": "render/captions.py",
@@ -280,12 +280,20 @@
       "sha256": "c9bd263dd4d7da419a4e480f25cc0d17f159e9e3f73502c7ce5b4ba2be9a523b"
     },
     {
+      "path": "rules/store-film-category-v54.md",
+      "sha256": "d616117e1ae907ba6535cad48d5263dcf8fb062b88ee9d8e106ac1617eeb08c7"
+    },
+    {
       "path": "rules/store-film-rules-v3.md",
       "sha256": "39e64fa34f0e48ece025b0b26b4a107d610a0d16e05bd4bc9ebf703ec147cc2c"
     },
     {
       "path": "rules/store-film-rules-v52.md",
       "sha256": "357f4dfee27e2774f898eb44b592f5845b8c1d9a857c584badea8feaf4191249"
+    },
+    {
+      "path": "rules/store-film-rules-v54.md",
+      "sha256": "964ca5102350ca6bcbf5e9a9d02d88af4795b2a3faf0d040e2493952f30c4955"
     },
     {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
@@ -305,7 +313,7 @@
     },
     {
       "path": "skills/\u53e3\u8bed\u53f0\u8bcd/SKILL.md",
-      "sha256": "62eee61228a24dfd1f0bfbd736d1d8fc17582bc6dd732c4535458fd39b6caf6a"
+      "sha256": "920e22bf8ddfbf4c4cbb226f8ede2b1fdc3bac32ce83997715eb8dec652f75b2"
     },
     {
       "path": "skills/\u5b66\u4e60\u89c4\u5219/SKILL.md",
@@ -321,11 +329,11 @@
     },
     {
       "path": "skills/\u6bcf\u65e5\u51fa\u7247\u89c4\u8303/SKILL.md",
-      "sha256": "4750a9180b84947789a874b0755c1fc336c5ee9901b909000f566771968cba13"
+      "sha256": "4bbd6cbdc3712a2c0df9d3b09ef1cb310d57770a14a2e91700645a0b052dee60"
     },
     {
       "path": "skills/\u955c\u5934\u63d0\u793a\u8bcd/SKILL.md",
-      "sha256": "e134f80dfece01a12752bbdc36e67f7c9425f10fd30c50f5e1fba5c54fd7a212"
+      "sha256": "512fec3048cd1f206e1a016b01940b90877866260f90efd8ffdb09272c192291"
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
@@ -333,7 +341,7 @@
     },
     {
       "path": "store_editorial.py",
-      "sha256": "2eed18255becc782c5a4603d87ed3f95392f53c5839793d924efd07500c635d8"
+      "sha256": "23afba64680e2c1d97304b6aee07c3cf5dc8ea9786ba05c12ee190895eb82a9f"
     },
     {
       "path": "store_film.py",
@@ -377,7 +385,7 @@
     },
     {
       "path": "test_store_editorial.py",
-      "sha256": "1100d1fb0aef3db5e08061d8e9492799d98ffafb0273fa1b3498da7e4acb8155"
+      "sha256": "cab6eb482599dff3e6c7522c93738f98010b0e10c08e12e68218f2d3956bbea5"
     },
     {
       "path": "test_store_film.py",
@@ -385,7 +393,7 @@
     },
     {
       "path": "test_subtitle_layout.py",
-      "sha256": "db0e1617c351db2a7837a3032583fb3124bd25c0d836edfc855c16e30b2e308d"
+      "sha256": "203e4586c2b0f769055a28d4c5cfbc4bedfe0af322dc75815a9e6c965fb939f3"
     },
     {
       "path": "toolkit.py",

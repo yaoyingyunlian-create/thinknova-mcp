@@ -66,6 +66,13 @@ class EditorialTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'QUESTION_ANSWER_REQUIRED'):
             dialogue_v21_lines({'segments': [{'dialogue': [question, dict(answer, speaker='customer')]}]})
 
+    def test_v54_allows_one_day_without_a_full_editorial_questionnaire(self):
+        profile = {'audiences': ['店主'], 'pain_points': [], 'features': ['租售设备'],
+                   'scenes': ['shop'], 'questions': []}
+        rows = [{'date': '2026-11-19', 'row': '店主', 'col': '租售设备', 'scene': 'shop',
+                 'format': 'shop_visit', 'opening': '到店看设备', 'opening_visual': 'Working staff'}]
+        self.assertEqual(validate_rotation(rows, [], profile, 3, '54'), rows)
+
     def test_v52_requires_exact_quotes_and_allows_solo_explainer(self):
         from store_editorial import validate_dialogue_v3
 

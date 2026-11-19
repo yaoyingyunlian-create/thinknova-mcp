@@ -454,8 +454,9 @@ def write_ass(path, job, cues, card_span, font):
         head += row.replace("{f}", font)
     head += (style % ("Badge", 30, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 3, 7, 60)).replace("{f}", font)
     head += (style % ("Card", 110, "&H00232D3C", "&H00232D3C", "&H00FFFFFF", 0, 5, 0)).replace("{f}", font)
-    head += (style % ("Closing", 68, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 6, 8,
-                      job.get('closing_overlay_top', 220))).replace("{f}", font)
+    closing = ("Style: Closing,{f},80,&H00FFFFFF,&H00FFFFFF,&H50141414,&H00000000,"
+               "-1,0,0,0,100,100,0,0,3,16,0,8,60,60,%d,1\n")
+    head += (closing % job.get('closing_overlay_top', 220)).replace("{f}", font)
     head += u"\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     rows = []
     for index, cue in enumerate(cues, 1):
@@ -487,7 +488,7 @@ def write_ass(path, job, cues, card_span, font):
         card_style = 'Closing' if overlay else 'Card'
         if overlay:
             try:
-                lines = [safe_subtitle_text(x, W, H, 68, job.get('closing_overlay_top', 220), 6, max_lines=1)
+                lines = [safe_subtitle_text(x, W, H, 80, job.get('closing_overlay_top', 220), 16, max_lines=1, allow_shrink=False)
                          for x in overlay]
             except ValueError as exc:
                 raise Stop('FILM_CLOSING_OVERLAY_INVALID: shorten the closing text', 2) from exc

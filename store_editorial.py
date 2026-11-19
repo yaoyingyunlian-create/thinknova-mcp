@@ -21,18 +21,19 @@ def normalized(value):
 
 def validate_rotation(rows, history, profile, schema_version=1, script_rules_revision=None):
     v3 = schema_version == 3
-    formats = FILM_V52_FORMATS if script_rules_revision == '52' else FILM_V3_FORMATS if v3 else FORMATS
+    minimal = script_rules_revision == '54'
+    formats = FILM_V52_FORMATS if script_rules_revision in ('52', '54') else FILM_V3_FORMATS if v3 else FORMATS
     for field in ('audiences', 'scenes', 'pain_points', 'features', 'questions'):
         values = profile.get(field)
-        if not isinstance(values, list) or len(values) < 3:
+        if not isinstance(values, list) or (not minimal and len(values) < 3):
             raise ValueError(f'SHOP_LIST_INCOMPLETE: {field}')
     questions = sorted(profile['questions'], key=lambda item: -item['count'])
     hot = {item['id'] for item in questions[:3]}
-    if len(rows) != 7 or len({row['format'] for row in rows}) < 4:
+    if len(rows) != (1 if minimal else 7) or (not minimal and len({row['format'] for row in rows}) < 4):
         raise ValueError('WEEK_REQUIRES_SEVEN_DAYS_AND_FOUR_FORMATS')
-    if len({row.get('question') for row in rows} & hot) < 2:
+    if not minimal and len({row.get('question') for row in rows} & hot) < 2:
         raise ValueError('WEEK_REQUIRES_TWO_POPULAR_QUESTIONS')
-    if len({row['row'] for row in rows}) != 3 or len({row['col'] for row in rows}) != 3:
+    if not minimal and (len({row['row'] for row in rows}) != 3 or len({row['col'] for row in rows}) != 3):
         raise ValueError('WEEK_REQUIRES_THREE_ROWS_AND_COLUMNS')
     allowed_rows = set(profile['audiences']) | set(profile['pain_points']) | {item['id'] for item in questions}
     seen = sorted(history, key=lambda old: old['date'])
@@ -57,7 +58,7 @@ def validate_rotation(rows, history, profile, schema_version=1, script_rules_rev
             if age == 1 and ('format' in same or (not v3 and same)):
                 raise ValueError(f'PLAN_CONSECUTIVE_REPEAT: {row["date"]} {", ".join(same)}')
             same_cell = 'row' in same and 'col' in same
-            if (same_cell and ((not v3 and age < 28) or 'format' in same)
+            if (not minimal and same_cell and ((not v3 and age < 28) or 'format' in same)
                     or (v3 and row.get('visual_batch') and row['visual_batch'] == old.get('visual_batch'))
                     or normalized(row['opening']) == normalized(old['opening'])
                     or row['opening_visual'] == old['opening_visual']):
@@ -152,7 +153,7 @@ def validate_dialogue_v3(plan):
             or overlay[0] != expected_overlay):
         raise ValueError('FILM_DIALOGUE_PROFILE_INVALID')
     revision21 = plan.get('dialogue_rules_revision') in ('2.1', '2.4')
-    final_rules = plan.get('script_rules_revision') == '52'
+    final_rules = plan.get('script_rules_revision') in ('52', '54')
     if revision21:
         dialogue_v21_lines(plan)
     for index, segment in enumerate(plan['segments'], 1):
@@ -226,7 +227,7 @@ def validate_script_evidence(plan):
                 if not source.startswith('Q') or line['text'] != sources[source]:
                     raise ValueError('DAY_PLAN_CUSTOMER_QUOTE_INVALID')
                 used_quotes.add(source)
-            elif category != '情境' and not source.startswith('F'):
+            elif category != '情境' and not source.startswith('F') and not (category == '麻烦' and source.startswith('B')):
                 raise ValueError('DAY_PLAN_SCRIPT_LINE_EVIDENCE_REQUIRED')
             counts[category] += 1
         quote_ids.append(used_quotes)
@@ -237,13 +238,21 @@ def validate_script_evidence(plan):
         raise ValueError('DAY_PLAN_EXPLAINER_QUOTES_REQUIRED')
     if counts != plan.get('dialogue_classification_counts'):
         raise ValueError('DAY_PLAN_SCRIPT_COUNTS_MISMATCH')
+    if plan.get('script_rules_revision') == '54':
+        angle = plan.get('content_angle') or {}
+        if not angle.get('id') or angle.get('source_ref') not in sources:
+            raise ValueError('DAY_PLAN_SCRIPT_ANGLE_REQUIRED')
+        for segment in plan['segments']:
+            if not all(isinstance(segment.get(field), str) and segment[field].strip()
+                       for field in ('scene_life', 'first_frame_prompt')):
+                raise ValueError('DAY_PLAN_LIVING_SCENE_REQUIRED')
 
 
 def dialogue_v21_lines(plan, previous_lines=()):
     used = set(previous_lines)
     lines = []
     for index, segment in enumerate(plan['segments'], 1):
-        final_rules = plan.get('script_rules_revision') == '52'
+        final_rules = plan.get('script_rules_revision') in ('52', '54')
         previous = None
         answered = False
         for line in segment.get('dialogue', ()):

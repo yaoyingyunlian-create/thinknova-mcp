@@ -90,7 +90,7 @@ During speech, keep the speaker's mouth visible. An explainer can use one roughl
 - [ ] 首帧结尾加了固定段；视频开头是 `Continue exactly from this frame`，结尾写了不出字、不出音乐
 - [ ] 台词用「我」，字数在上限内；带了 `duration_seconds`，报价也带了
 - [ ] 外貌描述、声音固定句和前面几镜一字不差；这一镜写了自己的情绪句
-- [ ] 台词里没有价格、带单位的数字、多音字
+- [ ] 价格、数字和发音按已核实资料核对
 
 ## English summary
 

@@ -33,7 +33,7 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 ## 2 账户规则与主动访谈
 - get_content_rules 返回的 platform_rules 是目标平台规则：硬性约束优先于客户偏好，客户偏好优先于运营建议；草稿不能当作有效规则。九个平台有规则目录不代表都有发布器或无人值守验收。
 - get_content_rules 返回的 effective_rules 是规则来源；本地仅保留 version、rules_schema_version、读取时间和摘要，不能覆盖服务器。
-- needs_onboarding=true 时主动按 missing_fields 提问，每轮最多三问，从目标、受众、平台开始；已回答不再问。没有素材、不出人和无禁忌均可明确记录，不能捏造答案。
+- needs_onboarding=true 时主动按 stage_missing_fields 在进入相应步骤时处理缺项，每轮最多三问，从目标、受众、平台开始；已回答不再问。没有素材、不出人和无禁忌均可明确记录，不能捏造答案。
 - 将新回答与已有完整规则合并，用 save_content_rules 携带 expected_version 保存；版本冲突重新读取，不能盲目覆盖。成功后更新本地摘要。
 - 默认 pre_publish：按已确认内容方案与预算制作，首条样片送审。pre_generation：先审脚本再生成。所有模式都先说明预计积分；价格未知先查询。仅启用制作或普通发布时，成片仍须确认。
 - 首次访谈和规则读写不扣积分、不建任务；不以服务器默认审核方式存在就判断访谈已完成。
@@ -173,8 +173,10 @@ The runner currently gates only shots whose plan contains 小程序: local ASR r
 
 ## 门店成片默认流程 / Store film workflow
 
-- 新版门店剧本先读 [主规则与模板](rules/store-film-rules-v52.md)，再用 [品类展示表](rules/store-film-category-v52.md) 对应一行。逐句留分类、来源、画面和机位。缺已授权原话时选能做的普通片型，记录缺项。趣味设定仍暂停。旧计划按原规则及任务号恢复。
-- For new store scripts, read the version 52 rules and category table. Record each line's classification, source, shot and camera. Choose an ordinary format when no approved quote is available. Resume existing plans under their saved rules.
+- 新账户优先使用 get_content_rules 的 effective_rules 和 stage_missing_fields。人物、风格、禁忌、频率使用默认值，不重复访谈六项。缺资料先完成可行脚本，列最多五项。生成前处理实际首帧和预算，发布前处理账号登录。MCP 账户页可一次确认项目的素材使用权限。
+- Use effective defaults without repeating the six-field interview. Continue feasible scripts and report at most five missing items. Resolve authorization and first-frame requirements at generation time, and account sign-in at publication time. Customers can confirm project asset use once on the MCP account page.
+- 新版门店剧本先读 [主规则与模板](rules/store-film-rules-v54.md)，再用 [品类展示表](rules/store-film-category-v54.md) 对应一行。逐句留分类、来源、画面和机位。缺已授权原话时选能做的普通片型，记录缺项。趣味设定仍暂停。旧计划按原规则及任务号恢复。
+- For new store scripts, read the version 54 rules and category table. Record each line's classification, source, shot and camera. Choose an ordinary format when no approved quote is available. Resume existing plans under their saved rules.
 - 门店片读取 skills/门店成片/SKILL.md。新品类产品片和服务片使用两段，各 15 秒，默认片尾叠字。讲解种草用 3–4 段、总长 45–60 秒。仅把质检通过的成片列入待审清单。
 - 首条样片用 publish/dispatch.py 的 --dry 准备各平台清单和哈希，客户确认后用 --approve-review HASH --user-confirmed 登记。普通发布继续按当前版本确认。已明确启用无人值守发布后，按当前授权和质检结果执行。
 - Mac 转写由 FFmpeg 解码后交给本机 Whisper。需要本地语音模型缓存。模型缺失或音频解码失败时记录待处理。

@@ -147,7 +147,10 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
             raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
         project = grant.get('project_key')
         rules = client.tool('get_content_rules', {'project_key': project}) if project else client.tool('get_content_rules')
-        if rules['version']!=grant['rules_version'] or rules.get('needs_onboarding'):raise RuntimeError('RULES_CHANGED')
+        if rules['version'] != grant['rules_version']:
+            raise RuntimeError('RULES_CHANGED')
+        if rules.get('needs_onboarding') and not rules.get('defaults_revision'):
+            raise RuntimeError('CREATION_PROFILE_INCOMPLETE')
         balance=client.tool('get_balance')
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
         if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
@@ -271,7 +274,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                         or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
                                for row in history)):
                     raise RuntimeError('FILM_CUSTOMER_REPEATED')
-        validate_rotation(rows, history, shop.get('editorial') or {}, plan.get('schema_version', 1),
+        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') == '54' else shop.get('editorial')
+        validate_rotation(rows, history, editorial or {}, plan.get('schema_version', 1),
                           plan.get('script_rules_revision'))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
@@ -430,6 +434,9 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if 'dialogue_classification_counts' in plan:
         summary['dialogue_classification_counts'] = plan['dialogue_classification_counts']
         summary['category_direction'] = plan['category_direction']
+    if 'content_angle' in plan:
+        summary['content_angle'] = plan['content_angle']
+        summary['first_frame_prompts'] = [segment.get('first_frame_prompt') for segment in plan['segments']]
     atomic(directory / 'review-ready.json', summary)
     if grant.get('auto_publish'):
         steps['stage'] = 'ready_to_publish'
@@ -590,7 +597,7 @@ def daily_film(project, day, work_slot=1):
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
         payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version':
-            grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6) else 4})
+            grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7) else 4})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -644,7 +651,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
         else:
             try:
                 response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version':
-                    grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6) else 4})
+                    grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7) else 4})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})
@@ -656,6 +663,8 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                     atomic(reminder, {
                         'date': day, 'error_code': result.get('error_code') or 'DAY_PLAN_INPUT_REQUIRED',
                         'missing_fields': result.get('missing_fields', []),
+                        'next_action': result.get('next_action'),
+                        'script_context': result.get('script_context'),
                     })
                 return
             raw_plan = result.get('plan')
@@ -872,7 +881,9 @@ def connected_report(check_local: bool = True, require_codex: bool = True, requi
         status('account','pass' if balance.get('generation_available') and balance.get('available_credits',0)>0 else 'waiting_user','Check plan and credits / 检查套餐和积分')
         project = (config.get('data') or {}).get('project_key')
         rules = client.tool('get_content_rules', {'project_key': project}) if project else client.tool('get_content_rules')
-        status('rules','pass' if not rules.get('needs_onboarding') and rules.get('version')==config['data']['rules_version'] else 'waiting_user','Confirm current account rules / 确认当前账户规则')
+        status('rules', 'pass' if (not rules.get('needs_onboarding') or rules.get('defaults_revision'))
+               and rules.get('version') == config['data']['rules_version'] else 'waiting_user',
+               'Use creation defaults and current rules / 使用创作默认值与当前规则')
         if require_publication:
             os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
             sys.path.insert(0,str(ROOT/'publish/youtube'))

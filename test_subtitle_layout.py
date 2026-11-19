@@ -27,3 +27,16 @@ class SubtitleLayoutTests(unittest.TestCase):
             data = Path(path).read_text(encoding='utf-8')
             self.assertIn('WrapStyle: 0',data)
             self.assertIn(r'\N',data)
+
+    def test_closing_overlay_has_a_box_and_rejects_unsafe_width(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / 'closing.ass')
+            job = {'closing_overlay': ['二楼 23 号档'], '_total': 30}
+            assemble.write_ass(path, job, [], (27.5, 30), 'Microsoft YaHei')
+            data = Path(path).read_text(encoding='utf-8')
+            self.assertIn('Style: Closing,Microsoft YaHei,80', data)
+            self.assertIn('&H50141414', data)
+            self.assertIn('100,100,0,0,3,16,0,8,60,60,220', data)
+            job['closing_overlay'] = ['楼' * 24]
+            with self.assertRaisesRegex(assemble.Stop, 'FILM_CLOSING_OVERLAY_INVALID'):
+                assemble.write_ass(path, job, [], (27.5, 30), 'Microsoft YaHei')

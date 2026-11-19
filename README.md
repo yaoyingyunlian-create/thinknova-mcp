@@ -2,6 +2,10 @@
 
 > 给 AI 助手：先读 AGENTS.md。For AI assistants: read AGENTS.md first.
 
+门店新计划使用 rules/store-film-rules-v54.md 和 rules/store-film-category-v54.md。读取服务器 effective_rules 的默认值，缺项按 stage_missing_fields 在对应步骤处理。MCP 账户页可确认项目素材权限。
+
+New store plans use the version 54 rules and category angles. Use the server's effective defaults and handle stage_missing_fields when entering that stage. Project asset permission can be confirmed on the MCP account page.
+
 安装体检：`python bootstrap.py setup --json`；安装完成后用 `.venv` Python 执行 `python toolkit.py doctor --json --online`。报告区分本机可运行与账户/规则/平台未知，Chromium 会实际启动检查；失败不算全就绪。后续更新会重新启动新版 setup。Windows 受控自动化试点见 [AUTOMATION.md](AUTOMATION.md)，默认关闭，不替代现有只读定时维护。
 
 Installation diagnostics: setup --json and toolkit.py doctor --json --online provide structured results, real Chromium launch checks and explicit unknown remote states. Updates restart the new setup process. The opt-in controlled Windows pilot is documented separately in AUTOMATION.md; existing users are never enrolled automatically.
