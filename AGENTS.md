@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.23
+# ThinkNova 视频制作工具包 v3.1.24
 
 工具包只负责制作：素材准备 → ThinkNova 生成与取件 → 拼片 → 字幕 → 质检 → 成片待审包。
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
@@ -22,11 +22,11 @@
 先核对客户AI助理支持原生定时和本机执行；不支持则只做手动制作，不宣称任务已登记。
 Check that the customer AI supports native timers and local execution; otherwise keep manual production and never claim a task was scheduled.
 
-- 客户 AI 助理使用自身定时功能，定时调用单次制作入口 automation.py produce-once；assistant-schedule 只返回制作任务建议，不安装任务。
+- 客户 AI 助理用原生定时功能和已有 MCP 连接，按已确认预算报价与生成，再调用 toolkit.py film job.json 制作。沿用原项目、当天请求号及对话；无需试点或设备配对。
 - 发布任务由客户 AI 助理另行创建，使用 Ego Lite 核对实际账号、成片版本、文案、披露与现有授权后操作。结果不明先核对已发作品；单个平台失败只影响该平台。
 - 不调用已退休的 enable-youtube、tick、tick-produce、tick-publish、install 或平台发布脚本；旧入口只返回迁移说明，不生成、不上传、不安装。已有 AI 定时任务需改指新入口，旧系统任务可用显式清理命令移除，仅限已知 ThinkNova 任务。
 - 本包不持有客户平台 OAuth Token。凭据不写提示词或 memory。只记录任务号、文件位置、用户偏好、确认范围和客户 AI 提供的实际发布结果。
 
 ## English
 The toolkit produces videos and review packages only. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.
-Scheduling belongs to the customer's AI assistant. Its native timer can invoke automation.py produce-once; assistant-schedule only returns production suggestions. Publishing belongs to that assistant through Ego Lite, within confirmed accounts and consent. Never run retired toolkit publishers or install OS tasks. Old timer commands do nothing and return migration guidance. No Google Desktop OAuth or platform login is needed to create videos. Do not store platform credentials in memory; record actual outcomes without claiming unverified publication.
+Scheduling belongs to the customer's AI assistant. Use existing MCP OAuth for quotes and generation, then toolkit.py film for local production. No pilot or pairing is needed. Publishing belongs to that assistant through Ego Lite, within confirmed accounts and consent. Never run retired toolkit publishers or install OS tasks. Old timer commands do nothing and return migration guidance. No Google Desktop OAuth or platform login is needed to create videos. Do not store platform credentials in memory; record actual outcomes without claiming unverified publication.

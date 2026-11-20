@@ -253,6 +253,10 @@ def prepare_reference(source: Path, output: Path, min_edge: int = 256, max_edge:
 
 
 def main() -> int:
+    if sys.argv[1:2] == ['enable-production']:
+        from automation import assistant_schedule
+        print(json.dumps(assistant_schedule(), ensure_ascii=False))
+        return 0
     if len(sys.argv)>1 and (sys.argv[1] in ('install-schedule','enable-youtube') or '--install-schedules' in sys.argv):
         from delivery_boundary import handoff, SCHEDULING_MOVED
         print(json.dumps(handoff(SCHEDULING_MOVED if sys.argv[1] != 'enable-youtube' else 'PUBLICATION_MOVED_TO_ASSISTANT_EGO'),ensure_ascii=False))
@@ -277,8 +281,7 @@ def main() -> int:
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
     authorization_parser = sub.add_parser("authorization", description="Read the paired project grant. Exit 2 on authorization or installation failure.")
-    sub.add_parser("assistant-schedule", help="Read the authorized schedule for the customer AI assistant")
-    sub.add_parser("enable-production", help="Authorize scheduled production and review")
+    sub.add_parser("assistant-schedule", help="Describe how to schedule production through the existing MCP connection")
     sub.add_parser("platform-capabilities", description="Print JSON showing ordinary publishing, unattended scheduling, and receipt verification by platform.")
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {schema_version: 3, rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
@@ -299,17 +302,10 @@ def main() -> int:
             result = {'status': 'blocked', 'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'awaiting_review' else 2
-    if args.command in ("enable-production", "enable-youtube", "assistant-schedule"):
-        from automation import assistant_schedule, enable_automation
-        try:
-            result = assistant_schedule() if args.command == "assistant-schedule" else enable_automation(include_publish=args.command == "enable-youtube")
-            print(json.dumps(result))
-            return 0 if result["status"] == "authorized" else 2
-        except Exception as exc:
-            detail = str(exc)
-            code = detail if re.fullmatch(r'[A-Z0-9_]{1,64}', detail) or detail.startswith('SCHEDULE_INSTALL_FAILED (') else 'YOUTUBE_SETUP_FAILED'
-            print(json.dumps({'status': 'blocked', 'error': code}), file=sys.stderr)
-            return 2
+    if args.command == "assistant-schedule":
+        from automation import assistant_schedule
+        print(json.dumps(assistant_schedule(), ensure_ascii=False))
+        return 0
     if args.command == "authorization":
         from automation import authorization
         try:

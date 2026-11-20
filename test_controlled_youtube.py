@@ -2,6 +2,7 @@
 import contextlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import sys
 import unittest
@@ -35,14 +36,33 @@ class PublisherTests(unittest.TestCase):
                   contextlib.redirect_stdout(io.StringIO())):
                 self.assertEqual(toolkit.main(),2);run.assert_not_called()
 
-    def test_assistant_schedule_contains_only_one_shot_production(self):
-        grant={'status':'available','project_key':'shop','grant_no':'fixture','timezone':'Asia/Shanghai',
-               'production_time':'10:00','publish_time':'19:00','auto_publish':True}
-        with patch.object(automation,'authorization',return_value=grant),patch.object(automation.subprocess,'run') as run:
-            result=automation.assistant_schedule()
-        self.assertEqual([item['phase'] for item in result['tasks']],['produce'])
-        self.assertEqual(result['tasks'][0]['argv'][-1],'produce-once')
-        self.assertFalse(result['publication']['toolkit_publisher']);run.assert_not_called()
+    def test_assistant_setup_uses_existing_mcp_without_pairing(self):
+        for command in ('assistant-schedule', 'enable-production'):
+            with (patch.object(sys, 'argv', ['toolkit.py', command]),
+                  patch.object(automation, 'authorization') as authorize,
+                  patch('urllib.request.build_opener') as network,
+                  patch('webbrowser.open') as browser,
+                  contextlib.redirect_stdout(io.StringIO()) as output):
+                self.assertEqual(toolkit.main(), 0)
+                authorize.assert_not_called()
+                network.assert_not_called()
+                browser.assert_not_called()
+            result = json.loads(output.getvalue())
+            self.assertEqual(result['status'], 'assistant_workflow')
+            self.assertEqual(result['production']['connection'], 'existing_thinknova_mcp_oauth')
+            self.assertFalse(result['production']['device_pairing_required'])
+            self.assertFalse(result['publication']['toolkit_publisher'])
+
+    def test_unpaired_old_timer_points_to_mcp_without_attempting_setup(self):
+        with (patch.object(sys, 'argv', ['automation.py', 'produce-once']),
+              patch.object(automation.platform, 'system', return_value='Windows'),
+              patch.object(automation, 'CREDENTIALS') as credentials,
+              patch.object(automation, 'scheduled_store_day') as execute,
+              contextlib.redirect_stdout(io.StringIO()) as output):
+            credentials.is_file.return_value = False
+            self.assertEqual(automation.main(), 2)
+            execute.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())['reason_code'], 'USE_EXISTING_MCP_CONNECTION')
 
     def test_local_manifest_never_invokes_a_platform_script(self):
         from publish import dispatch

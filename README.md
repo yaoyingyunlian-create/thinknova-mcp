@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.23
+# ThinkNova 视频制作工具包 v3.1.24
 
 工具包交付成片与待审包。自动发布推荐使用 **客户 AI 助理的原生定时任务 + Ego Lite**；工具包不再发布、登录社交账号或注册电脑系统任务。
 
@@ -22,9 +22,9 @@ python toolkit.py doctor --json
 
 ## 客户 AI 定时任务
 
-已有制作预算与执行凭据可继续使用。`python toolkit.py assistant-schedule` 提供时区、制作时间和 `automation.py produce-once` 单次制作入口。由客户 AI 助理登记定时，不安装 Windows 任务、launchd 或 systemd。
+由客户 AI 助理的原生定时任务复用现有 MCP OAuth 连接。按客户已确认的预算报价、生成与取件，再用工具包制作成片。无需申请试点、再次绑定设备或输入配对码。
 
-旧系统任务的 tick / tick-produce / tick-publish 入口不再执行。升级后将 AI 助理的制作任务改到 produce-once，再单独设置其 Ego Lite 发布任务。旧系统任务不会被悄悄删除；需要时显式清理已知 ThinkNova 任务，客户作品和登录态保留。
+旧系统任务的 tick / tick-produce / tick-publish 入口不再执行。将已有 AI 助理任务的制作入口改为 MCP 报价、生成、取件及工具包拼片，发布继续走 Ego Lite。旧系统任务不会被悄悄删除；需要时显式清理已知 ThinkNova 任务，客户作品和登录态保留。
 
 发布前按客户现有确认范围核对作品、账号、标题、正文、标签、平台与时间；首次样片待审核。单个平台登录失败仅阻塞该平台，未知结果先核验，避免重复发布。
 
@@ -32,4 +32,4 @@ python toolkit.py doctor --json
 
 This is a video-production toolkit. Install with bootstrap.py setup --json, make and check videos with toolkit.py film or run-day, and deliver a review package. Preserve original model dialogue; do not default to TTS or automatic pace adjustment. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
 
-Scheduling and publishing use the customer's AI assistant's native timers and Ego Lite. The toolkit installs no OS tasks and no longer supplies active upload/login implementations. Old commands return migration guidance. Use automation.py produce-once for assistant-triggered production; keep existing production budgets and idempotent task state. No platform OAuth or browser login is required for creation. Preserve customer memory, assets, platform sessions and work during upgrades.
+Scheduling and publishing use the customer's AI assistant's native timers and Ego Lite. The toolkit installs no OS tasks and no longer supplies active upload/login implementations. Old commands return migration guidance. Reuse MCP OAuth for quotes, generation and downloads, then use the toolkit to assemble the video. Keep the confirmed budget and existing idempotency keys. No pilot or device pairing is needed. No platform OAuth or browser login is required for creation. Preserve customer memory, assets, platform sessions and work during upgrades.

@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.23",
+  "version": "thinknova-automation-toolkit-v3.1.24",
   "text_line_endings": "lf",
-  "revision": "a97a75a261bb87e959c1389106b44788aafac2b2f0a8b7d3c8b77bc871df259f",
+  "revision": "7c0aa4e3967c9132363ac4ac938a07a08ad96b3de09752371dd7b18fa77c6492",
   "files": [
     {
       "path": ".gitignore",
@@ -9,15 +9,15 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "1a99b0ddd0e42eb96234c6b3b53fc46295dac62adc2d0b50ccae0008fb37f932"
+      "sha256": "751b79a6f5714699f96b5d25bf483fc78ac85c8445ab1192b9e05cf0ed07ac04"
     },
     {
       "path": "AUTOMATION.md",
-      "sha256": "69a969a3978e79c64e0d6ff6e137e5ab0409db642f2a379a09dfd00230afcbeb"
+      "sha256": "954a009b74d1486fba519ed27ed9336d54b37773413ec3e4e2f2c88f45cf6f24"
     },
     {
       "path": "README.md",
-      "sha256": "cf7fa883d6538620134788d7af6a880f703c88897f8660b5e5307478a245caa9"
+      "sha256": "1544ff4d8c86ab55faabf8c09782096f1ecfeea3b81cba5a75ae1312289031c1"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "0a4a615a9c4d960f80444df6c3014bb950bfa009c23f1e537394c508d160f68d"
+      "sha256": "833e4ffcd929331f7c4b17d85c6e16cc91cc2a403a9f5c23e3b8a98dc10e7f99"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "fd5063fb550dd094454ad5c6013ece706c20b2a0807a5231129a7823f3c72a66"
+      "sha256": "23ea21b33bbcd7541c73be14e6be8f635e1c313c4353bc9558d25275ebf5e1b8"
     },
     {
       "path": "clip_recovery.py",
@@ -397,7 +397,7 @@
     },
     {
       "path": "test_controlled_youtube.py",
-      "sha256": "39505858c5e813f723d62666d79ad8c4e86817e5e8b7ec0d231357c1491d1ace"
+      "sha256": "e922545b37dba00ba6c0cd7a52e93ebab8fdd2fd1edb9c8b93c988a0fa452080"
     },
     {
       "path": "test_ego_runtime.py",
@@ -449,7 +449,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "e9b215117c03c85b24b47556e1097ef897fb8b71dd2dd6127ee6c3bb33bc011b"
+      "sha256": "162c7853bb1f08d9197b028952de5a1766e99154ef2fd8f03bb95f5549737be7"
     },
     {
       "path": "update.py",

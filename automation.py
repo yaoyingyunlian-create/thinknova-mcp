@@ -555,73 +555,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     return summary
 
 
-def enable_automation(include_publish=False):
-    if include_publish:
-        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
-    import secrets
-    import urllib.error
-    import urllib.request
-    import webbrowser
-    from automation_client import BASE, NoRedirect
-
-    def post(stage, **data):
-        req = urllib.request.Request(BASE + '/mcp/device/youtube-setup/' + stage,
-            json.dumps(data).encode('utf-8'), headers={'Content-Type': 'application/json'})
-        try:
-            with urllib.request.build_opener(NoRedirect()).open(req, timeout=20) as response:
-                return json.loads(response.read(65536))['data']
-        except urllib.error.HTTPError as exc:
-            error = json.loads(exc.read(4096)).get('error', '')
-            raise RuntimeError(error if re.fullmatch('[A-Z0-9_]{1,64}', error) else 'YOUTUBE_SETUP_FAILED') from None
-
-    proof = secrets.token_hex(32)
-    proof_hash = hashlib.sha256(proof.encode()).hexdigest()
-    setup = post('start', proof_hash=proof_hash)['setup_id']
-    if not re.fullmatch('[a-f0-9]{48}', setup):
-        raise RuntimeError('YOUTUBE_SETUP_INVALID')
-    url = 'https://thinknova.top/app/account/mcp#youtube_setup=' + setup
-    print('Confirm the device and budget in ThinkNova / 请在 ThinkNova 页面确认设备与预算', flush=True)
-    print('Pairing code / 配对码: ' + proof_hash[:8].upper(), flush=True)
-    if not webbrowser.open(url):
-        print(url, flush=True)
-    deadline = time.monotonic() + 300
-    while time.monotonic() < deadline:
-        response = post('poll', setup_id=setup, secret=proof)
-        if response.get('status') == 'confirmed':
-            break
-        time.sleep(3)
-    else:
-        raise RuntimeError('YOUTUBE_SETUP_EXPIRED')
-
-    if not response.get('production_only'):
-        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
-    existing = secure_state.load(CREDENTIALS) if CREDENTIALS.is_file() else {}
-    execution = hashlib.sha256(('thinknova-youtube-execution:' + proof).encode()).hexdigest()
-    try:
-        result = post('activate', setup_id=setup, secret=proof, google_access_token="")
-    except (OSError, ValueError, RuntimeError):
-        # A committed grant is independently verifiable with its locally derived credential.
-        Client({'execution_token': execution}).post('/mcp/device/configuration', {})
-        result = {}
-    secure_state.save(CREDENTIALS, {**existing, 'execution_token': execution,
-                                  **({'telemetry_token': result['telemetry_token']} if 'telemetry_token' in result else {})})
-    (STATE / 'paused.json').unlink(missing_ok=True)
-    return assistant_schedule()
-
-
 def assistant_schedule():
-    grant = authorization()
-    if grant.get('status') != 'available' or not grant.get('project_key'):
-        raise RuntimeError('AUTOMATION_PROJECT_AUTHORIZATION_REQUIRED')
-    phases = [('produce', 'production_time')]
-    return {'status': 'authorized', 'scheduler': 'customer_ai_assistant',
-            'grant_no': grant['grant_no'], 'timezone': grant['timezone'],
-            'publication': {'executor':'customer_ai_assistant','browser':'ego_lite','toolkit_publisher':False},
-            'tasks': [
-                {'phase': phase, 'local_time': grant[field],
-                 'argv': [sys.executable, str(ROOT / 'automation.py'), 'produce-once']}
-                for phase, field in phases
-            ]}
+    return {'status': 'assistant_workflow', 'scheduler': 'customer_ai_assistant',
+            'production': {'connection': 'existing_thinknova_mcp_oauth',
+                           'device_pairing_required': False,
+                           'steps': ['get_content_rules', 'get_balance.quote_request',
+                                     'generate_with_max_credits', 'get_task', 'get_result', 'toolkit.py film']},
+            'publication': {'executor': 'customer_ai_assistant', 'browser': 'ego_lite',
+                            'toolkit_publisher': False}}
 
 
 def authorization():
@@ -962,7 +903,12 @@ def main():
             print('Server authorization stopped; existing paid tasks retain normal settlement/refund handling. 服务端已停止授权，已建任务按正常账务收尾。')
         elif args.command=='doctor':
             return doctor_command(args.json)
-        elif args.command=='produce-once':scheduled_store_day('produce')
+        elif args.command=='produce-once':
+            if not CREDENTIALS.is_file():
+                print(json.dumps({**assistant_schedule(), 'status': 'migration_required',
+                                  'reason_code': 'USE_EXISTING_MCP_CONNECTION'}))
+                return 2
+            scheduled_store_day('produce')
         else: uninstall_runner()
 
         return 0
