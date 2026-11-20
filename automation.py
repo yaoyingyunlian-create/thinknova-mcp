@@ -159,7 +159,7 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
         if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
         if day_plan is not None:
-            if (day_plan.get('script_rules_revision') == '59' and day_plan.get('asset_preparation')
+            if (day_plan.get('script_rules_revision') in ('59', '60') and day_plan.get('asset_preparation')
                     and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
                 from day_preparation import prepare_assets
                 day_plan = prepare_assets(client, claim, day_plan, directory, budget,
@@ -258,15 +258,15 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if steps.get('day_plan_sha256') not in (None, digest):
         raise RuntimeError('DAY_PLAN_CHANGED')
     authorized = set(rules['effective_rules'].get('authorized_asset_ids') or [])
-    if plan.get('script_rules_revision') == '59':
+    if plan.get('script_rules_revision') in ('59', '60'):
         authorized.update((plan.get('asset_bindings') or {}).values())
     shop = dict(rules['effective_rules'].get('shop_profile') or {})
-    if plan.get('script_rules_revision') == '59':
+    if plan.get('script_rules_revision') in ('59', '60'):
         shop['name'] = shop.get('name') or ''
         shop['featured_service'] = shop.get('featured_service') or shop.get('products') or ''
         shop['voice_identity'] = shop.get('voice_identity') or plan.get('script', {}).get('voice_identity', '')
     shop_assets = dict(shop.get('location_assets') or {})
-    if plan.get('script_rules_revision') == '59':
+    if plan.get('script_rules_revision') in ('59', '60'):
         for segment in plan['segments']:
             shop_assets.setdefault(segment.get('shop_location', 'generic'), []).append(segment['first_frame_asset_id'])
     if shop.get('name') != plan['shop_name'] or shop.get('featured_service') != plan['featured_service']:
@@ -296,10 +296,10 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                 if (previous.get('customer_identity') == plan['customer_identity']
                         or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
                                for row in history)):
-                    if plan.get('script_rules_revision') != '59':
+                    if plan.get('script_rules_revision') not in ('59', '60'):
                         raise RuntimeError('FILM_CUSTOMER_REPEATED')
                     plan.setdefault('warnings', []).append('SCRIPT_CHARACTER_ROTATION_ADVICE_UNMET')
-        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59') else shop.get('editorial')
+        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59', '60') else shop.get('editorial')
         validate_rotation(rows, history, editorial or {}, plan.get('schema_version', 1),
                           plan.get('script_rules_revision'), plan.setdefault('warnings', []))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
@@ -322,14 +322,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
-        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') != '59':
+        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') not in ('59', '60'):
             roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
             segment = {**segment, 'reference_roles': roles,
                        'reference_boards': {**(shop.get('reference_boards') or {}), **(segment.get('reference_boards') or {})}}
         args = generation_arguments(scripted_segment(segment, plan.get("script"), shop), shop_assets, authorized)
         if plan.get('dialogue_rules_revision') == '2.4':
             args['film_rules_revision'] = '2.4'
-        if plan.get('script_rules_revision') == '59':
+        if plan.get('script_rules_revision') in ('59', '60'):
             args['dialogue_language'] = 'zh' if re.search(r'[\u3400-\u9fff]', ''.join(segment.get('subs', []))) else plan.get('speech_language', 'en')
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
@@ -648,6 +648,12 @@ def run_day(path, budget):
         return execute(client, claim, day_plan=plan, budget=budget)
 
 
+def day_plan_request_version(grant):
+    if 9 in grant.get('supported_day_plan_request_versions', []):
+        return 9
+    return grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4
+
+
 def daily_film(project, day, work_slot=1):
     from store_film import validate_day_plan
     with state_lock(STATE / 'runner'):
@@ -661,7 +667,7 @@ def daily_film(project, day, work_slot=1):
         if project != grant.get('project_key') or day != grant.get('local_date'):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
         payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version':
-            grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4})
+            day_plan_request_version(grant)})
         result = payload.get('data') or {}
         if result.get('status') != 'ready':
             return result
@@ -716,7 +722,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
         else:
             try:
                 response, _ = client.post('/mcp/device/day-plan', {'work_slot': slot, 'schema_version':
-                    grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4})
+                    day_plan_request_version(grant)})
             except (RuntimeError, OSError) as exc:
                 code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'DAY_PLAN_CONNECTION_FAILED'
                 atomic(reminder, {'date': day, 'error_code': code})

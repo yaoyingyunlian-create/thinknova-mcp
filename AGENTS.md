@@ -26,14 +26,14 @@ Before planning, read Daily Film Standard. Read Shot Prompts before generation, 
 - 必须执行：MCP 的账户、素材授权、报价和预算校验，工具包的成片质检，以及对应平台已发布的 hard_constraints。平台规则发布状态、后台账号映射、无人值守授权和验收是对应平台的无人值守开通条件。
 - 客户可改：选题、人物、风格、常用素材、字幕语言、平台安排和制作偏好。用 get_content_rules 读取当前项目的 effective_rules，用 expected_version 保存合并后的规则。账号已写明的创作要求和自查逐条执行，技能只补缺项。自查为每项附上实际台词或镜头证据。素材权限、预算和质检硬约束继续生效。只在客户选择固定角色、镜头需要保持同一人物时使用三视图和角色禁项。
 - 客户本地偏好放在客户工作目录的 AGENTS.local.md 或项目规则中。官方仓库的 AGENTS.md、技能和脚本由 ThinkNova 更新。发现新版自动更新；遇到源码改动或更新失败，用 bootstrap.py recover --workspace 客户目录，按结果里的 active_toolkit 继续。原目录和客户文件保留。GitHub 离线时，完整性通过的安装可继续使用，版本记为未知。
-- 同一生成请求沿用原参数和请求号。成片通过后集中交审；修订59只在产品/服务未知或预算不可用时暂停收费制作，其他资料缺项随片说明。平台发布故障分别记录。
+- 同一生成请求沿用原参数和请求号。成片通过后集中交审；修订60只在产品/服务未知或预算不可用时暂停收费制作，其他资料缺项随片说明。平台发布故障分别记录。
 
 Enforce account eligibility, asset authorization, quotes, budgets, film checks, and published platform hard constraints at their applicable stages. Customers can change topics, characters, style, subtitles, targets, and editorial preferences in project rules. Published rules, account mapping, unattended authorization and acceptance are gates for unattended publishing only. Keep local preferences in the customer workspace. If an update fails, run bootstrap.py recover --workspace CUSTOMER_DIR and follow active_toolkit. Continue offline with an integrity-verified installation.
 
 ## 2 账户规则与主动访谈
 - get_content_rules 返回的 platform_rules 是目标平台规则：硬性约束优先于客户偏好，客户偏好优先于运营建议；草稿不能当作有效规则。九个平台有规则目录不代表都有发布器或无人值守验收。
 - get_content_rules 返回的 effective_rules 是规则来源；本地仅保留 version、rules_schema_version、读取时间和摘要，不能覆盖服务器。
-- 修订59仅在不知道卖什么时询问，其他缺项使用默认值并随片列清单；旧计划仍按原规则恢复。已回答不再问。没有素材、不出人和无禁忌均可明确记录，不能捏造答案。
+- 修订60仅在不知道卖什么时询问，其他缺项使用默认值并随片列清单；旧计划仍按原规则恢复。已回答不再问。没有素材、不出人和无禁忌均可明确记录，不能捏造答案。
 - 将新回答与已有完整规则合并，用 save_content_rules 携带 expected_version 保存；版本冲突重新读取，不能盲目覆盖。成功后更新本地摘要。
 - 默认 pre_publish：按已确认内容方案与预算制作，首条样片送审。pre_generation：先审脚本再生成。所有模式都先说明预计积分；价格未知先查询。仅启用制作或普通发布时，成片仍须确认。
 - 首次访谈和规则读写不扣积分、不建任务；不以服务器默认审核方式存在就判断访谈已完成。
@@ -108,7 +108,7 @@ Enforce account eligibility, asset authorization, quotes, budgets, film checks, 
 Use ego lite for AI browser work and read ego-browser skill first. Windows x64 setup downloads the official signed installer when missing; GUI installation/onboarding remains user controlled and blocks readiness. Existing installations are not silently upgraded. Legacy Python publishers retain their separate Chromium runtime and profiles until individually migrated and tested.
 Controlled automation is a separate opt-in Windows/Codex/YouTube pilot, not ordinary OAuth consent. It is limited by server-side daily credits, channel, rules version and a 30-day grant. Never ask the user to paste device tokens into chat. Use hidden local pairing, Windows DPAPI or macOS Keychain; Mac implementation still requires real-device acceptance; no paid terminal retries. Installation reports include real Chromium startup and explicit unknown account/platform states. Prefer schema v2 shop/style profiles, invite optional style references, and explicitly pass image ratio when requested.
 1. Check balance and eligibility. First setup automatically clones the HTTPS repository and runs bootstrap.py setup/repair; use the local .venv. Later updates run automatically without asking, using bootstrap.py update --workspace CUSTOMER_DIR. Never overwrite customer data or claim success after failed checks.
-2. Read memory, get_content_rules and its version. For revision 59 ask only if the product/service is unknown; do not wait for optional profile fields. Merge and save rules with expected_version. Default pre_publish follows the agreed budget; pre_generation reviews scripts first.
+2. Read memory, get_content_rules and its version. For revision 60 ask only if the product/service is unknown; do not wait for optional profile fields. Merge and save rules with expected_version. Default pre_publish follows the agreed budget; pre_generation reviews scripts first.
 3. Record asset consent and role. Use at most three references; animate_image must put the actual first frame first. Report first_only honestly.
 4. Persist request/task IDs and billing facts. Network retries reuse the same ID; active tasks are polled. Terminal failure or quality changes require a new request within an authorized budget, never a presumed free retry.
 5. Use render/assemble.py for normalization, joining, captions, loudness and quality checks. Supplied SRT timing is distinct from estimated text timing. Core, browser and account readiness are separate. Check local edits, captions and speech. Upscaling does not add source detail. No fixed durations, perfect identity/voice/text guarantees or frame-freeze padding.
@@ -159,24 +159,24 @@ Automatic update policy / 自动更新：每次开工检查官方GitHub仓库，
 - 已发现手部或其他结构异常的图片暂停用于图生视频，优先裁切或选择不露手的角度，必要时在预算内重生成一次；仍不合格换可用机位，不用异常画面拖住整片。不能以继续生成视频掩盖问题。此为具体样本处置和审核规则，未新增自动解剖检测器。
 - For new intents, run generation_quality.py on the UTF-8 draft and use its prompt unchanged for quote and creation. Never alter persisted/ambiguous earlier intents. Run speech_review.py with each required spoken term; legacy mismatch/unavailable handling is unchanged. Under server policy 58, repair runtime once and record unavailable recognition as unknown; it does not cancel an existing publication grant. ASR agreement never proves pronunciation; record listening separately without inventing a new gate under policy 58. This checker is a local diagnostic, not an automatic publication approval or anatomy detector. Correct defective source images before animation; no unapproved paid retries.
 
-旧契约对“小程序”保留原术语检查。新修订59逐镜头按服务器质量政策核验：58政策自动修复一次转写运行时，仍失败记录unknown，在已有发布授权内继续；有效低吻合度才执行有界配音修复。ASR不是发音保证，手部仍需AI/人工目视核验，不宣称已有自动解剖检测。
-Legacy term checks remain for old plans. Revision 59 follows the server-selected policy. Policy 58 repairs ASR once, records unknown status and continues within an existing grant; measured severe mismatch triggers bounded recovery. ASR is not pronunciation verification; anatomy still needs visual inspection.
+旧契约对“小程序”保留原术语检查。新修订60逐镜头按服务器质量政策核验：58政策自动修复一次转写运行时，仍失败记录unknown，在已有发布授权内继续；有效低吻合度才执行有界配音修复。ASR不是发音保证，手部仍需AI/人工目视核验，不宣称已有自动解剖检测。
+Legacy term checks remain for old plans. Revision 60 follows the server-selected policy. Policy 58 repairs ASR once, records unknown status and continues within an existing grant; measured severe mismatch triggers bounded recovery. ASR is not pronunciation verification; anatomy still needs visual inspection.
 
 
 ### 参考图参与生成 / Route reference images into generation
 
 - 先确认素材在本镜头的用途。指定角色、产品或场景参考且需要生成新画面时，调用 edit_image，并通过 reference_asset_ids 传入选中的授权图片。不要只把图片内容写成文字后走 generate_image。纯文本出图适用于无需参考的画面。
-- 生成首帧并核对后，用 animate_image 生成视频，实际首帧放在首位。客户已有图库继续遵守白名单；修订59本次运行生成的素材由服务端限定在当前运行使用，不为补首帧反复修改账户规则。只有设定图或风格样例时先做首帧，不能把它们直接当首帧。
-- 自动化的新计划必须显式记录 first_frame_asset_id。旧计划未选定首帧时仍按原契约处理。修订59由工具包自动报价、生成并绑定实际首帧，不等待客户选图；真实素材仍按原授权使用。已有计划继续按原工具和请求参数处理。
+- 生成首帧并核对后，用 animate_image 生成视频，实际首帧放在首位。客户已有图库继续遵守白名单；修订60本次运行生成的素材由服务端限定在当前运行使用，不为补首帧反复修改账户规则。只有设定图或风格样例时先做首帧，不能把它们直接当首帧。
+- 自动化的新计划必须显式记录 first_frame_asset_id。旧计划未选定首帧时仍按原契约处理。修订60由工具包自动报价、生成并绑定实际首帧，不等待客户选图；真实素材仍按原授权使用。已有计划继续按原工具和请求参数处理。
 - For a new image guided by authorized references, use edit_image with selected reference_asset_ids. Use animate_image with the actual intended first frame first. A character sheet or style sample only guides first-frame creation. An allowlist grants permission, not a first-frame assignment.
-- New unattended plans record first_frame_asset_id. For revision 59, automatically quote and prepare the intended first frame and missing fictional character sheets, then bind their IDs to the current run. Older plans retain their original reference requirements. Keep the chosen tool and arguments identical for the quote and creation, and retain legacy saved plans for idempotent retries.
+- New unattended plans record first_frame_asset_id. For revision 60, automatically quote and prepare the intended first frame and missing fictional character sheets, then bind their IDs to the current run. Older plans retain their original reference requirements. Keep the chosen tool and arguments identical for the quote and creation, and retain legacy saved plans for idempotent retries.
 
 ## 门店成片默认流程 / Store film workflow
 
 - 新账户优先使用 effective_rules。只在不知道产品或服务、套餐或预算不可用时暂停收费制作。没有店名也用产品或服务名称继续，不编造品牌。没有照片自动准备示意首帧。其余资料缺项随成片列最多五项，不等补齐。发布只检查对应账号及现有授权。MCP 账户页可一次确认项目的素材使用权限。
 - Use effective defaults. If the product/service and approved funds are available, continue without a shop name, photos, testimonials or a full checklist. Prepare illustrative first frames automatically and deliver up to five missing items with the film. Resolve authorization and first-frame requirements at generation time, and account sign-in at publication time. Customers can confirm project asset use once on the MCP account page.
-- 新版门店剧本先读 [主规则与模板](rules/store-film-rules-v59.md)，再用 [品类展示表](rules/store-film-category-v54.md) 对应一行。逐句留分类、来源、画面和机位。缺原话时普通片和讲解种草都可继续，由店员说已核实的用途或服务内容，记录缺项。趣味设定仍暂停。旧计划按原规则及任务号恢复。
-- For new store scripts, read revision 59 and the unchanged category table. Record each line's classification, source, shot and camera. With no approved quote, use verified staff statements even for explainers; never invent testimonials. Resume existing plans under their saved rules.
+- 新版门店剧本先读 [主规则与模板](rules/store-film-rules-v60.md)，再用 [品类展示表](rules/store-film-category-v54.md) 对应一行。逐句留分类、来源、画面和机位。缺原话时普通片和讲解种草都可继续，由店员说已核实的用途或服务内容，记录缺项。趣味设定仍暂停。旧计划按原规则及任务号恢复。
+- For new store scripts, read revision 60 and the unchanged category table. Record each line's classification, source, shot and camera. With no approved quote, use verified staff statements even for explainers; never invent testimonials. Resume existing plans under their saved rules.
 - 门店片读取 skills/门店成片/SKILL.md。新品类产品片和服务片使用两段，各 15 秒，默认片尾叠字。讲解种草用 3–4 段、总长 45–60 秒。仅把质检通过的成片列入待审清单。
 - 首条样片用 publish/dispatch.py 的 --dry 准备各平台清单和哈希，客户确认后用 --approve-review HASH --user-confirmed 登记。普通发布继续按当前版本确认。已明确启用无人值守发布后，按当前授权和质检结果执行。
 - Mac 转写由 FFmpeg 解码后交给本机 Whisper。需要本地语音模型缓存。模型缺失或音频解码失败时记录待处理。
@@ -193,11 +193,14 @@ Use python toolkit.py enable-production to approve the ThinkNova production budg
 同一人物跨镜头时，先用含正面、侧面、背面的单张授权设定板制作镜头首帧。日计划填 recurring_character: true、character_sheet_asset_id 和镜头适用的 negative_prompt。设定板不能当视频首帧；首帧始终排第一。工具包把禁项合入实际报价与建单使用的 prompt。
 For recurring characters, use one authorized front/side/back sheet to create each shot's first frame. Set recurring_character, character_sheet_asset_id and the shot's negative_prompt in the day plan. Put the actual shot frame first; the sheet is supplementary. The toolkit merges exclusions into the same prompt used to quote and generate.
 
-## 修订59与质量政策58 / Sparse creation and quality policy
+## 修订60与质量政策58 / Sparse creation and quality policy
 
-- 新计划由服务器声明修订59。规则和预算允许时，prepare → materialize → animate → film → review 连续执行；每个素材槽位和视频段使用稳定请求号，恢复先取原任务。没有照片生成 generic 示意首帧，不捏造招牌、地址或实际包装。图库许可和自动发布授权不因准备素材扩大。
+- 新计划由服务器声明修订60。规则和预算允许时，prepare → materialize → animate → film → review 连续执行；每个素材槽位和视频段使用稳定请求号，恢复先取原任务。没有照片生成 generic 示意首帧，不捏造招牌、地址或实际包装。图库许可和自动发布授权不因准备素材扩大。
 - 创建首张图前预估图片与视频总预算，实际每一步仍只用 get_balance.quote_request 报价并执行 max_credits。编码异常从原始 UTF-8 文件严格重读一次，不能靠猜编码把已损坏内容提交。
 - 服务器 quality_policy.version=58 才使用新质检：低于30%的已测对白吻合度、近全静音、黑屏、损坏、错误画幅或明显超出批准时长会阻断。语速、停顿、短暂无对白、运动少、30%～80%吻合度记警告。转写失败自动修复一次，仍不可用明确标 unknown，在有效发布授权内继续，不虚报已回听。
 - 配音错配先对同一视频做两次本地核验，不为确认错配重复收费；预算内最多一次新请求改善口语表达。仍错配则该镜头去错配音、用正确字幕，整片仍须通过非静音与严重错配检查。没有合格当天片时，只选择同项目、同账号、未过期且工具包没有发布尝试记录的库存；未知结果先核验。
-- First verify a bounded full-film estimate. Quote each actual image/video with the existing budget guard. Server revision 59 prepares and materializes missing assets within the current run; retry uses the same intent. Unknown brand names stay unknown, illustrative images do not depict actual shop signs or packaging.
+- First verify a bounded full-film estimate. Quote each actual image/video with the existing budget guard. Server revision 60 prepares and materializes missing assets within the current run; retry uses the same intent. Unknown brand names stay unknown, illustrative images do not depict actual shop signs or packaging.
 - Apply policy 58 only when returned by ThinkNova. Repair unavailable ASR once; persist unknown status and warnings, and continue only within an existing publication authorization. A measured match below 30% triggers bounded recovery; two local checks permit one budgeted new generation, then a caption-only shot fallback. A wholly silent or severely mismatched film still fails. Reuse only scoped, unexpired inventory with no recorded publication attempt. Never promise verified pronunciation, anatomy or a completed real-device trial from these checks.
+
+修订60：每段5～8句、总55～62字，短接话仍计对白与字幕，只免计情境句额度；第二段接第一段末句，第二卖点由对方问出，至少两处自然反应。门店结尾说已确认地址，缺地址不编造或停工。
+Revision 60: use 5–8 connected lines and 55–62 Chinese characters per segment. Short reactions remain in dialogue, captions and total counts; only the context quota is exempt. Bridge segments, let the other person elicit the second benefit, and include two natural reactions. Speak a confirmed address in store-film endings; never invent a missing address or block production for it.

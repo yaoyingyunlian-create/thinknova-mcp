@@ -132,7 +132,7 @@ def validate_day_plan(plan):
     day = plan.get('date')
     if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or type(plan.get('rules_version')) is not int:
         raise ValueError('DAY_PLAN_DATE_OR_RULES_INVALID')
-    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') == '59'
+    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') in ('59', '60')
                   else ('shop_name', 'featured_service', 'opening', 'visual_batch')):
         if not isinstance(plan.get(field), str) or not plan[field].strip():
             raise ValueError(f'DAY_PLAN_REQUIRED: {field}')

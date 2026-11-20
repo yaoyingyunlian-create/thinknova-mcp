@@ -47,7 +47,7 @@ Before drafting, record audience/problem, confirmed benefits and the intended ac
 
 ## 三、片型与画内对白
 
-账号没有指定时采用内置七片型和对白写作默认值。新版普通产品和服务片两段各 15 秒，每段一问一答、3～4 句，默认 55～62 字。原样记录对白并同步字幕。参考图依照「镜头提示词」预检。
+账号没有指定时采用内置七片型和对白写作默认值。新版普通产品和服务片两段各 15 秒，每段 5～8 句，逐句接话，默认 55～62 字。原样记录对白并同步字幕。参考图依照「镜头提示词」预检。
 
 ## 四、制作与提交
 
@@ -68,8 +68,11 @@ Before drafting, record audience/problem, confirmed benefits and the intended ac
 
 ## English summary
 
-Use the project's editorial rules. Reuse the approved staff turnaround, and choose a different customer for each film. For a visit, have the staff say one verified location cue or booking action; keep the full address and phone in the profile. Quote all segments and verify applied references. Review the first film and platform copy with the customer. Later qualifying films follow the active unattended grant, when enabled.
+Use the project's editorial rules. Reuse the approved staff turnaround, and choose a different customer for each film. For revision 60 store films, speak the confirmed shop name, address and one booking action in the ending and captions. If the address is unknown, omit it without inventing it or blocking creation. Quote all segments and verify applied references. Review the first film and platform copy with the customer. Later qualifying films follow the active unattended grant, when enabled.
 
 
-修订59执行补充：新脚本以 rules/store-film-rules-v59.md 为准，品类表不变。只知道产品或服务也先出片，店名可空。缺照片由工具包准备示意首帧和必要人物图；有授权实图优先引用。缺原话用店员陈述已核实信息，讲解首尾同样适用，不编造体验。创作自查重写一次后建议项记警告。质量政策由服务器返回；58政策下语速、停顿、低运动及30%～80%吻合度不拦交付，转写未知修复一次后记警告，实际严重错配进入有界恢复。费用包含素材和重做，不突破已有预算。旧计划保留原契约。
-Revision 59 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.
+修订60执行补充：新脚本以 rules/store-film-rules-v60.md 为准，品类表不变。只知道产品或服务也先出片，店名可空。缺照片由工具包准备示意首帧和必要人物图；有授权实图优先引用。缺原话用店员陈述已核实信息，讲解首尾同样适用，不编造体验。创作自查重写一次后建议项记警告。质量政策由服务器返回；58政策下语速、停顿、低运动及30%～80%吻合度不拦交付，转写未知修复一次后记警告，实际严重错配进入有界恢复。费用包含素材和重做，不突破已有预算。旧计划保留原契约。
+Revision 60 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.
+
+修订60：每段5～8句、总55～62字，短接话仍计对白与字幕，只免计情境句额度；第二段接第一段末句，第二卖点由对方问出，至少两处自然反应。门店结尾说已确认地址，缺地址不编造或停工。
+Revision 60: use 5–8 connected lines and 55–62 Chinese characters per segment. Short reactions remain in dialogue, captions and total counts; only the context quota is exempt. Bridge segments, let the other person elicit the second benefit, and include two natural reactions. Speak a confirmed address in store-film endings; never invent a missing address or block production for it.

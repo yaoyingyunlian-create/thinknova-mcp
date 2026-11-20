@@ -1,4 +1,4 @@
-# v3.1.20：少资料出片 / Sparse creation
+# v3.1.21：接话对白与规则读取 / Connected dialogue and rule recovery
 
 只知道产品或服务且有已批准预算时即可制作；没有店名、照片或顾客原话不等待补齐。新版设备日计划请求版本8，先自动准备素材，再通过服务端绑定到当前运行，继续原生成、制作和发布流程。费用预估包含图片与视频，实际任务仍逐项报价，恢复保留原请求号。
 Known product/service + approved funds are sufficient to start. Missing shop names, photos or quotes become a delivery checklist. Day-plan request version 8 materializes generated image slots under the existing run and budget. It does not broaden asset or publication authorization.
@@ -10,7 +10,7 @@ Policy 58 is server-selected. Unknown recognition after bounded repair is record
 
 > 给 AI 助手：先读 AGENTS.md。For AI assistants: read AGENTS.md first.
 
-门店新计划使用 rules/store-film-rules-v59.md 和 rules/store-film-category-v54.md。读取服务器 effective_rules 的默认值，缺项按 stage_missing_fields 在对应步骤处理。MCP 账户页可确认项目素材权限。
+门店新计划使用 rules/store-film-rules-v60.md 和 rules/store-film-category-v54.md。读取服务器 effective_rules 的默认值，缺项按 stage_missing_fields 在对应步骤处理。MCP 账户页可确认项目素材权限。
 
 New store plans use the version 54 rules and category angles. Use the server's effective defaults and handle stage_missing_fields when entering that stage. Project asset permission can be confirmed on the MCP account page.
 
@@ -393,3 +393,6 @@ The runner currently gates only shots whose plan contains 小程序: local ASR r
 - 生成后提醒客户检查完整视频和各平台的标题、正文、标签、封面、账号、发布时间。用 publish/dispatch.py 的 --dry 获取各平台清单和哈希。只有客户确认该版本后才用 --approve-review HASH --user-confirmed 登记。每次开工先检查上次待审清单并提醒，修改内容后重新审核。自动发布需要单独授权。
 - Mac 转写由 FFmpeg 解码后交给本机 Whisper。需要本地语音模型缓存。模型缺失或音频解码失败时记录待处理。
 - For store videos read the store-film skill and use the six-beat template. Run the film gate, then present the complete video and per-platform dispatch manifests for customer review. Remind customers of outstanding reviews at the next session. Record explicit approval of each manifest hash. A changed artifact or publishing payload requires review again. Automatic publication requires a separate authorization.
+
+修订60：每段5～8句、总55～62字，短接话仍计对白与字幕，只免计情境句额度；第二段接第一段末句，第二卖点由对方问出，至少两处自然反应。门店结尾说已确认地址，缺地址不编造或停工。
+Revision 60: use 5–8 connected lines and 55–62 Chinese characters per segment. Short reactions remain in dialogue, captions and total counts; only the context quota is exempt. Bridge segments, let the other person elicit the second benefit, and include two natural reactions. Speak a confirmed address in store-film endings; never invent a missing address or block production for it.

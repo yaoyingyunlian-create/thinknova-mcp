@@ -834,7 +834,7 @@ def main():
                 validate_beats(job.get('clips', []), job.get('film_type'))
             except ValueError as exc:
                 raise Stop(str(exc), 2) from exc
-        for key in (('featured_service',) if job.get('script_rules_revision') == '59' else ('shop_name', 'featured_service')):
+        for key in (('featured_service',) if job.get('script_rules_revision') in ('59', '60') else ('shop_name', 'featured_service')):
             if not isinstance(job.get(key), str) or not job[key].strip():
                 raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
     validate_job(job)

@@ -22,13 +22,13 @@ def normalized(value):
 def validate_rotation(rows, history, profile, schema_version=1, script_rules_revision=None, warnings=None):
     warnings = warnings if warnings is not None else []
     def repeat(message):
-        if script_rules_revision == '59':
+        if script_rules_revision in ('59', '60'):
             warnings.append(message)
         else:
             raise ValueError(message)
     v3 = schema_version == 3
-    minimal = script_rules_revision in ('54', '59')
-    formats = FILM_V52_FORMATS if script_rules_revision in ('52', '54', '59') else FILM_V3_FORMATS if v3 else FORMATS
+    minimal = script_rules_revision in ('54', '59', '60')
+    formats = FILM_V52_FORMATS if script_rules_revision in ('52', '54', '59', '60') else FILM_V3_FORMATS if v3 else FORMATS
     for field in ('audiences', 'scenes', 'pain_points', 'features', 'questions'):
         values = profile.get(field)
         if not isinstance(values, list) or (not minimal and len(values) < 3):
@@ -159,7 +159,7 @@ def validate_dialogue_v3(plan):
             or overlay[0] != expected_overlay):
         raise ValueError('FILM_DIALOGUE_PROFILE_INVALID')
     revision21 = plan.get('dialogue_rules_revision') in ('2.1', '2.4')
-    final_rules = plan.get('script_rules_revision') in ('52', '54', '59')
+    final_rules = plan.get('script_rules_revision') in ('52', '54', '59', '60')
     if revision21:
         dialogue_v21_lines(plan)
     for index, segment in enumerate(plan['segments'], 1):
@@ -172,7 +172,7 @@ def validate_dialogue_v3(plan):
             low, high = (low * seconds + 14) // 15, high * seconds // 15
         dialogue = segment.get('dialogue')
         prompt = str(segment.get('prompt', ''))
-        if (not isinstance(dialogue, list) or len(dialogue) not in (3, 4)
+        if (not isinstance(dialogue, list) or len(dialogue) not in (range(5, 9) if plan.get('script_rules_revision') == '60' else (3, 4))
                 or re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|^\s*\d+(?:[.,]\d+)?\s*[-–—~～至到]\s*\d+(?:[.,]\d+)?\s*(?:s\b|秒)', prompt, re.I | re.M)
                 or (not may_address_camera and re.search(r'对着镜头|talking to camera', prompt, re.I))):
             raise ValueError(f'FILM_DIALOGUE_LINES_INVALID: {index}')
@@ -193,15 +193,29 @@ def validate_dialogue_v3(plan):
         actual = ''.join(char for char in ''.join(spoken) if unicodedata.category(char)[0] in 'LN')
         length = len(actual)
         solo = may_address_camera and all(line.get('listener') == 'camera' for line in dialogue)
-        if plan.get('script_rules_revision') != '59' and (len(speakers) != (1 if solo else 2) or not low <= length <= high):
+        if plan.get('script_rules_revision') not in ('59', '60') and (len(speakers) != (1 if solo else 2) or not low <= length <= high):
             raise ValueError(f'FILM_DIALOGUE_WORD_COUNT: segment {index}, got {length}; expected {low}–{high}')
         captions = segment.get('subs')
         if not isinstance(captions, list) or not all(isinstance(item, str) for item in captions):
             raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')
         if actual != ''.join(char for char in ''.join(captions) if unicodedata.category(char)[0] in 'LN'):
             raise ValueError(f'FILM_DIALOGUE_CAPTIONS_MISMATCH: {index}')
+        if plan.get('script_rules_revision') == '60':
+            streak, previous = 0, None
+            for line in dialogue:
+                size = len(''.join(c for c in line['text'] if unicodedata.category(c)[0] in 'LN'))
+                streak = streak + 1 if previous == line['speaker'] else 1
+                previous = line['speaker']
+                if (size < 3 and not short_reaction(line['text'])) or size > 12 or streak > 2:
+                    code = f'SCRIPT_CONVERSATION_ADVICE_UNMET:{index - 1}'
+                    if code not in plan.setdefault('warnings', []): plan['warnings'].append(code)
+
     if final_rules:
         validate_script_evidence(plan)
+
+
+def short_reaction(text):
+    return re.fullmatch(r'(?:啊|真的|泡的|哦|嗯|好|是吗|对吗|这样啊|原来如此|哈哈|哇)[？?！!。，,、\s]*', text.strip()) is not None
 
 
 def validate_script_evidence(plan):
@@ -213,7 +227,7 @@ def validate_script_evidence(plan):
     explainer = plan.get('film_type') == 'explainer'
     if (format_name == 'explainer') != explainer:
         raise ValueError('DAY_PLAN_SCRIPT_FORMAT_MISMATCH')
-    if plan.get('script_rules_revision') != '59' and (not week or (format_name != 'shop_visit'
+    if plan.get('script_rules_revision') not in ('59', '60') and (not week or (format_name != 'shop_visit'
                     and plan['segments'][0]['dialogue'][0].get('classification') not in ('麻烦', '原话'))):
         raise ValueError('DAY_PLAN_SCRIPT_OPENING_INVALID')
     counts = dict.fromkeys(('麻烦', '好处或原因', '原话', '情境'), 0)
@@ -235,16 +249,17 @@ def validate_script_evidence(plan):
                 used_quotes.add(source)
             elif category != '情境' and not source.startswith('F') and not (category == '麻烦' and source.startswith('B')):
                 raise ValueError('DAY_PLAN_SCRIPT_LINE_EVIDENCE_REQUIRED')
-            counts[category] += 1
+            if not (plan.get('script_rules_revision') == '60' and category == '情境' and short_reaction(line['text'])):
+                counts[category] += 1
         quote_ids.append(used_quotes)
-    if plan.get('script_rules_revision') != '59' and (counts['情境'] > 2 or counts['好处或原因'] < 2 or (
+    if plan.get('script_rules_revision') not in ('59', '60') and (counts['情境'] > 2 or counts['好处或原因'] < 2 or (
             any(source.startswith('Q') for source in sources) and counts['原话'] < 1)):
         raise ValueError('DAY_PLAN_SCRIPT_COUNTS_INVALID')
-    if plan.get('script_rules_revision') != '59' and explainer and (not quote_ids[0] or (plan['film_purpose'] == 'service' and not quote_ids[-1] - quote_ids[0])):
+    if plan.get('script_rules_revision') not in ('59', '60') and explainer and (not quote_ids[0] or (plan['film_purpose'] == 'service' and not quote_ids[-1] - quote_ids[0])):
         raise ValueError('DAY_PLAN_EXPLAINER_QUOTES_REQUIRED')
     if counts != plan.get('dialogue_classification_counts'):
         raise ValueError('DAY_PLAN_SCRIPT_COUNTS_MISMATCH')
-    if plan.get('script_rules_revision') in ('54', '59'):
+    if plan.get('script_rules_revision') in ('54', '59', '60'):
         angle = plan.get('content_angle') or {}
         if not angle.get('id') or angle.get('source_ref') not in sources:
             raise ValueError('DAY_PLAN_SCRIPT_ANGLE_REQUIRED')
@@ -258,7 +273,7 @@ def dialogue_v21_lines(plan, previous_lines=()):
     used = set(previous_lines)
     lines = []
     for index, segment in enumerate(plan['segments'], 1):
-        final_rules = plan.get('script_rules_revision') in ('52', '54', '59')
+        final_rules = plan.get('script_rules_revision') in ('52', '54', '59', '60')
         previous = None
         answered = False
         for line in segment.get('dialogue', ()):
@@ -268,7 +283,7 @@ def dialogue_v21_lines(plan, previous_lines=()):
                     or (kind == 'question' and not text.strip().endswith(('?', '？')))):
                 raise ValueError(f'FILM_DIALOGUE_TURN_INVALID: {index}')
             normalized_line = ''.join(char for char in text if unicodedata.category(char)[0] in 'LN')
-            if normalized_line in used and not (final_rules and line.get('classification') == '原话'):
+            if normalized_line in used and plan.get('script_rules_revision') != '60' and not (final_rules and line.get('classification') == '原话'):
                 raise ValueError(f'FILM_DIALOGUE_LINE_REPEATED: {index}')
             used.add(normalized_line)
             lines.append(normalized_line)
@@ -278,7 +293,7 @@ def dialogue_v21_lines(plan, previous_lines=()):
             previous = line
         solo = (final_rules and plan.get('film_type') == 'explainer' and index > 1
                 and all(line.get('listener') == 'camera' for line in segment.get('dialogue', ())))
-        if not answered and not solo and plan.get('script_rules_revision') != '59':
+        if not answered and not solo and plan.get('script_rules_revision') not in ('59', '60'):
             raise ValueError(f'FILM_DIALOGUE_QUESTION_ANSWER_REQUIRED: {index}')
     return lines
 
