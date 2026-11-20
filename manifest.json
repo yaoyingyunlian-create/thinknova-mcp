@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.24",
+  "version": "thinknova-automation-toolkit-v3.1.25",
   "text_line_endings": "lf",
-  "revision": "7c0aa4e3967c9132363ac4ac938a07a08ad96b3de09752371dd7b18fa77c6492",
+  "revision": "9f528dfec3003c186cea1c884a8a2db28f26552db1ac48904f81d83dc3a11ef5",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "751b79a6f5714699f96b5d25bf483fc78ac85c8445ab1192b9e05cf0ed07ac04"
+      "sha256": "605fe587621d2df09ef55230bb8a22b252b55ba0cffabcf44af9a137e9531808"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "1544ff4d8c86ab55faabf8c09782096f1ecfeea3b81cba5a75ae1312289031c1"
+      "sha256": "91707d667ca755437eba20b1b8d798cbbfe5a05a8b5ae6f25d22671ccf934d3a"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "833e4ffcd929331f7c4b17d85c6e16cc91cc2a403a9f5c23e3b8a98dc10e7f99"
+      "sha256": "223316601e55e505634715220603de71f60882e9e39715a7ccf379305047a0f9"
     },
     {
       "path": "automation_client.py",
@@ -41,7 +41,7 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "428d0bda5f70111e5252814968e17b6f31696d9f10392a39cc6783146c1ccc3f"
+      "sha256": "467c8fe8a3be933cc221fc7ddcc00486d8eab08acc64d36d7c9b9a50cff94878"
     },
     {
       "path": "browser_receipt.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "23ea21b33bbcd7541c73be14e6be8f635e1c313c4353bc9558d25275ebf5e1b8"
+      "sha256": "a5954cbd7bc202c662c5e86e8dbc273b3766910de5f8ed184e1bef2b3718378b"
     },
     {
       "path": "clip_recovery.py",
@@ -393,7 +393,7 @@
     },
     {
       "path": "test_bootstrap.py",
-      "sha256": "147307795ba4fde56c5eee1156ba3b325399f7a9eb3a4e80da5ed29c8277570d"
+      "sha256": "28e78d635c13aa8322ea474bd5879af2d7a1f224abc71cacd12e8f0e209a15bb"
     },
     {
       "path": "test_controlled_youtube.py",

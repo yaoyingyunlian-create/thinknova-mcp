@@ -129,9 +129,9 @@ def prepare_legacy_update():
     print('Local instructions preserved. Run update to apply available changes automatically. 本地规矩已保留，运行update自动更新。')
 
 
-def update(confirmed=False):
+def update(confirmed=False, *, quiet=False):
     status = check()
-    if not status['update_available']: return
+    if not status['update_available']: return status
     changes = update_blockers()
     if changes: raise RuntimeError('Local source changes detected; preserve these files before updating / 请先保留以下文件修改:\n' + '\n'.join(changes))
     source = status['source']
@@ -145,7 +145,50 @@ def update(confirmed=False):
         raise RuntimeError('Toolkit source is older or divergent; update status unknown.') from exc
     git('merge', '--ff-only', status['latest_commit'])
     # The running module still contains OLD code after merge. Start the updated entrypoint.
-    subprocess.run([sys.executable, str(ROOT / 'bootstrap.py'), 'setup'], check=True)
+    subprocess.run([sys.executable, str(ROOT / 'bootstrap.py'), 'setup'], check=True,
+                   **({'stdout': sys.stderr} if quiet else {}))
+    return status
+
+
+def write_workspace_json(path, report):
+    import tempfile
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        json.dump(report, stream, ensure_ascii=False)
+    try:
+        os.replace(temporary, path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def workspace_runtime(root, repair=False):
+    python = root / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
+    try:
+        check_args = [str(python), str(root / 'toolkit.py'), 'doctor']
+        if python.is_file() and subprocess.run(check_args, stdout=sys.stderr, timeout=100).returncode == 0:
+            return str(python)
+        if repair:
+            subprocess.run([sys.executable, str(root / 'bootstrap.py'), 'setup'], check=True,
+                           stdout=sys.stderr, timeout=1800)
+            return str(python)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return None
+
+
+def workspace_update(workspace):
+    import contextlib
+    try:
+        with contextlib.redirect_stdout(sys.stderr):
+            remote = update(quiet=True)
+        python = workspace_runtime(ROOT, repair=not remote['update_available'])
+        if python:
+            return {'status': 'ready', 'version_status': 'current', 'active_toolkit': str(ROOT),
+                    'python': python, 'recovery': 'fast_forward' if remote['update_available'] else 'current'}
+    except (RuntimeError, OSError, subprocess.SubprocessError):
+        pass
+    return recovery_report(workspace)
 
 
 def preserve_customer_state(source, candidate):
@@ -227,7 +270,10 @@ def recovery_report(workspace):
         remote = None
 
     if not mismatches and not (remote and remote['update_available']):
-        return {**report, 'status': 'ready', 'active_toolkit': str(ROOT)}
+        python = workspace_runtime(ROOT, repair=True)
+        if python:
+            return {**report, 'status': 'ready', 'active_toolkit': str(ROOT), 'python': python}
+        return {**report, 'error': 'TOOLKIT_LOCAL_RUNTIME_NOT_READY'}
 
     if remote:
         candidate = None
@@ -264,10 +310,13 @@ def recovery_report(workspace):
             preserve_customer_state(ROOT, candidate)
             if failures(candidate):
                 raise RuntimeError('TOOLKIT_CANDIDATE_INTEGRITY_FAILED')
-            from automation import atomic
-            atomic(workspace / '.thinknova-toolkit.json', {'toolkit': str(candidate), 'commit': head})
+            python = workspace_runtime(candidate)
+            if not python:
+                raise RuntimeError('TOOLKIT_LOCAL_RUNTIME_NOT_READY')
+            write_workspace_json(workspace / '.thinknova-toolkit.json',
+                                 {'toolkit': str(candidate), 'commit': head, 'python': python})
             return {**report, 'status': 'ready', 'active_toolkit': str(candidate), 'version_status': 'current',
-                    'recovery': 'clean_copy'}
+                    'recovery': 'clean_copy', 'python': python}
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
             report['recovery'] = 'clean_copy_failed'
             reason = str(exc)
@@ -280,7 +329,10 @@ def recovery_report(workspace):
                 except OSError:
                     report['candidate_cleanup'] = 'failed'
     if not mismatches:
-        return {**report, 'status': 'ready', 'active_toolkit': str(ROOT)}
+        python = workspace_runtime(ROOT)
+        if python:
+            return {**report, 'status': 'ready', 'active_toolkit': str(ROOT), 'python': python}
+        return {**report, 'error': 'TOOLKIT_LOCAL_RUNTIME_NOT_READY'}
     report['error'] = 'TOOLKIT_INTEGRITY_RECOVERY_REQUIRED'
     return report
 
@@ -331,28 +383,16 @@ def main():
             if args.json:
                 python = ROOT / '.venv' / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
                 subprocess.run([str(python), str(ROOT / 'health.py'), '--json'], check=True)
-        elif args.command == 'recover':
-            from automation import atomic
+        elif args.command == 'recover' or (args.command == 'update' and args.workspace is not None):
             workspace = (args.workspace or Path.cwd()).resolve()
-            report = recovery_report(workspace)
+            report = recovery_report(workspace) if args.command == 'recover' else workspace_update(workspace)
             if report['status'] == 'blocked':
-                atomic(workspace / 'thinknova-recovery.json', report)
+                write_workspace_json(workspace / 'thinknova-recovery.json', report)
             print(json.dumps(report, ensure_ascii=False))
             return 0 if report['status'] == 'ready' else 2
         elif args.command == 'check': check()
         elif args.command == 'prepare-update': prepare_legacy_update()
-        else:
-            try:
-                update(args.user_confirmed)
-            except (OSError, RuntimeError, subprocess.SubprocessError):
-                if args.workspace is None:
-                    raise
-                report = recovery_report(args.workspace.resolve())
-                if report['status'] == 'blocked':
-                    from automation import atomic
-                    atomic(args.workspace.resolve() / 'thinknova-recovery.json', report)
-                print(json.dumps(report, ensure_ascii=False))
-                return 0 if report['status'] == 'ready' else 2
+        else: update(args.user_confirmed)
         return 0
     except (RuntimeError, OSError, subprocess.SubprocessError) as exc:
         print(str(exc), file=sys.stderr)

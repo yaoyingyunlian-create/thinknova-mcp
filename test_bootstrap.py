@@ -67,6 +67,23 @@ class BootstrapTests(unittest.TestCase):
                 bootstrap.update()
             git.assert_any_call('fetch', bootstrap.GITEE_REPOSITORY, 'refs/heads/main')
 
+    def test_workspace_update_falls_back_when_legacy_install_cannot_merge(self):
+        with patch.object(bootstrap, 'update', side_effect=RuntimeError('local changes')), patch.object(
+                bootstrap, 'recovery_report', return_value={'status': 'ready', 'active_toolkit': 'clean'}) as recover:
+            workspace = Path('customer workspace')
+            self.assertEqual(bootstrap.workspace_update(workspace)['active_toolkit'], 'clean')
+            recover.assert_called_once_with(workspace)
+
+    def test_offline_ready_requires_working_local_runtime(self):
+        with patch.object(bootstrap, 'check', side_effect=RuntimeError('offline')), patch.object(
+                bootstrap, 'workspace_runtime', side_effect=[None, 'verified-python']) as runtime:
+            blocked = bootstrap.recovery_report(Path('customer workspace'))
+            ready = bootstrap.recovery_report(Path('customer workspace'))
+        self.assertEqual(blocked['error'], 'TOOLKIT_LOCAL_RUNTIME_NOT_READY')
+        self.assertEqual(ready['version_status'], 'unknown')
+        self.assertEqual(ready['python'], 'verified-python')
+        self.assertTrue(runtime.call_args.kwargs['repair'])
+
     def test_first_init_preserves_memory(self):
         with tempfile.TemporaryDirectory() as directory:
             memory = Path(directory) / 'memory.md'

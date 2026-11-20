@@ -1,11 +1,11 @@
-# ThinkNova 视频制作工具包 v3.1.24
+# ThinkNova 视频制作工具包 v3.1.25
 
 工具包只负责制作：素材准备 → ThinkNova 生成与取件 → 拼片 → 字幕 → 质检 → 成片待审包。
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
 
 ## 首次使用与更新
 1. 用现有 MCP OAuth 连接调用 get_balance、get_toolkit、get_content_rules。会员、预算及素材许可按服务端实际结果判断。
-2. 缺工具包自动准备；后续 bootstrap.py update 自动安全更新。保留客户工作目录、素材、memory、登录态和作品；源码冲突先用官方干净副本恢复，不覆盖客户改动。
+2. 缺工具包自动准备；开工运行 bootstrap.py update --workspace "<客户工作目录>" --json。按返回的 active_toolkit、python 继续；冲突用官方干净副本自动恢复，保留工作目录与客户数据。
 3. python bootstrap.py setup --json；之后使用工具包 .venv 的 Python。核心制作不依赖平台登录、Google OAuth、Playwright 或另装 Chromium。Ego Lite 是客户 AI 的外部浏览器，可独立准备。
 
 ## 制作
@@ -24,7 +24,7 @@ Check that the customer AI supports native timers and local execution; otherwise
 
 - 客户 AI 助理用原生定时功能和已有 MCP 连接，按已确认预算报价与生成，再调用 toolkit.py film job.json 制作。沿用原项目、当天请求号及对话；无需试点或设备配对。
 - 发布任务由客户 AI 助理另行创建，使用 Ego Lite 核对实际账号、成片版本、文案、披露与现有授权后操作。结果不明先核对已发作品；单个平台失败只影响该平台。
-- 不调用已退休的 enable-youtube、tick、tick-produce、tick-publish、install 或平台发布脚本；旧入口只返回迁移说明，不生成、不上传、不安装。已有 AI 定时任务需改指新入口，旧系统任务可用显式清理命令移除，仅限已知 ThinkNova 任务。
+- 不调用已退休的 enable-youtube、tick、tick-produce、tick-publish、install 或平台发布脚本；旧入口只返回迁移说明，不生成、不上传、不安装。遇到旧制作命令或 AUTOMATION_PILOT_NOT_ALLOWED，自动更新原 AI 任务的执行方式，先查当天原任务，旧系统任务可用显式清理命令移除，仅限已知 ThinkNova 任务。
 - 本包不持有客户平台 OAuth Token。凭据不写提示词或 memory。只记录任务号、文件位置、用户偏好、确认范围和客户 AI 提供的实际发布结果。
 
 ## English
