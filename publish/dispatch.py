@@ -1,4 +1,4 @@
-"""Local publication manifest, seven-day duplicate guard and explicit script dispatch."""
+"""Local review manifests; posting belongs to the customer AI assistant and Ego Lite."""
 from __future__ import annotations
 import argparse
 import contextlib
@@ -120,56 +120,17 @@ def film_review(path, value, approval=None, confirmed=False):
 
 
 def dispatch(path, platform, execute=False, confirmed=False, approval=None):
+    if execute: raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
     if platform not in PLATFORMS:raise RuntimeError('PLATFORM_NOT_SUPPORTED')
     value=snapshot(path,platform)
     review = film_review(path, value, approval, confirmed)
     if review:
         value['review_state'] = review
-        if execute and review != 'approved':
-            raise RuntimeError('FILM_REVIEW_REQUIRED')
     if approval:
         return value
-    script=ROOT/'publish'/platform/('upload.py' if platform=='youtube' else 'publish.py')
-    with tempfile.TemporaryDirectory(prefix='thinknova-publish-check-') as directory:
-        validated = Path(directory) / 'job.json'
-        atomic(validated, value['job'])
-        preflight = subprocess.run([sys.executable, str(script), str(validated), '--dry'],
-                                   capture_output=True, timeout=120)
-    if preflight.returncode:raise RuntimeError('PUBLISHER_LOCAL_PREFLIGHT_FAILED')
-    if not execute:return value
-    if not confirmed:raise RuntimeError('PUBLICATION_CONFIRMATION_REQUIRED')
-    ATTEMPTS.mkdir(exist_ok=True)
-    value['attempt_id']=uuid.uuid4().hex
-    marker=ATTEMPTS/(value['attempt_id']+'.json')
-    with state_lock(HISTORY):
-        history=json.loads(HISTORY.read_text(encoding='utf-8')) if HISTORY.exists() else []
-        if duplicate(value,history) or marker.exists():raise RuntimeError('RECENT_DUPLICATE_OR_UNKNOWN_ATTEMPT')
-        value.update(state='executing',attempted_at=datetime.now(timezone.utc).isoformat())
-        with marker.open('x',encoding='utf-8') as stream:json.dump(value,stream,ensure_ascii=False)
-        history.append(value);atomic(HISTORY,history)
-    # Freeze the exact merged payload; publisher consumes this same file, not a mutable original.
-    frozen=ATTEMPTS/(value['attempt_id']+'.job.json');atomic(frozen,value['job'])
-    script=ROOT/'publish'/platform/('upload.py' if platform=='youtube' else 'publish.py')
-    command=[sys.executable,str(script),str(frozen),'--execute']
-    try:
-        result=subprocess.run(command,timeout=1200)
-        receipt=Path(str(frozen)+'.receipt.json')
-        evidence=json.loads(receipt.read_text(encoding='utf-8')) if receipt.exists() else {}
-        value['state']='verified' if result.returncode==0 and evidence.get('state')=='verified' else ('submitted_unverified' if result.returncode==0 else 'outcome_unknown')
-        value['actual_readback']=evidence if evidence else 'pending'
-    except Exception:
-        value['state']='outcome_unknown'
-    finally:
-        atomic(marker,value)
-        with state_lock(HISTORY):
-            history=json.loads(HISTORY.read_text(encoding='utf-8'))
-            history=[value if row.get('attempt_id')==value['attempt_id'] else row for row in history]
-            atomic(HISTORY,history)
-    try:
-        import monitoring
-        monitoring.event(platform,'publication',None if value['state']=='verified' else 'PUBLICATION_OUTCOME_UNVERIFIED')
-    except Exception:pass
     return value
+
+
 
 
 def main():

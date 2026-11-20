@@ -107,12 +107,11 @@ def metrics_command() -> list[str]:
 
 def maintenance() -> int:
     init()
-    result = subprocess.run([sys.executable, str(ROOT / 'analytics.py'), 'collect'], check=False)
     archive()
     pending = [line for line in MEMORY.read_text(encoding='utf-8').splitlines() if line.lstrip().startswith('- [ ]')]
     (ROOT / 'reminders.txt').write_text('Local pending work / 本机待办\n' + '\n'.join(pending) + '\n', encoding='utf-8')
     print('Read-only maintenance finished. See reminders.txt. No AI session, generation or publication was started.')
-    return result.returncode
+    return 0
 
 
 def doctor() -> int:
@@ -123,26 +122,9 @@ def doctor() -> int:
 
 
 def install_schedule() -> int:
-    command = metrics_command()
-    system = platform.system()
-    if system == "Windows":
-        quoted = " ".join('"%s"' % item for item in command)
-        subprocess.run(["schtasks", "/Create", "/F", "/SC", "DAILY", "/TN", JOB_NAME, "/TR", quoted, "/ST", "10:00"], check=True)
-    elif system == "Darwin":
-        directory = Path.home() / "Library" / "LaunchAgents"; directory.mkdir(parents=True, exist_ok=True)
-        plist = directory / (JOB_NAME + ".plist")
-        values = "".join("<string>%s</string>" % item.replace("&", "&amp;") for item in command)
-        plist.write_text("<?xml version=\"1.0\" encoding=\"UTF-8\"?><!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\"><plist version=\"1.0\"><dict><key>Label</key><string>%s</string><key>ProgramArguments</key><array>%s</array><key>StartCalendarInterval</key><dict><key>Hour</key><integer>10</integer><key>Minute</key><integer>0</integer></dict></dict></plist>" % (JOB_NAME, values), encoding="utf-8")
-        subprocess.run(["launchctl", "load", str(plist)], check=True)
-    else:
-        unit_dir = Path.home() / ".config" / "systemd" / "user"; unit_dir.mkdir(parents=True, exist_ok=True)
-        escaped = " ".join('"%s"' % item.replace('"', '\\"') for item in command)
-        (unit_dir / (JOB_NAME + ".service")).write_text("[Service]\nType=oneshot\nExecStart=%s\n" % escaped, encoding="utf-8")
-        (unit_dir / (JOB_NAME + ".timer")).write_text("[Timer]\nOnCalendar=*-*-* 10:00:00\nPersistent=true\n[Install]\nWantedBy=timers.target\n", encoding="utf-8")
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "--user", "enable", "--now", JOB_NAME + ".timer"], check=True)
-    print("Installed a daily read-only metrics task. It never generates or publishes.")
-    return 0
+    from delivery_boundary import handoff, SCHEDULING_MOVED
+    print(json.dumps(handoff(SCHEDULING_MOVED),ensure_ascii=False))
+    return 2
 
 
 def uninstall_schedule() -> int:
@@ -271,9 +253,13 @@ def prepare_reference(source: Path, output: Path, min_edge: int = 256, max_edge:
 
 
 def main() -> int:
+    if len(sys.argv)>1 and (sys.argv[1] in ('install-schedule','enable-youtube') or '--install-schedules' in sys.argv):
+        from delivery_boundary import handoff, SCHEDULING_MOVED
+        print(json.dumps(handoff(SCHEDULING_MOVED if sys.argv[1] != 'enable-youtube' else 'PUBLICATION_MOVED_TO_ASSISTANT_EGO'),ensure_ascii=False))
+        return 2
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("install-schedule"); sub.add_parser("uninstall-schedule")
+    sub.add_parser("init"); sub.add_parser("verify"); doctor_parser = sub.add_parser("doctor"); doctor_parser.add_argument('--json', action='store_true'); doctor_parser.add_argument('--online', action='store_true'); sub.add_parser("migrate-memory"); sub.add_parser("maintenance"); sub.add_parser("uninstall-schedule")
     archive_parser = sub.add_parser("archive"); archive_parser.add_argument("--max-lines", type=int, default=300); archive_parser.add_argument("--max-chars", type=int, default=15000)
     reference_parser = sub.add_parser("prepare-reference", help="Resize an undersized reference image locally without overwriting it")
     reference_parser.add_argument("source", type=Path)
@@ -291,10 +277,8 @@ def main() -> int:
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
     authorization_parser = sub.add_parser("authorization", description="Read the paired project grant. Exit 2 on authorization or installation failure.")
-    authorization_parser.add_argument("--install-schedules", action="store_true", help="Register both local jobs after confirming the sample, authorizing and pairing the device")
     sub.add_parser("assistant-schedule", help="Read the authorized schedule for the customer AI assistant")
     sub.add_parser("enable-production", help="Authorize scheduled production and review")
-    sub.add_parser("enable-youtube", help="Open ThinkNova to enable YouTube automatic publishing")
     sub.add_parser("platform-capabilities", description="Print JSON showing ordinary publishing, unattended scheduling, and receipt verification by platform.")
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {schema_version: 3, rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
@@ -327,22 +311,22 @@ def main() -> int:
             print(json.dumps({'status': 'blocked', 'error': code}), file=sys.stderr)
             return 2
     if args.command == "authorization":
-        from automation import authorization, install_daily_schedules
+        from automation import authorization
         try:
-            result = install_daily_schedules() if args.install_schedules else authorization()
+            result = authorization()
             print(json.dumps(result, ensure_ascii=False))
             return 0
         except (RuntimeError, OSError, KeyError) as exc:
-            error = str(exc) if args.install_schedules and isinstance(exc, RuntimeError) else 'AUTOMATION_AUTHORIZATION_UNAVAILABLE'
+            error = str(exc) if isinstance(exc, RuntimeError) else 'AUTOMATION_AUTHORIZATION_UNAVAILABLE'
             print(json.dumps({'status': 'unavailable', 'error': error}, ensure_ascii=False))
             return 2
     if args.command == "platform-capabilities":
         from publish.dispatch import PLATFORMS
         print(json.dumps({platform: {
-            'publisher_available': True,
-            'unattended': 'controlled_pilot' if platform == 'youtube' else 'unavailable',
-            'scheduled': 'controlled_pilot' if platform == 'youtube' else 'unverified',
-            'receipt_verification': 'supported' if platform == 'youtube' else 'requires_platform_validation'
+            'publisher_available': False,
+            'unattended': 'external_ai_assistant_ego_lite',
+            'scheduled': 'customer_ai_assistant',
+            'receipt_verification': 'external_platform_readback'
         } for platform in PLATFORMS}))
         return 0
     if args.command == "validate-week":

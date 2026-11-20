@@ -1,71 +1,65 @@
-"""Synthetic YouTube API; never authenticates, uploads or publishes real content."""
+"""Retired publishing must never access a platform or install an OS task."""
+import contextlib
 import importlib.util
-import json
+import io
 from pathlib import Path
 import sys
-import tempfile
-import types
 import unittest
 from unittest.mock import patch
-import automation_client
-import secure_state
-
-ROOT=Path(__file__).resolve().parent
-spec=importlib.util.spec_from_file_location('controlled_youtube',ROOT/'publish/youtube/upload.py')
-upload=importlib.util.module_from_spec(spec);spec.loader.exec_module(upload)
-
-
-class Response:
-    def __init__(self,value):self.value=value
-    def execute(self):return self.value
-
-
-class FakeYouTube:
-    def __init__(self):self.insertions=0;self.privacy_writes=[];self.body=None
-    def videos(self):return self
-    def insert(self,**kw):
-        self.insertions+=1;self.body=kw['body'];self.privacy_writes.append(self.body['status']['privacyStatus'])
-        return self
-    def next_chunk(self):return None,{'id':'Abcdef12345'}
-    def list(self,**kw):return Response({'items':[self.body]})
-    def update(self,**kw):
-        status=kw['body'].get('status')
-        if status:self.body['status'].update(status);self.privacy_writes.append(self.body['status']['privacyStatus'])
-        return Response({})
+import automation
+import toolkit
 
 
 class PublisherTests(unittest.TestCase):
-    def invoke(self,root,api,expected='UC'+'a'*22,denied=False):
-        video=root/'clip.mp4';video.write_bytes(b'synthetic-fixture')
-        job=root/'job.json';job.write_text(json.dumps({'video':str(video),'title':'Cafe','description':'Real shop','privacy':'public','aigc':True,'expected_channel_id':expected,'automation_run_id':'run_'+'a'*24,'automation_steps':{'task_0':'task_fixture'}}),encoding='utf-8')
-        module=types.ModuleType('googleapiclient.http');module.MediaFileUpload=lambda *a,**k: object()
-        with patch.dict(sys.modules,{'googleapiclient.http':module}),patch.object(upload.yt_common,'youtube',return_value=api),patch.object(upload.yt_common,'my_channel',return_value={'id':'UC'+'a'*22,'title':'Fixture','handle':'fixture','subs':0,'videos':0}),patch.object(upload,'run_check',return_value=0),patch.object(upload,'append_log'),patch.object(upload.time,'sleep'),patch.object(secure_state,'load',return_value={'execution_token':'a'*64}),patch.object(automation_client.Client,'receipt',side_effect=RuntimeError('AUTOMATION_INACTIVE') if denied else None) as permission,patch.object(sys,'argv',['upload.py',str(job),'--execute']):
-            result=upload.main()
-            return result,permission.call_count
+    def test_every_retired_platform_entry_returns_handoff(self):
+        root=Path(__file__).parent/'publish'
+        names={'upload','publish','auth','login','reschedule','yt_captions'}
+        files=[p for p in root.glob('*/*.py') if p.parent.name!='common' and p.stem in names]
+        self.assertEqual(len(files),18)
+        with (patch('urllib.request.urlopen',side_effect=AssertionError('No platform API')),
+              patch('webbrowser.open',side_effect=AssertionError('No browser login'))):
+            for i,path in enumerate(files):
+                spec=importlib.util.spec_from_file_location('retired_'+str(i),path)
+                module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+                with contextlib.redirect_stdout(io.StringIO()):self.assertEqual(module.main(),2)
 
-    def test_private_staging_before_final_authorization(self):
-        with tempfile.TemporaryDirectory() as d:
-            api=FakeYouTube();code,calls=self.invoke(Path(d),api)
-            self.assertEqual(code,0);self.assertEqual(calls,1);self.assertEqual(api.privacy_writes[0],'private');self.assertEqual(api.privacy_writes[-1],'public')
-            receipt=json.loads((Path(d)/'job.json.receipt.json').read_text(encoding='utf-8'))
-            self.assertEqual(receipt['state'],'verified')
+    def test_old_system_task_commands_do_not_generate_or_publish(self):
+        for command in ('tick','tick-produce','tick-publish','install','install-daily-schedules','youtube-auth'):
+            with (patch.object(sys,'argv',['automation.py',command]),patch.object(automation,'scheduled_store_day') as execute,
+                  patch.object(automation.subprocess,'run') as run,contextlib.redirect_stdout(io.StringIO())):
+                self.assertEqual(automation.main(),2);execute.assert_not_called();run.assert_not_called()
 
-    def test_revoke_during_private_upload_prevents_publication(self):
-        with tempfile.TemporaryDirectory() as d:
-            api=FakeYouTube()
-            with self.assertRaisesRegex(RuntimeError,'AUTOMATION_INACTIVE'):self.invoke(Path(d),api,denied=True)
-            self.assertNotIn('public',api.privacy_writes)
+    def test_old_toolkit_install_and_youtube_commands_do_nothing(self):
+        for arguments in (['install-schedule'],['enable-youtube'],['authorization','--install-schedules']):
+            with (patch.object(sys,'argv',['toolkit.py',*arguments]),patch.object(toolkit.subprocess,'run') as run,
+                  contextlib.redirect_stdout(io.StringIO())):
+                self.assertEqual(toolkit.main(),2);run.assert_not_called()
 
-    def test_existing_upload_marker_prevents_duplicate(self):
-        with tempfile.TemporaryDirectory() as d:
-            root=Path(d);(root/'job.json.receipt.json').write_text('{"state":"uploading"}',encoding='utf-8')
-            api=FakeYouTube();code,_=self.invoke(root,api)
-            self.assertEqual(code,2);self.assertEqual(api.insertions,0)
+    def test_assistant_schedule_contains_only_one_shot_production(self):
+        grant={'status':'available','project_key':'shop','grant_no':'fixture','timezone':'Asia/Shanghai',
+               'production_time':'10:00','publish_time':'19:00','auto_publish':True}
+        with patch.object(automation,'authorization',return_value=grant),patch.object(automation.subprocess,'run') as run:
+            result=automation.assistant_schedule()
+        self.assertEqual([item['phase'] for item in result['tasks']],['produce'])
+        self.assertEqual(result['tasks'][0]['argv'][-1],'produce-once')
+        self.assertFalse(result['publication']['toolkit_publisher']);run.assert_not_called()
 
-    def test_channel_mismatch_never_uploads(self):
-        with tempfile.TemporaryDirectory() as d:
-            api=FakeYouTube();code,_=self.invoke(Path(d),api,expected='UC'+'b'*22)
-            self.assertEqual(code,2);self.assertEqual(api.insertions,0)
+    def test_local_manifest_never_invokes_a_platform_script(self):
+        from publish import dispatch
+        value={'job':{},'artifacts':[]}
+        with patch.object(dispatch,'snapshot',return_value=value),patch.object(dispatch,'film_review',return_value=None),patch.object(dispatch.subprocess,'run') as process:
+            self.assertEqual(dispatch.dispatch(Path('fixture.json'),'youtube'),value)
+            process.assert_not_called()
+            with self.assertRaisesRegex(RuntimeError,'PUBLICATION_MOVED_TO_ASSISTANT_EGO'):
+                dispatch.dispatch(Path('fixture.json'),'youtube',execute=True,confirmed=True)
+            process.assert_not_called()
+
+    def test_setup_has_no_browser_or_platform_dependency_install(self):
+        source=(Path(__file__).parent/'bootstrap.py').read_text(encoding='utf-8')
+        self.assertNotIn("run('chromium_install'",source)
+        requirements=(Path(__file__).parent/'requirements.txt').read_text(encoding='utf-8')
+        for package in ('google-api-python-client','google-auth','playwright'):
+            self.assertNotIn(package,requirements)
 
 
-if __name__=='__main__':unittest.main()
+if __name__ == '__main__':unittest.main()

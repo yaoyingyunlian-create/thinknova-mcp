@@ -18,8 +18,8 @@ class HealthTests(unittest.TestCase):
     def test_browser_launch_failure_blocks_browser_capability(self):
         with patch.object(health, 'verify_files', return_value=True), patch.object(health, 'chromium_probe', return_value=False):
             result=health.report()
-        self.assertEqual(result['capabilities']['browser_publishing'],'fail')
-        self.assertEqual(next(x for x in result['checks'] if x['name']=='chromium_runtime')['status'],'fail')
+        self.assertEqual(result['capabilities']['browser_publishing'],'external_ai_assistant_ego_lite')
+        self.assertEqual(next(x for x in result['checks'] if x['name']=='chromium_runtime')['status'],'not_applicable')
         self.assertEqual(next(x for x in result['checks'] if x['name']=='account')['status'],'unknown')
 
     def test_network_failure_is_unknown_not_latest(self):

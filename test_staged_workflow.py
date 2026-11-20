@@ -26,7 +26,7 @@ class Contracts(unittest.TestCase):
         checks=[{'name':n,'status':'pass'} for n in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font')]
         checks += [{'name':'chromium_runtime','status':'fail'},{'name':'ego_runtime','status':'fail'}]
         states=health.capabilities(checks)
-        self.assertEqual(states['core_production'],'pass');self.assertEqual(states['browser_publishing'],'fail');self.assertEqual(states['automation'],'unknown')
+        self.assertEqual(states['core_production'],'pass');self.assertEqual(states['browser_publishing'],'external_ai_assistant_ego_lite');self.assertEqual(states['automation'],'unknown')
 
     def test_bad_jobs_are_explicit_errors(self):
         for job in ({'out':'a.mp4','clips':['bad']},{'out':'a.mp4','clips':[{'file':'a','dur':float('nan')}]},{'out':'a.mp4','clips':[{'file':'a','start':-1}]},{'out':'a.mp4','clips':[{'file':'a','fit':'stretch'}]}):
@@ -59,16 +59,10 @@ class Contracts(unittest.TestCase):
         dispatch.validate_variants({'platforms':{'youtube':{'title':'A'},'tiktok':{'title':'B'}}})
 
     def test_mac_launchagent_has_no_credentials(self):
-        with tempfile.TemporaryDirectory() as d:
-            path=Path(d)/'task.plist'
-            with patch.object(automation.platform,'system',return_value='Darwin'),patch.object(automation,'schedule_path',return_value=path),patch.object(automation.os,'getuid',create=True,return_value=501),patch.object(automation.subprocess,'run') as run:
+        with patch.object(automation.subprocess,'run') as run:
+            with self.assertRaisesRegex(RuntimeError,'SYSTEM_SCHEDULING_REMOVED_USE_ASSISTANT'):
                 automation.install_runner()
-                import plistlib
-                value=plistlib.loads(path.read_bytes())
-                self.assertEqual(value['ProgramArguments'][-1],'tick')
-                self.assertEqual(value['StartInterval'],300)
-                self.assertFalse(any('token' in str(v).lower() for v in value['ProgramArguments']))
-                self.assertEqual(run.call_args.args[0][0:2],['launchctl','bootstrap'])
+            run.assert_not_called()
 
     def test_recovering_one_platform_keeps_other_faults(self):
         with tempfile.TemporaryDirectory() as d:

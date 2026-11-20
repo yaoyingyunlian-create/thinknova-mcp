@@ -1,4 +1,4 @@
-"""Opt-in Windows/Codex/YouTube controlled pilot. No AI-generated shell commands."""
+"""One-shot video production. Scheduling and publication belong to the customer AI assistant."""
 from __future__ import annotations
 import argparse
 from datetime import date, datetime, timezone
@@ -70,7 +70,7 @@ def make_plan(directory: Path, rules: dict) -> dict:
     if not codex:raise RuntimeError('CODEX_UNAVAILABLE')
     output=directory/'plan.json'
     # Only a constrained content plan is consumed. No model-provided commands or paths.
-    prompt='Create one YouTube video content plan matching these account rules. For ordinary human characters require anatomically natural hands, five fingers per fully visible hand, no extra or fused digits/limbs, and simple stable gestures. This does not certify generated anatomy. If the spoken script contains 小程序, add the pronunciation instruction 小程序 = xiǎo chéng xù; keep displayed text unchanged, do not speak the pinyin. Require listening and visual review for suspected defects before release. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
+    prompt='Create one video content plan matching these account rules. For ordinary human characters require anatomically natural hands, five fingers per fully visible hand, no extra or fused digits/limbs, and simple stable gestures. This does not certify generated anatomy. If the spoken script contains 小程序, add the pronunciation instruction 小程序 = xiǎo chéng xù; keep displayed text unchanged, do not speak the pinyin. Require listening and visual review for suspected defects before release. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
     prompt += (' For each shot set first_frame_asset_id to the exact ThinkNova asset ID only when the account rules explicitly identify '
                'that image as the intended starting frame for the shot. Authorization alone is insufficient. '
                'Never substitute a character sheet, style sample, negative reference or external URL. Use null if no such frame is designated.')
@@ -146,7 +146,7 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
     def checkpoint(status='running',error=None):
         atomic(state_path,steps);client.receipt(run_no,steps,status,error)
     try:
-        preflight = connected_report(require_publication=True) if day_plan is None else connected_report(require_codex=False, require_publication=False)
+        preflight = connected_report(require_publication=False) if day_plan is None else connected_report(require_codex=False, require_publication=False)
         if not preflight['automation_ready']:
             raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
         project = grant.get('project_key')
@@ -215,21 +215,12 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
             review_spoken_terms(path, shot['prompt'])
         steps['stage']='render';checkpoint()
         output=compose(directory,len(plan['shots']),checkpoint)
-        # The publisher persists an upload-attempt marker before calling YouTube.
-        # If the outcome is unknown, a later run cannot blindly re-upload.
-        checkpoint()
-        steps['stage']='publication';checkpoint()
-        job={'video':str(output),'title':plan['title'],'description':plan['description'],'privacy':'public','aigc':True,'expected_channel_id':grant['channel_id'],'automation_run_id':run_no,'automation_steps':steps}
-        job_path=directory/'job.json';atomic(job_path,job)
-        checkpoint() # live authorization/lease check immediately before starting publication
-        os.environ['THINKNOVA_RUN_LEASE']=client.lease
-        try:run_command([sys.executable,str(ROOT/'publish/youtube/upload.py'),str(job_path),'--execute'],directory,timeout=300)
-        finally:os.environ.pop('THINKNOVA_RUN_LEASE',None)
-        receipt=json.loads(Path(str(job_path)+'.receipt.json').read_text(encoding='utf-8'))
-        if receipt.get('state')!='verified':raise RuntimeError('PUBLICATION_UNVERIFIED')
-        steps['youtube_video_id']=receipt['video_id'];steps['published_hash']=hashlib.sha256(output.read_bytes()).hexdigest();steps['stage']='complete';checkpoint('succeeded')
-        try:client.post('/mcp/device/heartbeat',{'state':'normal','platform':'youtube','stage':'publication','last_run_state':'succeeded'},execution=False)
-        except Exception:pass
+        steps['stage']='review';checkpoint('waiting_user')
+        review={'status':'awaiting_review','output':str(output),'run_no':run_no,
+                'title':plan['title'],'description':plan['description'],
+                'publication_executor':'customer_ai_assistant','browser':'ego_lite'}
+        atomic(directory/'review-ready.json',review)
+        return review
     except Exception as exc:
         code=str(exc) if re.fullmatch('[A-Z0-9_]{1,64}',str(exc)) else 'LOCAL_RUN_FAILED'
         if code in ('RECOVERY_TASK_PENDING', 'DAY_PLAN_ASSET_PENDING'):
@@ -275,10 +266,6 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     copy_policies = {}
     if grant.get('project_key'):
         from store_editorial import dialogue_v21_lines, validate_plan_copy, validate_rotation
-        if grant.get('auto_publish') and set(plan['platforms']) != {'youtube'}:
-            raise RuntimeError('DAY_PLAN_PLATFORM_NOT_AUTHORIZED')
-        if grant.get('auto_publish') and plan['platforms']['youtube'].get('expected_channel_id') != grant['channel_id']:
-            raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
         rows = plan.get('week_rows')
         if not isinstance(rows, list):
             raise RuntimeError('DAY_PLAN_WEEK_REQUIRED')
@@ -410,9 +397,13 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     checkpoint()
     output = directory / 'final.mp4'
     job_path = directory / 'assemble.json'
+    from quality_policy import store_policy
+    render_policy = store_policy(plan.get('quality_policy'))
+    if render_policy.get('version') == 'legacy' and rules.get('quality_policy', {}).get('version') == 'native_dialogue_v1':
+        render_policy = rules['quality_policy']
     job = {'out': output.name, 'film_profile': 'store_v2', 'film_type': plan['film_type'],
            'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips,
-           'script_rules_revision': plan.get('script_rules_revision'), 'quality_policy': plan.get('quality_policy', {})}
+           'script_rules_revision': plan.get('script_rules_revision'), 'quality_policy': render_policy}
     if plan.get('speech_language'):
         job['speech_language'] = plan['speech_language']
     if plan['schema_version'] in (2, 3):
@@ -496,24 +487,20 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if inventory:
         summary.update(delivery_source='inventory', source_run_no=inventory['source_run_no'],
                        source_date=inventory['review']['source_date'], segments=inventory['review'].get('segments', []))
-    summary['quality_policy'] = plan.get('quality_policy', {})
+    summary['quality_policy'] = render_policy
     proof_file = Path(str(output) + '.film.json')
     proof = json.loads(proof_file.read_text(encoding='utf-8'))
     summary['warnings'] = [*plan.get('warnings', []), *proof.get('warnings', [])]
     summary['speech_status'] = proof.get('speech_status', 'unknown')
     atomic(directory / 'review-ready.json', summary)
-    if grant.get('auto_publish'):
-        steps['stage'] = 'ready_to_publish'
-        steps['publish_job_hash'] = hashlib.sha256(publish_job.read_bytes()).hexdigest()
-        steps['film_sha256'] = hashlib.sha256(output.read_bytes()).hexdigest()
-        checkpoint('pending')
-        return {**summary, 'status': 'ready_to_publish'}
     steps['stage'] = 'review'
     checkpoint('waiting_user')
     return summary
 
 
 def enable_automation(include_publish=False):
+    if include_publish:
+        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
     import secrets
     import urllib.error
     import urllib.request
@@ -536,8 +523,6 @@ def enable_automation(include_publish=False):
     if not re.fullmatch('[a-f0-9]{48}', setup):
         raise RuntimeError('YOUTUBE_SETUP_INVALID')
     url = 'https://thinknova.top/app/account/mcp#youtube_setup=' + setup
-    if include_publish:
-        url += '&publish=youtube'
     print('Confirm the device and budget in ThinkNova / 请在 ThinkNova 页面确认设备与预算', flush=True)
     print('Pairing code / 配对码: ' + proof_hash[:8].upper(), flush=True)
     if not webbrowser.open(url):
@@ -551,31 +536,16 @@ def enable_automation(include_publish=False):
     else:
         raise RuntimeError('YOUTUBE_SETUP_EXPIRED')
 
-    credentials = None
     if not response.get('production_only'):
-        from google_auth_oauthlib.flow import InstalledAppFlow
-        from googleapiclient.discovery import build
-        sys.path.insert(0, str(ROOT / 'publish' / 'youtube'))
-        import yt_common
-        flow = InstalledAppFlow.from_client_config(response['oauth'], yt_common.SCOPES, autogenerate_code_verifier=True)
-        credentials = flow.run_local_server(host='127.0.0.1', port=0, timeout_seconds=max(1, int(deadline - time.monotonic())),
-                                          authorization_prompt_message=None, prompt='select_account')
-        channel = yt_common.my_channel(build('youtube', 'v3', credentials=credentials, cache_discovery=False))
-        if channel['id'] != response['channel_id']:
-            raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
+        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
     existing = secure_state.load(CREDENTIALS) if CREDENTIALS.is_file() else {}
     execution = hashlib.sha256(('thinknova-youtube-execution:' + proof).encode()).hexdigest()
-    pending_token = YOUTUBE_TOKEN.with_name('youtube-pending' + YOUTUBE_TOKEN.suffix)
-    if credentials:
-        secure_state.save(pending_token, json.loads(credentials.to_json()))
     try:
-        result = post('activate', setup_id=setup, secret=proof, google_access_token=credentials.token if credentials else "")
+        result = post('activate', setup_id=setup, secret=proof, google_access_token="")
     except (OSError, ValueError, RuntimeError):
         # A committed grant is independently verifiable with its locally derived credential.
         Client({'execution_token': execution}).post('/mcp/device/configuration', {})
         result = {}
-    if credentials:
-        secure_state.save(YOUTUBE_TOKEN, secure_state.load(pending_token))
     secure_state.save(CREDENTIALS, {**existing, 'execution_token': execution,
                                   **({'telemetry_token': result['telemetry_token']} if 'telemetry_token' in result else {})})
     (STATE / 'paused.json').unlink(missing_ok=True)
@@ -587,13 +557,12 @@ def assistant_schedule():
     if grant.get('status') != 'available' or not grant.get('project_key'):
         raise RuntimeError('AUTOMATION_PROJECT_AUTHORIZATION_REQUIRED')
     phases = [('produce', 'production_time')]
-    if grant.get('auto_publish'):
-        phases.append(('publish', 'publish_time'))
     return {'status': 'authorized', 'scheduler': 'customer_ai_assistant',
             'grant_no': grant['grant_no'], 'timezone': grant['timezone'],
+            'publication': {'executor':'customer_ai_assistant','browser':'ego_lite','toolkit_publisher':False},
             'tasks': [
                 {'phase': phase, 'local_time': grant[field],
-                 'argv': [sys.executable, str(ROOT / 'automation.py'), 'tick-' + phase]}
+                 'argv': [sys.executable, str(ROOT / 'automation.py'), 'produce-once']}
                 for phase, field in phases
             ]}
 
@@ -609,7 +578,7 @@ def authorization():
         return {'status': 'unconfigured'}
     fields = ('grant_no', 'channel_id', 'rules_version', 'daily_budget', 'publish_time',
               'timezone', 'expires_at', 'project_key', 'weekly_budget', 'production_time', 'auto_publish')
-    return {'status': 'available', 'platform': 'youtube',
+    return {'status': 'available', 'platform': 'thinknova_production',
             **{key: grant[key] for key in fields if key in grant}}
 
 
@@ -684,6 +653,8 @@ def daily_film(project, day, work_slot=1):
 
 
 def scheduled_store_day(phase):
+    if phase != 'produce':
+        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
     """Poll a due phase for each work authorized on the device."""
 
     if not CREDENTIALS.is_file() or (STATE / 'paused.json').exists():
@@ -708,6 +679,8 @@ def scheduled_store_day(phase):
 
 def scheduled_store_work(client, phase, grant, day, slot, reminder):
     from store_film import validate_day_plan
+    if phase != 'produce':
+        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
     if phase == 'produce':
         if grant.get('local_time', '') < grant.get('production_time', '10:00'):
             return
@@ -772,95 +745,16 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
             except RuntimeError as exc:
                 atomic(reminder, {'date': day, 'error_code': str(exc)})
                 raise
-    elif grant.get('auto_publish'):
-        claim = client.claim('publish', slot)
-        if claim.get('due'):
-            publish_store_day(client, claim)
+    else:
+        raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
 
 
 def publish_store_day(client, claim):
-    from publish.dispatch import dispatch
-
-    run_no = claim['run_no']
-    if not re.fullmatch(r'run_[a-f0-9]{24}', run_no):
-        raise RuntimeError('INVALID_RUN_ID')
-    directory = STATE / 'runs' / run_no
-    grant, steps = claim['grant'], dict(claim['steps'])
-    job_path = directory / 'publish.json'
-    frozen = directory / 'youtube-authorized.json'
-    receipt_path = Path(str(frozen) + '.receipt.json')
-    try:
-        if not grant.get('auto_publish') or not grant.get('project_key'):
-            raise RuntimeError('AUTOMATION_PUBLICATION_NOT_AUTHORIZED')
-        if hashlib.sha256(job_path.read_bytes()).hexdigest() != steps.get('publish_job_hash'):
-            raise RuntimeError('PUBLICATION_JOB_CHANGED')
-        if steps.get('publication_started') != 'yes':
-            os.environ['YT_TOKEN'] = str(YOUTUBE_TOKEN)
-            value = dispatch(job_path, 'youtube')
-            video = next(item for item in value['artifacts'] if item['role'] == 'video')
-            if video['sha256'] != steps.get('film_sha256'):
-                raise RuntimeError('PUBLICATION_VIDEO_CHANGED')
-            if value['target_account'] != grant['channel_id']:
-                raise RuntimeError('YOUTUBE_CHANNEL_MISMATCH')
-            steps['publication_started'] = 'yes'
-            steps['stage'] = 'publication'
-            atomic(frozen, {**value['job'], 'privacy': 'public', 'schedule': None,
-                            'aigc': True, 'automation_run_id': run_no, 'automation_steps': steps})
-            client.receipt(run_no, steps)
-            os.environ['THINKNOVA_RUN_LEASE'] = client.lease
-            try:
-                run_command([sys.executable, str(ROOT / 'publish/youtube/upload.py'), str(frozen), '--execute'],
-                            directory, timeout=300)
-            finally:
-                os.environ.pop('THINKNOVA_RUN_LEASE', None)
-        if not receipt_path.is_file():
-            raise RuntimeError('PUBLICATION_OUTCOME_UNKNOWN')
-        evidence = json.loads(receipt_path.read_text(encoding='utf-8'))
-        video_id = evidence.get('video_id', '')
-        if evidence.get('state') != 'verified' or evidence.get('channel_id') != grant['channel_id'] or not re.fullmatch(r'[A-Za-z0-9_-]{11}', video_id):
-            raise RuntimeError('PUBLICATION_OUTCOME_UNKNOWN')
-        steps.update(stage='complete', youtube_video_id=video_id)
-        client.receipt(run_no, steps, 'succeeded')
-        published = {'date': claim['usage_date'], 'status': 'published',
-                     'video_url': f'https://youtube.com/shorts/{video_id}'}
-    except Exception as exc:
-        code = str(exc) if re.fullmatch(r'[A-Z0-9_]{1,64}', str(exc)) else 'PUBLICATION_FAILED'
-        atomic(STATE / 'daily-reminder.json', {'date': claim['usage_date'], 'error_code': code})
-        client.receipt(run_no, steps, 'waiting_user', code)
-        raise RuntimeError(code) from exc
-
-
-    try:
-        from analytics import register
-        register(argparse.Namespace(platform='youtube', content_id=video_id, content_url=None,
-                                    published_at=datetime.now(timezone.utc).isoformat(), controlled=True))
-    except (OSError, RuntimeError, ValueError):
-        published['analytics_error'] = 'ANALYTICS_REGISTRATION_FAILED'
-    atomic(STATE / 'daily-reminder.json', published)
+    raise RuntimeError('PUBLICATION_MOVED_TO_ASSISTANT_EGO')
 
 
 def daily_schedule_status():
-    marker = STATE / 'schedule-install.json'
-    installed = 0
-    system = platform.system()
-    if system not in ('Windows', 'Darwin'):
-        return 'unsupported'
-    for phase in ('produce', 'publish'):
-        command = (['schtasks', '/Query', '/TN', f'ThinkNova-Store-{phase}'] if system == 'Windows'
-                   else ['launchctl', 'print', f'gui/{os.getuid()}/top.thinknova.store-{phase}'])
-        try:
-            installed += subprocess.run(command, capture_output=True, timeout=10).returncode == 0
-        except (OSError, subprocess.TimeoutExpired):
-            return 'unknown'
-    if not CREDENTIALS.is_file() or (STATE / 'paused.json').exists():
-        return 'awaiting_authorization'
-    if installed == 2:
-        return 'ready'
-    if installed:
-        return 'partial'
-    if marker.is_file():
-        return 'failed'
-    return 'not_installed'
+    return 'external_ai_assistant'
 
 
 def schedule_error(exc):
@@ -877,72 +771,16 @@ def schedule_error(exc):
 
 
 def install_daily_schedules():
-    if (STATE / 'paused.json').exists():
-        raise RuntimeError('AUTOMATION_PAUSED')
-    grant = authorization()
-    if grant.get('status') != 'available' or not grant.get('project_key'):
-        raise RuntimeError('AUTOMATION_PROJECT_AUTHORIZATION_REQUIRED')
-    if platform.system() not in ('Windows', 'Darwin'):
-        raise RuntimeError('AUTOMATION_OS_UNSUPPORTED')
-    with state_lock(STATE / 'schedule-install'):
-        marker = STATE / 'schedule-install.json'
-        try:
-            _register_daily_schedules()
-        except subprocess.CalledProcessError as exc:
-            atomic(marker, {'status': 'failed'})
-            raise RuntimeError(schedule_error(exc)) from None
-        except OSError:
-            atomic(marker, {'status': 'failed'})
-            raise RuntimeError('SCHEDULE_INSTALL_OS_ERROR') from None
-        marker.unlink(missing_ok=True)
-    return {'status': 'ready'}
+    raise RuntimeError('SYSTEM_SCHEDULING_REMOVED_USE_ASSISTANT')
 
 
 def _register_daily_schedules():
-    for phase in ('produce', 'publish'):
-        command = [sys.executable, str(ROOT / 'automation.py'), f'tick-{phase}']
-        if platform.system() == 'Windows':
-            subprocess.run(['schtasks', '/Create', '/F', '/TN', f'ThinkNova-Store-{phase}',
-                            '/SC', 'MINUTE', '/MO', '5', '/IT', '/TR', subprocess.list2cmdline(command)],
-                           check=True, capture_output=True)
-        elif platform.system() == 'Darwin':
-            label = f'top.thinknova.store-{phase}'
-            path = Path.home() / 'Library/LaunchAgents' / (label + '.plist')
-            path.parent.mkdir(parents=True, exist_ok=True)
-            scope = f'gui/{os.getuid()}'
-            if path.exists():
-                subprocess.run(['launchctl', 'bootout', scope, str(path)], capture_output=True)
-            path.write_bytes(plistlib.dumps({'Label': label, 'ProgramArguments': command,
-                                            'StartInterval': 300, 'WorkingDirectory': str(ROOT),
-                                            'LimitLoadToSessionType': 'Aqua',
-                                            'EnvironmentVariables': {'PATH': os.environ.get('PATH', '/usr/bin:/bin:/opt/homebrew/bin')}}))
-            path.chmod(0o600)
-            subprocess.run(['launchctl', 'bootstrap', scope, str(path)], check=True, capture_output=True)
+    raise RuntimeError('SYSTEM_SCHEDULING_REMOVED_USE_ASSISTANT')
 
 
 
 def tick():
-    if platform.system() not in ('Windows','Darwin'):raise RuntimeError('AUTOMATION_OS_UNSUPPORTED')
-    with state_lock(STATE/'runner'):
-        if (STATE/'paused.json').exists(): return
-        secrets=secure_state.load(CREDENTIALS);client=Client(secrets)
-        os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
-        if not (YOUTUBE_TOKEN).is_file():raise RuntimeError('YOUTUBE_AUTH_REQUIRED')
-        heartbeat=STATE/'heartbeat.json'
-        last=json.loads(heartbeat.read_text(encoding='utf-8')) if heartbeat.exists() else {}
-        if time.time()-last.get('time',0)>=900:
-            full=time.time()-last.get('full_time',0)>=3600 or last.get('local_ready') is False
-            result=connected_report(check_local=full)
-            health_state=json.loads((STATE/'health.json').read_text(encoding='utf-8')) if (STATE/'health.json').exists() else {'state':'unknown'}
-            if not result['automation_ready']:health_state={'state':'failed','error_code':'AUTOMATION_PREFLIGHT_INCOMPLETE'}
-            elif health_state['state']=='unknown':health_state={'state':'normal'}
-            client.post('/mcp/device/heartbeat',{**health_state,'full_check':full,'checks':result['checks'],**({'available_credits':result['available_credits']} if 'available_credits' in result else {})},execution=False)
-            atomic(heartbeat,{'time':time.time(),'full_time':time.time() if full else last.get('full_time'),'local_ready':result.get('local_ready',last.get('local_ready'))})
-            if not result['automation_ready']:raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
-        claim=client.claim()
-        if claim.get('due'):
-            execute(client,claim)
-            atomic(STATE/'health.json',{'state':'normal'})
+    return scheduled_store_day('produce')
 
 
 def connected_report(check_local: bool = True, require_codex: bool = True, require_publication: bool = False) -> dict:
@@ -952,9 +790,12 @@ def connected_report(check_local: bool = True, require_codex: bool = True, requi
         for check in result['checks']:
             if check['name']==name:check.update(status=state,remedy=remedy);return
         result['checks'].append({'name':name,'status':state,'remedy':remedy})
-    codex=shutil.which('codex')
-    try:status('codex_login','pass' if codex and subprocess.run([codex,'login','status'],capture_output=True,timeout=15).returncode==0 else 'waiting_user','Sign in to Codex / 请登录 Codex')
-    except Exception:status('codex_login','waiting_user','CODEX_LOGIN_REQUIRED')
+    if require_codex:
+        codex=shutil.which('codex')
+        try:status('codex_login','pass' if codex and subprocess.run([codex,'login','status'],capture_output=True,timeout=15).returncode==0 else 'waiting_user','Sign in to Codex / 请登录 Codex')
+        except Exception:status('codex_login','waiting_user','CODEX_LOGIN_REQUIRED')
+    else:
+        status('codex_login','not_applicable','Use the customer assistant plan or the server day plan')
     try:
         client=Client(secure_state.load(CREDENTIALS))
         config,_=client.post('/mcp/device/configuration',{})
@@ -967,16 +808,10 @@ def connected_report(check_local: bool = True, require_codex: bool = True, requi
         status('rules', 'pass' if (not rules.get('needs_onboarding') or rules.get('defaults_revision'))
                and rules.get('version') == config['data']['rules_version'] else 'waiting_user',
                'Use creation defaults and current rules / 使用创作默认值与当前规则')
-        if require_publication:
-            os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
-            sys.path.insert(0,str(ROOT/'publish/youtube'))
-            import yt_common
-            try:status('platform_authorization','pass' if yt_common.my_channel(yt_common.youtube())['id']==config['data']['channel_id'] else 'fail','YOUTUBE_CHANNEL_MISMATCH')
-            except (Exception,SystemExit):status('platform_authorization','waiting_user','Run automation.py youtube-auth / 完成平台授权')
+        status('platform_authorization','not_applicable','Publishing is owned by the customer AI assistant and Ego Lite')
     except (Exception,SystemExit):status('account','waiting_user','Pair an active device/grant; no secrets in chat / 配对有效设备与授权')
     required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','account','rules','platform_authorization','server_quote')]
-    if not require_publication:
-        required = [check for check in required if check['name'] != 'platform_authorization']
+    required = [check for check in required if check['name'] != 'platform_authorization']
     if not require_codex:
         required = [check for check in required if check['name'] != 'codex_login']
     result['automation_ready']=all(c['status']=='pass' for c in required)
@@ -986,14 +821,14 @@ def connected_report(check_local: bool = True, require_codex: bool = True, requi
 
 def doctor_command(as_json):
     from health import display
-    print('Checking local dependencies, device authorization and YouTube / 正在检查本机依赖、设备授权和 YouTube', file=sys.stderr, flush=True)
+    print('Checking local production and ThinkNova access / 正在检查本机制作及 ThinkNova 访问', file=sys.stderr, flush=True)
     if as_json:
         try:
             probe = subprocess.run(
                 [sys.executable, '-c',
                  'import automation, contextlib, json, sys; '
                  'redirect = contextlib.redirect_stdout(sys.stderr); '
-                 'redirect.__enter__(); result = automation.connected_report(); '
+                 'redirect.__enter__(); result = automation.connected_report(require_codex=False); '
                  'redirect.__exit__(None, None, None); print(json.dumps(result, ensure_ascii=True))'],
                 cwd=ROOT, capture_output=True, timeout=150, encoding='utf-8', errors='replace',
             )
@@ -1003,18 +838,18 @@ def doctor_command(as_json):
         except subprocess.TimeoutExpired:
             result = {'schema_version': 1, 'automation_ready': False, 'overall': 'blocked',
                       'checks': [{'name': 'connected_probe', 'status': 'unknown',
-                                  'remedy': 'AUTOMATION_DOCTOR_TIMEOUT: check local doctor, authorization and YouTube separately'}]}
+                                  'remedy': 'AUTOMATION_DOCTOR_TIMEOUT: check local production and ThinkNova access separately'}]}
         except (OSError, ValueError):
             result = {'schema_version': 1, 'automation_ready': False, 'overall': 'blocked',
                       'checks': [{'name': 'connected_probe', 'status': 'unknown', 'remedy': 'AUTOMATION_DOCTOR_PROBE_FAILED'}]}
     else:
-        result = connected_report()
+        result = connected_report(require_codex=False)
     display(result, as_json)
     return 0 if result['automation_ready'] else 2
 
 
 def installation_preflight():
-    if not connected_report(require_publication=True)['automation_ready']:raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
+    raise RuntimeError('SYSTEM_SCHEDULING_REMOVED_USE_ASSISTANT')
 
 
 SCHEDULE_LABEL='top.thinknova.controlled-automation'
@@ -1024,16 +859,7 @@ def schedule_path():
 
 
 def install_runner():
-    command=[sys.executable,str(ROOT/'automation.py'),'tick']
-    if platform.system()=='Windows':
-        subprocess.run(['schtasks','/Create','/F','/TN','ThinkNova-Controlled-Automation','/SC','MINUTE','/MO','5','/IT','/TR',subprocess.list2cmdline(command)],check=True,capture_output=True)
-    else:
-        path=schedule_path();path.parent.mkdir(parents=True,exist_ok=True)
-        value={'Label':SCHEDULE_LABEL,'ProgramArguments':command,'StartInterval':300,'RunAtLoad':True,
-               'WorkingDirectory':str(ROOT),'LimitLoadToSessionType':'Aqua',
-               'EnvironmentVariables':{'PATH':os.environ.get('PATH','/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin')}}
-        path.write_bytes(plistlib.dumps(value));path.chmod(0o600)
-        subprocess.run(['launchctl','bootstrap',f'gui/{os.getuid()}',str(path)],check=True,capture_output=True)
+    raise RuntimeError('SYSTEM_SCHEDULING_REMOVED_USE_ASSISTANT')
 
 
 def uninstall_daily_schedules():
@@ -1059,7 +885,11 @@ def uninstall_runner():
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('command',choices=['pair','youtube-auth','doctor','tick','tick-produce','tick-publish','install-daily-schedules','install','uninstall','pause','revoke']);parser.add_argument('--user-confirmed',action='store_true');parser.add_argument('--json',action='store_true');args=parser.parse_args()
+    if len(sys.argv)>1 and sys.argv[1] in ('youtube-auth','tick','tick-produce','tick-publish','install-daily-schedules','install'):
+        from delivery_boundary import handoff, SCHEDULING_MOVED
+        print(json.dumps(handoff(SCHEDULING_MOVED if sys.argv[1] != 'youtube-auth' and sys.argv[1] != 'tick-publish' else 'PUBLICATION_MOVED_TO_ASSISTANT_EGO'),ensure_ascii=False))
+        return 2
+    parser=argparse.ArgumentParser(description=__doc__);parser.add_argument('command',choices=['pair','doctor','produce-once','uninstall','pause','revoke']);parser.add_argument('--user-confirmed',action='store_true');parser.add_argument('--json',action='store_true');args=parser.parse_args()
     try:
         if platform.system() not in ('Windows','Darwin'):raise RuntimeError('AUTOMATION_OS_UNSUPPORTED')
         if args.command=='pair':
@@ -1073,20 +903,9 @@ def main():
             Client(secure_state.load(CREDENTIALS)).post('/mcp/device/stop',{'status':status})
             atomic(STATE/'paused.json',{'status':status,'time':time.time()})
             print('Server authorization stopped; existing paid tasks retain normal settlement/refund handling. 服务端已停止授权，已建任务按正常账务收尾。')
-        elif args.command=='youtube-auth':
-            os.environ['YT_TOKEN']=str(YOUTUBE_TOKEN)
-            subprocess.run([sys.executable,str(ROOT/'publish/youtube/auth.py')],check=True)
         elif args.command=='doctor':
             return doctor_command(args.json)
-        elif args.command=='tick':tick()
-        elif args.command in ('tick-produce', 'tick-publish'):
-            scheduled_store_day(args.command.removeprefix('tick-'))
-        elif args.command == 'install-daily-schedules':
-            install_daily_schedules()
-        elif args.command=='install':
-            if not args.user_confirmed:raise RuntimeError('SCHEDULE_CONFIRMATION_REQUIRED')
-            installation_preflight()
-            install_runner()
+        elif args.command=='produce-once':scheduled_store_day('produce')
         else: uninstall_runner()
 
         return 0

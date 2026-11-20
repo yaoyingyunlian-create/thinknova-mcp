@@ -142,7 +142,7 @@ class EditorialTests(unittest.TestCase):
                                'publish_job_hash': hashlib.sha256(job.read_bytes()).hexdigest()}}
             client = Mock()
             with patch.object(automation, 'STATE', state), patch.object(automation, 'run_command') as upload:
-                with self.assertRaisesRegex(RuntimeError, 'PUBLICATION_OUTCOME_UNKNOWN'):
+                with self.assertRaisesRegex(RuntimeError, 'PUBLICATION_MOVED_TO_ASSISTANT_EGO'):
                     automation.publish_store_day(client, claim)
             upload.assert_not_called()
-            self.assertEqual(client.receipt.call_args.args[2:], ('waiting_user', 'PUBLICATION_OUTCOME_UNKNOWN'))
+            client.receipt.assert_not_called()

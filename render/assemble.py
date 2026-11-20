@@ -322,7 +322,7 @@ def apply_cutaway(ff, fp, base, shot, duration, cutaway, index, work):
     return output
 
 
-def trim_store_blank(ff, shot, duration, work, index, count):
+def trim_store_blank(ff, shot, duration, work, index, count, max_trim=None):
     windows = speech_chunks(ff, shot, duration)
     if not windows:
         return shot, duration, None
@@ -331,6 +331,8 @@ def trim_store_blank(ff, shot, duration, work, index, count):
     if start <= 0.02 and duration - end <= 0.02:
         return shot, duration, None
     if end - start < 0.5:
+        return shot, duration, None
+    if max_trim is not None and duration - (end - start) > max_trim:
         return shot, duration, None
     target = os.path.join(work, f'trimmed_{index:03d}.mp4')
     run_ff(ff, ['-i', shot, '-filter_complex',
@@ -653,8 +655,8 @@ def run_delivery_check(ff, fp, video, srt, options):
             cmd += ['--store-film', '--shop-name', options['shop_name'], '--featured-service', options['featured_service']]
         if options['speech_language']:
             cmd += ['--lang', options['speech_language']]
-    if (options.get('quality_policy') or {}).get('version') == '58':
-        cmd += ['--quality-58']
+    if quality_policy.enabled(options.get('quality_policy')):
+        cmd += ['--native-dialogue' if quality_policy.native(options.get('quality_policy')) else '--quality-58']
     if srt:
         cmd += ['--srt', srt]
     if options['max_dur']:
@@ -670,7 +672,7 @@ def run_delivery_check(ff, fp, video, srt, options):
                    for code, message in re.findall(r'^  \[([A-Za-z0-9_]+)\] (.+)$', report, re.M)]
     sheet = os.path.splitext(video)[0] + '_sheet.jpg'
     if code == 0 and not os.path.isfile(sheet):
-        code = 0 if (options.get('quality_policy') or {}).get('version') == '58' else 2
+        code = 0 if quality_policy.enabled(options.get('quality_policy')) else 2
         diagnostics.append({'code': 'CONTACT_SHEET_FAILED', 'message': 'No visual review artifact.'})
     if code and not diagnostics:
         diagnostics.append({'code': 'CHECK_FAILED', 'message': f'Film check exited with code {code}.'})
@@ -795,9 +797,14 @@ def recheck(receipt, overwrite):
                 raise Stop('SUBTITLE_DIGEST_MISMATCH', 2)
         else:
             temp_srt = None
-        if options.get('caption_alignment_pending'):
+        if options.get('film_profile') == 'store_v2':
+            options['quality_policy'] = quality_policy.store_policy(options.get('quality_policy'))
+        if options.get('caption_alignment_pending') and not quality_policy.enabled(options.get('quality_policy')):
             raise Stop('FILM_CAPTION_ALIGNMENT_PENDING: reassemble with verified subtitle timing', 2)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, video, temp_srt, options)
+        if options.get('caption_alignment_pending') and quality_policy.native(options.get('quality_policy')):
+            diagnostics.append({'code':'FILM_CAPTION_ALIGNMENT_PENDING', 'message':'Existing subtitle timing remains estimated.'})
+            record['result']['subtitle_timing'] = 'estimated_unverified'
         if not passed:
             if os.path.isfile(sheet):
                 shutil.copyfile(sheet, os.path.splitext(preview)[0] + '_sheet.jpg')
@@ -821,7 +828,9 @@ def main():
     verified_srt = bool(job.get('film_rules_revision') == '2.4' and job.get('srt'))
     if store_film and job.get('srt') and not verified_srt:
         raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
-    relaxed = (job.get('quality_policy') or {}).get('version') == '58'
+    if store_film:
+        job['quality_policy'] = quality_policy.store_policy(job.get('quality_policy'))
+    relaxed = quality_policy.enabled(job.get('quality_policy'))
     if store_film:
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
         from store_film import validate_beats
@@ -861,6 +870,7 @@ def main():
     try:
         parts, cues, t = [], [], 0.0
         pace_report = []
+        trim_budget = max(2, float(job.get("short_dialogue_seconds") or 30) * 0.1)
         segment_boundaries = []
         protected_names = ()
         if job.get('film_rules_revision') == '2.4':
@@ -903,13 +913,18 @@ def main():
             if not relaxed and job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
                 raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)
             if relaxed:
-                shot, dur, trimming = trim_store_blank(ff, shot, dur, wk, i, len(job['clips']))
+                shot, dur, trimming = trim_store_blank(ff, shot, dur, wk, i, len(job['clips']),
+                    max_trim=trim_budget if quality_policy.native(job.get('quality_policy')) else None)
+                if trimming and quality_policy.native(job.get('quality_policy')):
+                    trim_budget -= trimming['start_trim'] + trimming['end_trim']
                 if trimming:
                     pace_report.append({'status':'boundary_trimmed', **trimming})
             if 'cutaway' in c:
                 shot = apply_cutaway(ff, fp, base, shot, dur, c['cutaway'], i, wk)
             parts.append(shot)
             lines = c.get("subs") or (split_text(c["text"]) if c.get("text") else [])
+            if not lines and quality_policy.native(job.get("quality_policy")):
+                lines = [line["text"] for line in c.get("dialogue", []) if isinstance(line, dict) and isinstance(line.get("text"), str) and line["text"].strip()]
             secondary = c.get('subs2')
             if secondary is not None and (
                 job.get('srt') or not isinstance(secondary, list) or len(secondary) != len(lines)

@@ -304,23 +304,12 @@ def setup(json_output=False):
     if not python.exists(): venv.EnvBuilder(with_pip=True).create(environment)
     python = environment / ('Scripts/python.exe' if os.name == 'nt' else 'bin/python')
     run('python_dependencies', [str(python), '-m', 'pip', 'install', '-r', str(ROOT / 'requirements.txt')])
-    run('chromium_install', [str(python), '-m', 'playwright', 'install', 'chromium'])
     run('memory_init', [str(python), str(ROOT / 'toolkit.py'), 'init'])
     run('memory_migration', [str(python), str(ROOT / 'toolkit.py'), 'migrate-memory'])
-    SETUP_PHASE = 'ego_browser'; refresh_path()
-    import ego_runtime
-    if platform.system() == 'Windows':
-        try: ego_runtime.prepare()
-        except RuntimeError as exc:
-            print('AI_BROWSER_PENDING: ego lite requires installation/onboarding; core preparation continues. ' + str(exc), file=sys.stderr)
-    elif shutil.which('ego-browser'):
-        try: ego_runtime.prepare()
-        except RuntimeError: print('AI_BROWSER_PENDING: complete ego lite onboarding separately.', file=sys.stderr)
-    else:
-        print('AI_BROWSER_NOT_CONFIGURED: optional for API/script workflows; required for ego browser work. / 非 ego 工作流不受阻塞。', file=sys.stderr)
+    print('Ego Lite belongs to the customer AI assistant publishing workflow; video setup does not install a browser. / 视频制作安装不安装发布浏览器。', file=sys.stderr)
     run('local_runtime_check', [str(python), str(ROOT / 'toolkit.py'), 'doctor'])
     SETUP_PHASE = 'complete'
-    print('Local setup completed; verify MCP account, rules and platform authorization separately. 本机准备完成，账户、规则和平台授权仍需核实。')
+    print('Video setup completed; check ThinkNova access and rules. Publishing uses the customer AI assistant and Ego Lite. 本机制作准备完成；发布使用客户AI助理与Ego Lite。')
 
 
 def main():

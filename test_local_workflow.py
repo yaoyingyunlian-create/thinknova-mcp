@@ -60,21 +60,16 @@ class MemoryTests(unittest.TestCase):
 
 class PublishTests(unittest.TestCase):
     def test_youtube_dry_never_accesses_account(self):
-        with tempfile.TemporaryDirectory() as directory:
-            video = Path(directory) / 'test.mp4'; video.write_bytes(b'test fixture')
-            job = {'video': str(video), 'title': 'test', 'privacy': 'public', 'schedule': '2030-01-01 10:00'}
-            with patch.object(youtube.sys, 'argv', ['upload.py', 'job.json', '--dry']), patch.object(youtube.jobfile, 'load_job', return_value=job), patch.object(youtube, 'run_check', return_value=0), patch.object(youtube.yt_common, 'youtube') as api:
-                self.assertEqual(youtube.main(), 0)
-                api.assert_not_called()
+        with patch('urllib.request.urlopen',side_effect=AssertionError('No platform network access')), patch('webbrowser.open',side_effect=AssertionError('No platform login')):
+            self.assertEqual(youtube.main(),2)
 
     def test_youtube_without_execute_does_nothing(self):
-        with patch.object(youtube.sys, 'argv', ['upload.py', 'job.json']), patch.object(youtube.jobfile, 'load_job') as load:
-            self.assertEqual(youtube.main(), 1)
-            load.assert_not_called()
+        with patch('urllib.request.urlopen',side_effect=AssertionError('No platform network access')), patch('webbrowser.open',side_effect=AssertionError('No platform login')):
+            self.assertEqual(youtube.main(),2)
 
     def test_missing_checker_stops_upload(self):
-        with patch.object(youtube, 'CHECK', '/this/toolkit/checker/does/not/exist'):
-            self.assertEqual(youtube.run_check('video.mp4', None), 2)
+        with patch('urllib.request.urlopen',side_effect=AssertionError('No platform network access')), patch('webbrowser.open',side_effect=AssertionError('No platform login')):
+            self.assertEqual(youtube.main(),2)
 
 
 class MetricsTests(unittest.TestCase):

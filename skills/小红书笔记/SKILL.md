@@ -31,4 +31,4 @@ description: 写 / 改小红书笔记时用。四步：选题 → 标题 → 配
 - ⛔ AI 腔词堆砌、⛔ emoji 轰炸、⛔ 绝对化用语（最、第一、100%）。
 
 ## 五、发布
-用工具包 `python publish/xiaohongshu/publish.py job.json --dry`，确认后去掉 `--dry`，勾 AI 内容声明；同一内容发前用 `dupcheck.py` 查重。
+拼片、字幕和质检使用工具包；逐平台待审清单只在本机准备。实际发布使用客户AI助理的原生定时任务与Ego Lite，遵守客户已确认的账号、作品和授权。

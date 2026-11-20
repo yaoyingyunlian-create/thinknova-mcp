@@ -83,7 +83,7 @@ class FilmTests(unittest.TestCase):
             value = {'platform':'youtube', 'job':{}, 'manifest_sha256':'approved-version',
                      'artifacts':[{'role':'video','file':str(video),'sha256':'good'}]}
             with patch.object(dispatch, 'snapshot', return_value=value), patch.object(dispatch.subprocess, 'run') as publisher:
-                with self.assertRaisesRegex(RuntimeError, 'FILM_REVIEW_REQUIRED'):
+                with self.assertRaisesRegex(RuntimeError, 'PUBLICATION_MOVED_TO_ASSISTANT_EGO'):
                     dispatch.dispatch(path, 'youtube', execute=True, confirmed=True)
                 publisher.assert_not_called()
                 self.assertEqual(dispatch.film_review(path, value, 'approved-version', True), 'approved')

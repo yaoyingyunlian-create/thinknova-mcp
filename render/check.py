@@ -55,12 +55,13 @@ except Exception:
 
 FAILS, WARNS, INFO = [], [], []
 RELAXED = False
+NATIVE = False
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from quality_policy import HARD_CODES
+from quality_policy import HARD_CODES, NATIVE_WARNINGS
 
 
 def fail(code, msg):
-    (WARNS if RELAXED and code not in HARD_CODES else FAILS).append((code, msg))
+    (WARNS if (NATIVE and code in NATIVE_WARNINGS) or (RELAXED and not NATIVE and code not in HARD_CODES) else FAILS).append((code, msg))
 
 
 def warn(code, msg):
@@ -87,7 +88,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58", "--native-dialogue"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -388,10 +389,11 @@ def main():
     if any(a in ("-h", "--help") for a in sys.argv[1:]):
         print(__doc__)
         return 0
-    global RELAXED
+    global RELAXED, NATIVE
     FAILS.clear(); WARNS.clear(); INFO.clear()
     pos, on, o = get_opts(sys.argv[1:])
-    RELAXED = "--quality-58" in on
+    NATIVE = "--native-dialogue" in on
+    RELAXED = "--quality-58" in on or NATIVE
     if not pos:
         print(__doc__)
         return 1
@@ -466,6 +468,10 @@ def main():
                 fail('MEDIA_BLACK', 'at least 95% of the film is black')
         except (OSError, subprocess.SubprocessError):
             fail('MEDIA_DECODE_FAILED', 'full media decoding did not complete')
+    if NATIVE and not o['--srt']:
+        candidate = os.path.splitext(path)[0] + '.srt'
+        if os.path.isfile(candidate): o['--srt'] = candidate
+        else: fail('FILM_CAPTIONS_REQUIRED', 'Add subtitles from the existing approved dialogue; no new generation is needed.')
     s2_opening(ff, path)
     if o.get('--planned-film-seconds') is not None and o['store_film']:
         check_dialogue_motion(ff, path, o["outro_start"])

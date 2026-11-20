@@ -56,11 +56,11 @@ def initialize(path, film, plan):
         raise ValueError('BROWSER_PUBLICATION_PROJECT_INVALID')
     value = {'project_key': project, 'local_date': local_date, 'film_sha256': digest, 'revision': 1,
              'platforms': {name: {'target_account': account, 'status': 'pending'} for name, account in targets.items()}}
-    if proof.get('quality_policy_version') == '58':
+    if proof.get('quality_policy_version') in ('58', 'native_dialogue_v1'):
         codes = [item['code'] for item in proof.get('warnings', [])
                  if isinstance(item, dict) and re.fullmatch(r'[A-Za-z0-9_]{1,64}', item.get('code', ''))]
         for row in value['platforms'].values():
-            row['quality'] = {'version':'58', 'speech_status':proof.get('speech_status', 'unknown'), 'warning_codes':list(dict.fromkeys(codes))[:32]}
+            row['quality'] = {'version':proof['quality_policy_version'], 'speech_status':proof.get('speech_status', 'unknown'), 'warning_codes':list(dict.fromkeys(codes))[:32]}
     path.parent.mkdir(parents=True, exist_ok=True)
     with state_lock(path):
         if path.exists():

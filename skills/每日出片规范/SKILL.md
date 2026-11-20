@@ -64,7 +64,7 @@ Before drafting, record audience/problem, confirmed benefits and the intended ac
 
 ## 六、样片审核与后续发布
 
-首条样片与各平台发布信息一起请店主确认。客户可在这一步明确开启无人值守发布。已有有效授权的合格成片按授权的账号、平台、预算和排期执行。普通发布仍按本条作品确认。
+首条样片与各平台发布信息一起请店主确认。客户可在其AI助理中确认后续定时与Ego Lite发布范围。已有有效授权的合格成片按授权的账号、平台、预算和排期执行。普通发布仍按本条作品确认。
 
 ## English summary
 

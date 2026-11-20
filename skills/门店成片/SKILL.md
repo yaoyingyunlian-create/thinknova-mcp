@@ -1,3 +1,8 @@
+## 原生对白制作 / Native dialogue production
+
+新版门店制作默认 native_dialogue_v1，保留视频模型原声，字幕后加；不默认另做TTS或为了字速改变原音速度。语速快慢及自然停顿记警告。只在不损伤口播、不使片长越界时裁段间首尾空白。已有台词可补字幕；缺字幕内容保留待审预览并指出缺项，不要求重生成。损坏、黑屏、整片无声、严重对白错配及错误规格仍阻断，发布继续沿用当前授权和首片审核。回查实际成片与哈希质检凭据，不以单一 READY.json 文件是否存在判断交付。
+New store films use native_dialogue_v1 and preserve model-generated dialogue. Add captions without default TTS or automatic speech retiming. Pace and natural pauses warn. Trim boundary blanks only within the film-duration allowance. Reuse existing approved dialogue for captions; missing caption content keeps a preview pending with a concrete issue, never a request to regenerate by default. Unusable media and severe mismatch still block. Existing publication consent and first-film review remain. Find delivery artifacts and hash-bound receipts rather than relying on one READY.json filename.
+
 ---
 name: store-film
 description: 片段都生成好之后，拼成片、验收、交给店主之前必须先读。管三件事：怎么拼、怎么验、交付时给什么。做什么片看「每日出片规范」，提示词怎么写看「镜头提示词」。
@@ -10,7 +15,7 @@ description: 片段都生成好之后，拼成片、验收、交给店主之前�
 
 ## 〇、分工
 - 画面、视频、声音：只调 ThinkNova 的工具生成。
-- 拼片、字幕、检查、发布：只跑工具包脚本（render/assemble.py、render/check.py、publish/dispatch.py），一件事一条命令。
+拼片、字幕和质检使用工具包；逐平台待审清单只在本机准备。实际发布使用客户AI助理的原生定时任务与Ego Lite，遵守客户已确认的账号、作品和授权。
 - 你只做三件事：读店铺档案和规矩本、照技能填提示词和 job.json、调工具和脚本，把结果给店主看。
 - ⛔ 用你自己的生图、生视频、网页动画、幻灯片模板给客户做内容；⛔ 为了做片去读工具包源码；⛔ 因为没有预算就换不花积分的办法代替。
 

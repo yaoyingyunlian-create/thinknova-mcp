@@ -53,10 +53,10 @@ def capabilities(checks):
         return 'fail' if 'fail' in values else ('pass' if all(x == 'pass' for x in values) else 'unknown')
     core = ['python', 'files', 'virtual_environment', 'git', 'ffmpeg', 'ffprobe', 'libass', 'cjk_font']
     return {'core_production': state(core),
-            'browser_publishing': state(core + ['playwright', 'chromium_runtime']),
-            'ai_browser': state(['ego_runtime']),
-            'platform_authorization': state(['account', 'platform_authorization']),
-            'automation': state(core + ['account', 'rules', 'platform_authorization', 'codex_login'])}
+            'browser_publishing': 'external_ai_assistant_ego_lite',
+            'ai_browser': 'external_ai_assistant_ego_lite',
+            'platform_authorization': 'not_applicable',
+            'automation': state(core + ['account', 'rules'])}
 
 
 def verify_files(root: Path) -> bool:
@@ -81,10 +81,8 @@ def report(root: Path = ROOT, online: bool = False) -> dict:
     check('libass', libass_probe, 'Install an FFmpeg build with libass / 安装包含 libass 的 FFmpeg')
     check('cjk_font', font_probe, 'Install a licensed CJK font / 安装有授权的中文字体')
     check('node', lambda: int(subprocess.check_output(['node', '--version'], text=True, timeout=10).strip().lstrip('v').split('.')[0]) >= 18, 'Install Node.js 18+ / 安装 Node.js 18+')
-    check('playwright', lambda: importlib.util.find_spec('playwright') is not None, 'Install requirements in .venv / 在虚拟环境安装依赖')
-    check('chromium_runtime', chromium_probe, 'Run .venv Python -m playwright install chromium; inspect system restrictions / 检查浏览器安装和系统权限')
-    import ego_runtime
-    check('ego_runtime', ego_runtime.probe, 'Open ego lite and complete onboarding, then rerun bootstrap.py setup / 打开 ego lite 完成首次引导后重新检查')
+    checks.extend([{'name':name,'status':'not_applicable','remedy':'Publishing runs in the customer AI assistant and Ego Lite'} for name in ('playwright','chromium_runtime')])
+    checks.append({'name':'ego_runtime','status':'not_applicable','remedy':'Prepare Ego Lite separately in the customer AI assistant when publishing'})
     version = {'name': 'github_version', 'status': 'unknown', 'update_available': None, 'remedy': 'Run bootstrap.py check when online / 联网检查版本'}
     if online:
         try:
@@ -98,13 +96,10 @@ def report(root: Path = ROOT, online: bool = False) -> dict:
             version.update(status='pass', installed_commit=current, latest_commit=remote[0], update_available=current != remote[0], remedy='')
         except (Exception, SystemExit): pass
     checks.append(version)
-    from automation import daily_schedule_status
-    schedule = daily_schedule_status()
-    checks.append({'name': 'daily_schedules', 'status': schedule,
-                   'remedy': '' if schedule in ('ready', 'unsupported') else
-                   'Confirm the sample, authorize and pair the device, then run toolkit.py authorization --install-schedules / 确认样片、授权和配对后安装每日任务'})
-    for name in ('account', 'rules', 'platform_authorization'):
-        checks.append({'name': name, 'status': 'unknown', 'remedy': 'Check through authenticated MCP or platform flow / 通过授权接口核实'})
+    checks.append({'name':'daily_schedules','status':'not_applicable','remedy':'Use the customer AI assistant scheduler; the toolkit installs no system tasks'})
+    for name in ('account','rules'):
+        checks.append({'name':name,'status':'unknown','remedy':'Check through authenticated ThinkNova MCP'})
+    checks.append({'name':'platform_authorization','status':'not_applicable','remedy':'Check the account in Ego Lite when publishing'})
     readiness = capabilities(checks)
     local_ready = readiness['core_production'] == 'pass'
     return {'schema_version': 1, 'checked_at': datetime.now(timezone.utc).isoformat(), 'local_ready': local_ready,

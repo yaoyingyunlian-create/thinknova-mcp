@@ -46,8 +46,8 @@ def quality_check_args(video):
             for block in iter(lambda: stream.read(1024 * 1024), b''):
                 hasher.update(block)
             digest = hasher.hexdigest()
-        if value.get('machine_check') == 'pass' and value.get('sha256') == digest and value.get('quality_policy_version') == '58':
-            return ['--quality-58']
+        if value.get('machine_check') == 'pass' and value.get('sha256') == digest and value.get('quality_policy_version') in ('58', 'native_dialogue_v1'):
+            return ['--native-dialogue' if value['quality_policy_version'] == 'native_dialogue_v1' else '--quality-58']
     except (OSError, ValueError):
         pass
     return []
