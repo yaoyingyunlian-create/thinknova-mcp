@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import quality_policy
 from render import check, assemble
 
@@ -47,6 +47,44 @@ class NativeDialogueTests(unittest.TestCase):
     def test_unknown_asr_stays_unknown(self):
         receipt=quality_policy.receipt(quality_policy.store_policy(),[{'code':'SPEECH_CHECK_PENDING','message':'fixture'}])
         self.assertEqual(receipt['speech_status'],'unknown');self.assertFalse(receipt['checks_completed'])
+
+    def test_transient_check_retries_using_the_same_preview(self):
+        from automation import render_store_candidate
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            job = root / 'assemble.json'
+            job.write_text('{"clips":[]}', encoding='utf-8')
+            folder = root / 'film_pending_fixture'
+            folder.mkdir()
+            receipt = folder / 'preview.mp4.film.json'
+            receipt.touch()
+            reports = [
+                Mock(returncode=2, stdout=json.dumps({'pending_receipt': str(receipt),
+                      'diagnostics': [{'code': 'FILM_CHECK_TIMEOUT'}]})),
+                Mock(returncode=0, stdout='{"machine_check":"pass"}'),
+            ]
+            with patch('automation.subprocess.run', side_effect=reports) as run:
+                self.assertEqual(render_store_candidate(job)['machine_check'], 'pass')
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args.args[0][-3:], ['--recheck', str(receipt), '--json'])
+            self.assertEqual(json.loads((root/'film-check.json').read_text(encoding='utf-8'))['automatic_recheck'], 'passed')
+
+    def test_content_failure_only_rerenders_after_input_changes(self):
+        from automation import render_store_candidate
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            job = root / 'assemble.json'
+            job.write_text('{"clips":[{"file":"shot.mp4"}]}', encoding='utf-8')
+            source = root / 'shot.mp4'
+            source.write_bytes(b'original')
+            failed = Mock(returncode=2, stdout='{"diagnostics":[{"code":"FILM_DIALOGUE_MISMATCH"}]}')
+            with patch('automation.subprocess.run', return_value=failed) as run:
+                self.assertTrue(render_store_candidate(job)['render_failed'])
+                self.assertEqual(render_store_candidate(job)['next_action'], 'fix_render_input_before_retry')
+                self.assertEqual(run.call_count, 1)
+                source.write_bytes(b'revised')
+                render_store_candidate(job)
+                self.assertEqual(run.call_count, 2)
 
     def test_legacy_pending_preview_rechecks_without_rendering(self):
         with tempfile.TemporaryDirectory() as directory:

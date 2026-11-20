@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.22",
+  "version": "thinknova-automation-toolkit-v3.1.23",
   "text_line_endings": "lf",
-  "revision": "fbb015901286587171069e0b5bf8c6f7ab6db8d8f20d44567fc646a4f4b04bbc",
+  "revision": "a97a75a261bb87e959c1389106b44788aafac2b2f0a8b7d3c8b77bc871df259f",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "816c1efdabcabe3350cb7730c98cb6ed85174a9ef4dde8033abfaf43c1fdd3a4"
+      "sha256": "1a99b0ddd0e42eb96234c6b3b53fc46295dac62adc2d0b50ccae0008fb37f932"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "abaddce10fa7b2f51172d11527f61c42080af7ab04cc61677a4c91d28bcd7856"
+      "sha256": "cf7fa883d6538620134788d7af6a880f703c88897f8660b5e5307478a245caa9"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "63ba1b8190573dc12c077722a4d8635d2e8d14ffae23bbba900167f78ada0c82"
+      "sha256": "0a4a615a9c4d960f80444df6c3014bb950bfa009c23f1e537394c508d160f68d"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "e67729ed2c756c61d20c8fbafd1436878180f32b3f59fc017b16c9f7b4f324b2"
+      "sha256": "fd5063fb550dd094454ad5c6013ece706c20b2a0807a5231129a7823f3c72a66"
     },
     {
       "path": "clip_recovery.py",
@@ -413,7 +413,7 @@
     },
     {
       "path": "test_native_dialogue.py",
-      "sha256": "38403ca467398c322e1c08eda451f97291ccf6e28664c9bf6f8bebd7a0606dd7"
+      "sha256": "89647cb421c5217f984458de64bf3f35f6f2a7e3eedf70719452fc1460f94ab4"
     },
     {
       "path": "test_render_pipeline.py",
@@ -441,7 +441,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "b437a5788faa41ed092bf2a5ce448bdd690f08ce545c1f3f3ff353820f7ae12a"
+      "sha256": "257b5e0d3ed843a7cef063b4fd57186f324a8b07c6c54c0832a6112589c6ab2c"
     },
     {
       "path": "test_subtitle_layout.py",

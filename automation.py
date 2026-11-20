@@ -236,6 +236,66 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         raise RuntimeError(code) from None
 
 
+def render_store_candidate(job_path):
+    """Retry temporary checks once on the existing preview, without generating or rendering again."""
+    directory = job_path.parent
+    report_path = directory / 'film-check.json'
+    from file_integrity import sha256
+
+    job_bytes = job_path.read_bytes()
+    job = json.loads(job_bytes)
+    digest = hashlib.sha256(job_bytes)
+    for clip in job['clips']:
+        source = directory / clip['file']
+        if source.is_file():
+            digest.update(bytes.fromhex(sha256(source)))
+    input_digest = digest.hexdigest()
+    try:
+        saved = json.loads(report_path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        saved = {}
+    if isinstance(saved, dict) and saved.get('render_input_sha256') == input_digest and saved.get('render_failed'):
+        return saved
+
+    def render(args):
+        try:
+            result = subprocess.run([sys.executable, str(ROOT / 'render/assemble.py'), *args, '--json'],
+                                    cwd=directory, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW='1'),
+                                    capture_output=True, encoding='utf-8', errors='replace', timeout=900)
+            report = json.loads(result.stdout)
+            if isinstance(report, dict):
+                return result.returncode, report
+        except subprocess.TimeoutExpired:
+            return 2, {'diagnostics': [{'code': 'FILM_CHECK_TIMEOUT'}]}
+        except (OSError, ValueError):
+            pass
+        return 2, {'diagnostics': [{'code': 'FILM_RENDER_REPORT_UNAVAILABLE'}]}
+
+    code, report = render([str(job_path)])
+    if not code:
+        return report
+
+    transient = {'SPEECH_CHECK_PENDING', 'FILM_PACE_UNAVAILABLE', 'FILM_CHECK_TIMEOUT', 'CONTACT_SHEET_FAILED'}
+    codes = {item.get('code') for item in report.get('diagnostics', [])}
+    receipt = report.get('pending_receipt')
+    if isinstance(receipt, str) and codes and codes <= transient:
+        path = Path(receipt).resolve()
+        if path.name == 'preview.mp4.film.json' and path.parent.name.startswith('film_pending_') and path.parent.parent == directory.resolve() and path.is_file():
+            report.update(render_input_sha256=input_digest, automatic_recheck='started', render_failed=True)
+            atomic(report_path, report)
+            code, checked = render(['--recheck', str(path)])
+            if not code:
+                atomic(report_path, {**checked, 'render_input_sha256': input_digest, 'automatic_recheck': 'passed'})
+                return checked
+            report.update(checked, automatic_recheck='failed')
+
+    report['next_action'] = ('recheck_after_local_fix' if codes and codes <= transient
+                             else 'fix_render_input_before_retry')
+    report.update(render_input_sha256=input_digest, render_failed=True)
+    atomic(report_path, report)
+    return report
+
+
 def execute_store_day(client, claim, plan, budget, rules, balance, directory, steps, checkpoint):
     from store_film import generation_arguments
     from store_editorial import scripted_segment
@@ -389,7 +449,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             if assessment.get('warning'):
                 plan.setdefault('warnings', []).append({'code':assessment['warning'], 'clip':index})
         clip = {'file': path.name, 'fit': 'cover', **{
-            key: segment[key] for key in ('beats', 'subs', 'subs2') if key in segment}}
+            key: segment[key] for key in ('beats', 'dialogue', 'subs', 'subs2') if key in segment}}
         if plan.get('film_type') == 'explainer':
             clip['planned_seconds'] = segment['duration_seconds']
         clips.append(clip)
@@ -425,11 +485,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         copy_artifacts(inventory['video'], output)
         plan['platforms'] = inventory['platforms']
     if not output.exists():
-        result = subprocess.run([sys.executable, str(ROOT / 'render/assemble.py'), str(job_path), '--json'],
-                                cwd=directory, capture_output=True, encoding='utf-8', errors='replace', timeout=900)
-        if result.returncode:
-            report = json.loads(result.stdout)
-            atomic(directory / 'film-check.json', report)
+        report = render_store_candidate(job_path)
+        if report.get('render_failed') or not output.is_file():
             if (plan.get('quality_policy') or {}).get('version') == '58':
                 from film_inventory import reserve, copy_artifacts
                 inventory = reserve(STATE, grant['project_key'], plan['date'], plan['platforms'], run_no, plan['rules_version'])

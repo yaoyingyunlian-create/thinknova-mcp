@@ -306,7 +306,8 @@ class StoreFilmTests(unittest.TestCase):
 
         day = '2026-11-18'
         durations = [10, 11, 12, 12]
-        segments = [{'prompt': 'A store scene', 'duration_seconds': duration, 'first_frame_asset_id': 'asset_first'}
+        segments = [{'prompt': 'A store scene', 'duration_seconds': duration,
+                     'first_frame_asset_id': 'asset_first', 'dialogue': [{'text': 'Welcome to our shop.'}]}
                     for duration in durations]
         plan = {'date': day, 'rules_version': 2, 'film_type': 'explainer', 'schema_version': 3,
                 'dialogue_rules_revision': '2.4', 'film_purpose': 'service', 'shop_name': 'Store',
@@ -334,4 +335,6 @@ class StoreFilmTests(unittest.TestCase):
             job = json.loads((root / 'assemble.json').read_text(encoding='utf-8'))
             self.assertEqual([clip['planned_seconds'] for clip in job['clips']], durations)
             self.assertEqual(job['short_dialogue_seconds'], 45)
+            self.assertEqual([clip['dialogue'] for clip in job['clips']],
+                             [segment['dialogue'] for segment in segments])
         self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_task'] * 4)
