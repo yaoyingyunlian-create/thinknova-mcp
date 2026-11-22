@@ -150,7 +150,7 @@ def ass_time(t):
     return "%d:%02d:%02d.%02d" % (h, m, s, cs)
 
 
-def safe_subtitle_text(text, width, height, size, bottom, outline=8, max_lines=2, allow_shrink=True):
+def safe_subtitle_text(text, width, height, size, bottom, outline=8, max_lines=2, allow_shrink=True, measure=None):
     """Conservative two-line ASS layout; never silently crop unreadable cues."""
     import math
     values = [width, height, size, bottom, outline]
@@ -162,16 +162,22 @@ def safe_subtitle_text(text, width, height, size, bottom, outline=8, max_lines=2
     for fitted in range(top, 23 if allow_shrink else top - 1, -1):
         capacity = int((width - 120 - 2 * outline) / (fitted * 1.15))
         if capacity < 1: continue
+        fits = (lambda line: measure(line) <= width - 120 - 2 * outline) if measure else (lambda line: len(line) <= capacity)
         lines = []
         for paragraph in clean.splitlines() or ['']:
             paragraph = paragraph.strip()
-            while len(paragraph) > capacity:
-                cut = paragraph.rfind(' ', 0, capacity + 1)
-                if cut < capacity // 2: cut = capacity
+            while not fits(paragraph):
+                limit = min(len(paragraph) - 1, capacity) if not measure else len(paragraph) - 1
+                while limit > 0 and not fits(paragraph[:limit]):
+                    limit -= 1
+                if not limit:
+                    break
+                cut = paragraph.rfind(' ', 0, limit + 1)
+                if cut < max(1, limit // 2): cut = limit
                 lines.append(paragraph[:cut].strip())
                 paragraph = paragraph[cut:].strip()
             if paragraph: lines.append(paragraph)
-        if len(lines) <= max_lines and len(lines) * fitted * 1.4 + outline * 2 < height - bottom - 60:
+        if len(lines) <= max_lines and all(fits(line) for line in lines) and len(lines) * fitted * 1.4 + outline * 2 < height - bottom - 60:
             return '{\\fs%d}' % fitted + r'\N'.join(lines)
     raise ValueError('SUBTITLE_TOO_LONG: split this cue into shorter timed cues; text does not fit two readable lines')
 

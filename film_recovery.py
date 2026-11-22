@@ -207,7 +207,7 @@ def _render(root, job_path, job, recheck, state_path, atomic):
             path = Path(receipt).resolve()
             if job_path.parent in path.parents and path.name == 'preview.mp4.film.json' and path.is_file():
                 repair, args = 'recheck', ['--recheck', str(path)]
-        elif codes & CAPTION and os.environ.get(RECOVERY_ACTIONS['captions'], '1') != '0':
+        elif codes & CAPTION and not result.get('missing_caption_lines') and os.environ.get(RECOVERY_ACTIONS['captions'], '1') != '0':
             revised = caption_repair(job)
             if revised:
                 candidate = job_path.with_name('.' + job_path.name + '.caption-repair.json')

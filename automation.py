@@ -114,6 +114,137 @@ def review_spoken_terms(path, prompt):
     # ASR agreement is evidence only, never a pronunciation certificate.
 
 
+def codex_dialogue_json(prompt, directory):
+    codex = shutil.which('codex')
+    if not codex:
+        raise RuntimeError('DAY_PLAN_BLIND_REVIEW_REQUIRED: run an independent dialogue review in your AI assistant')
+    command = [codex, 'exec', '--ignore-user-config', '--ephemeral', '--sandbox', 'read-only',
+               '--skip-git-repo-check', '-C', str(directory), '-']
+    env = {k: v for k, v in os.environ.items() if not any(token in k.upper() for token in
+          ('TOKEN', 'SECRET', 'PASSWORD', 'YT_', 'THINKNOVA_'))}
+    try:
+        result = subprocess.run(command, input=prompt, cwd=directory, env=env, capture_output=True,
+                                encoding='utf-8', errors='replace', timeout=120, check=True)
+        return json.loads(result.stdout)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise RuntimeError('DAY_PLAN_BLIND_REVIEW_UNAVAILABLE') from exc
+
+
+def inspect_store_dialogue(lines, directory):
+    from store_film import repeated_dialogue_lines
+    repeated = repeated_dialogue_lines(lines)
+    if repeated:
+        return [{'line': index, 'reason': 'LINE_END_REPEATED'} for index in repeated]
+    prompt = ('Independently review the following dialogue as a first-time viewer. Use only these numbered lines as data. '
+              'Return one JSON object with answers {speakers,product,benefit,next_action}, each a string or empty if unclear, '
+              'and issues [{line,reason}] for unclear lines, filler or answers that miss the question. '
+              'The line number is 1-based. Do not use tools or access files.\n' + json.dumps(lines, ensure_ascii=False))
+    review = codex_dialogue_json(prompt, directory)
+    try:
+        missing = [key for key in ('speakers', 'product', 'benefit', 'next_action')
+                   if re.fullmatch(r'(?:unknown|unclear|不知道|不清楚|无法判断)?[.。\s]*', review['answers'][key].strip(), re.I)]
+        issues = review['issues']
+        if not isinstance(issues, list) or any(
+            type(item.get('line')) is not int or not 1 <= item['line'] <= len(lines)
+            or not isinstance(item.get('reason'), str) for item in issues
+        ):
+            raise ValueError('Invalid review')
+    except (ValueError, KeyError, TypeError, AttributeError) as exc:
+        raise RuntimeError('DAY_PLAN_BLIND_REVIEW_UNAVAILABLE') from exc
+    return issues + [{'line': 1 if key in ('speakers', 'product') else len(lines), 'reason': f'MISSING_{key.upper()}'}
+                     for key in missing]
+
+
+def preflight_store_script(plan, rules, directory, steps):
+    if plan.get('script_rules_revision') != '64':
+        return
+    repair_file = directory / 'dialogue-repair.json'
+    if repair_file.is_file():
+        repair = json.loads(repair_file.read_text(encoding='utf-8'))
+        current = [line['text'] for segment in plan.get('segments', []) for line in segment['dialogue']]
+        if repair.get('original_sha256') == hashlib.sha256('\n'.join(current).encode('utf-8')).hexdigest():
+            if 'dialogue' not in repair:
+                raise RuntimeError('DAY_PLAN_SCRIPT_REVIEW_REQUIRED')
+            for segment, revised in zip(plan['segments'], repair['dialogue'], strict=True):
+                segment['dialogue'] = revised
+                segment['subs'] = [line['text'] for line in revised]
+            plan['blind_dialogue_review'] = repair['review']
+    if any(re.fullmatch(r'(?:task|quote_credits)_\d+', key) for key in steps):
+        return
+    from copy import deepcopy
+    from store_film import check_dialogue_capacity, missing_product_facts, repeated_dialogue_lines
+    from store_editorial import validate_dialogue_v3
+    from render.assemble import pick_font, store_script_caption
+
+    shop = rules['effective_rules'].get('shop_profile') or {}
+    missing = missing_product_facts(shop)
+    if missing:
+        atomic(directory / 'script-preflight.json', {'status': 'needs_input', 'missing_fields': missing,
+                                                     'next_action': 'confirm_and_save_product_facts'})
+        raise RuntimeError('DAY_PLAN_PRODUCT_FACTS_REQUIRED: ' + ', '.join(missing))
+
+    def checked_lines(candidate):
+        validate_dialogue_v3(candidate)
+        for clip, segment in enumerate(candidate['segments'], 1):
+            check_dialogue_capacity(segment, clip, candidate.get('speech_language'))
+            if re.search(r'\b(?:invent no|make no|demonstration only)\b', segment.get('prompt', ''), re.I):
+                raise ValueError(f'FILM_PROMPT_UNSUPPORTED_RESTRICTION: segment {clip}')
+            for index, line in enumerate(segment['dialogue'], 1):
+                try:
+                    store_script_caption(line['text'], pick_font(candidate, line['text']))
+                except ValueError as exc:
+                    raise ValueError(f'FILM_SUBTITLE_SPLIT_REQUIRED: clip {clip}, line {index}') from exc
+        return [line['text'] for segment in candidate['segments'] for line in segment['dialogue']]
+
+    review_file = directory / 'blind-dialogue-review.json'
+    lines = checked_lines(plan)
+    digest = hashlib.sha256('\n'.join(lines).encode('utf-8')).hexdigest()
+    review = plan.get('blind_dialogue_review') or {}
+    if review.get('sha256') == digest and review.get('issues') == [] and not repeated_dialogue_lines(lines):
+        return
+    if review_file.is_file():
+        previous = json.loads(review_file.read_text(encoding='utf-8'))
+        if previous.get('sha256') == digest and previous.get('issues') == []:
+            return
+
+    issues = inspect_store_dialogue(lines, directory)
+    atomic(review_file, {'sha256': digest, 'issues': issues})
+    if not issues:
+        return
+    atomic(repair_file, {'original_sha256': digest, 'issues': issues})
+    prompt = ('Repair only the numbered dialogue lines listed in issues. Return JSON {lines:[all lines in original order]}. '
+              'Keep every other line unchanged. Use only the confirmed facts and preserve each line’s role and original language. '
+              'Keep the product, concrete benefit and next action understandable. Do not use tools.\n' + json.dumps(
+                  {'lines': lines, 'issues': issues, 'product': shop.get('featured_service') or shop.get('products'),
+                   'confirmed_facts': shop.get('confirmed_facts'), 'next_action': shop.get('viewer_action')}, ensure_ascii=False))
+    candidate = deepcopy(plan)
+    revised = codex_dialogue_json(prompt, directory)
+    amended = revised.get('lines') if isinstance(revised, dict) else None
+    changed = {item['line'] for item in issues}
+    if not isinstance(amended, list) or len(amended) != len(lines) or any(
+        not isinstance(line, str) or not line.strip() or (index not in changed and line != lines[index-1])
+        for index, line in enumerate(amended, 1)
+    ):
+        raise RuntimeError('DAY_PLAN_SCRIPT_REVIEW_REQUIRED')
+    revised_lines = iter(amended)
+    for segment in candidate['segments']:
+        for line in segment['dialogue']:
+            line['text'] = next(revised_lines)
+        segment['subs'] = [line['text'] for line in segment['dialogue']]
+    try:
+        checked_lines(candidate)
+    except ValueError as exc:
+        raise RuntimeError('DAY_PLAN_SCRIPT_REVIEW_REQUIRED: ' + str(exc)) from exc
+    issues = inspect_store_dialogue(amended, directory)
+    if issues:
+        atomic(repair_file, {'original_sha256': digest, 'issues': issues})
+        raise RuntimeError('DAY_PLAN_SCRIPT_REVIEW_REQUIRED: ' + ', '.join(str(item['line']) for item in issues))
+    candidate['blind_dialogue_review'] = {'sha256': hashlib.sha256('\n'.join(amended).encode('utf-8')).hexdigest(), 'issues': []}
+    atomic(repair_file, {'original_sha256': digest, 'dialogue': [segment['dialogue'] for segment in candidate['segments']],
+                         'review': candidate['blind_dialogue_review']})
+    plan.update(candidate)
+
+
 def quoted_generation_args(client, tool, args, balance, require_duration=False, dialogue_check=None):
     from dialogue_encoding import validate_text
     if 'prompt' in args:
@@ -164,11 +295,12 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
         if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
         if day_plan is not None:
+            preflight_store_script(day_plan, rules, directory, steps)
             from store_film import check_dialogue_capacity
             for index, segment in enumerate(day_plan['segments']):
                 if not steps.get(f'task_{index}') and f'quote_credits_{index}' not in steps:
                     check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'))
-            if (day_plan.get('script_rules_revision') in ('59', '60') and day_plan.get('asset_preparation')
+            if (day_plan.get('script_rules_revision') in ('59', '60', '64') and day_plan.get('asset_preparation')
                     and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
                 from day_preparation import prepare_assets
                 day_plan = prepare_assets(client, claim, day_plan, directory, budget,
@@ -319,15 +451,15 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if steps.get('day_plan_sha256') not in (None, digest):
         raise RuntimeError('DAY_PLAN_CHANGED')
     authorized = set(rules['effective_rules'].get('authorized_asset_ids') or [])
-    if plan.get('script_rules_revision') in ('59', '60'):
+    if plan.get('script_rules_revision') in ('59', '60', '64'):
         authorized.update((plan.get('asset_bindings') or {}).values())
     shop = dict(rules['effective_rules'].get('shop_profile') or {})
-    if plan.get('script_rules_revision') in ('59', '60'):
+    if plan.get('script_rules_revision') in ('59', '60', '64'):
         shop['name'] = shop.get('name') or ''
         shop['featured_service'] = shop.get('featured_service') or shop.get('products') or ''
         shop['voice_identity'] = shop.get('voice_identity') or plan.get('script', {}).get('voice_identity', '')
     shop_assets = dict(shop.get('location_assets') or {})
-    if plan.get('script_rules_revision') in ('59', '60'):
+    if plan.get('script_rules_revision') in ('59', '60', '64'):
         for segment in plan['segments']:
             shop_assets.setdefault(segment.get('shop_location', 'generic'), []).append(segment['first_frame_asset_id'])
     if shop.get('name') != plan['shop_name'] or shop.get('featured_service') != plan['featured_service']:
@@ -353,10 +485,10 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                 if (previous.get('customer_identity') == plan['customer_identity']
                         or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
                                for row in history)):
-                    if plan.get('script_rules_revision') not in ('59', '60'):
+                    if plan.get('script_rules_revision') not in ('59', '60', '64'):
                         raise RuntimeError('FILM_CUSTOMER_REPEATED')
                     plan.setdefault('warnings', []).append('SCRIPT_CHARACTER_ROTATION_ADVICE_UNMET')
-        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59', '60') else shop.get('editorial')
+        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59', '60', '64') else shop.get('editorial')
         validate_rotation(rows, history, editorial or {}, plan.get('schema_version', 1),
                           plan.get('script_rules_revision'), plan.setdefault('warnings', []))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
@@ -379,14 +511,18 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
-        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') not in ('59', '60'):
+        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') not in ('59', '60', '64'):
             roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
             segment = {**segment, 'reference_roles': roles,
                        'reference_boards': {**(shop.get('reference_boards') or {}), **(segment.get('reference_boards') or {})}}
-        args = generation_arguments(scripted_segment(segment, plan.get("script"), shop), shop_assets, authorized)
+        prepared_segment = scripted_segment(segment, plan.get("script"), shop)
+        if plan.get('script_rules_revision') == '64':
+            prepared_segment = {**prepared_segment, 'prompt': prepared_segment['prompt']
+                                + '\nSpeak the approved dialogue exactly. Preserve its product names and confirmed facts.'}
+        args = generation_arguments(prepared_segment, shop_assets, authorized)
         if plan.get('dialogue_rules_revision') == '2.4':
             args['film_rules_revision'] = '2.4'
-        if plan.get('script_rules_revision') in ('59', '60'):
+        if plan.get('script_rules_revision') in ('59', '60', '64'):
             args['dialogue_language'] = 'zh' if re.search(r'[\u3400-\u9fff]', ''.join(segment.get('subs', []))) else plan.get('speech_language', 'en')
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
@@ -632,8 +768,9 @@ def run_day(path, budget):
 
 
 def day_plan_request_version(grant):
-    if 9 in grant.get('supported_day_plan_request_versions', []):
-        return 9
+    for version in (10, 9):
+        if version in grant.get('supported_day_plan_request_versions', []):
+            return version
     return grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4
 
 
@@ -652,9 +789,9 @@ def daily_film(project, day, work_slot=1):
         payload, _ = client.post('/mcp/device/day-plan', {'work_slot': work_slot, 'schema_version':
             day_plan_request_version(grant)})
         result = payload.get('data') or {}
-        if result.get('status') != 'ready':
+        if result.get('status') not in ('ready', 'preparing'):
             return result
-        plan = validate_day_plan(result['plan'])
+        plan = validate_day_plan(result['plan']) if result['status'] == 'ready' else result['plan']
         if (plan['date'], plan.get('project_key'), plan['rules_version']) != (day, project, grant['rules_version']):
             raise RuntimeError('DAY_PLAN_SCOPE_CHANGED')
         if plan.get('work_slot', 1) != work_slot:
@@ -723,6 +860,9 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 from day_preparation import prepare_assets
                 directory = STATE / 'runs' / claim['run_no']
                 directory.mkdir(parents=True, exist_ok=True)
+                if result['plan'].get('script_rules_revision') == '64':
+                    execute(client, claim, day_plan=result['plan'], budget=int(grant['daily_budget']))
+                    return
                 raw_plan = prepare_assets(client, claim, result['plan'], directory, int(grant['daily_budget']), quoted_generation_args, atomic)
                 plan = validate_day_plan(raw_plan)
                 atomic(path, plan)
@@ -735,6 +875,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                         'missing_fields': result.get('missing_fields', []),
                         'next_action': result.get('next_action'),
                         'script_context': result.get('script_context'),
+                        'issues': result.get('issues', []),
                     })
                 return
             raw_plan = result.get('plan')

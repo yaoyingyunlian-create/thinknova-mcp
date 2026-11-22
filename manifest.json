@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.29",
+  "version": "thinknova-automation-toolkit-v3.1.30",
   "text_line_endings": "lf",
-  "revision": "b7b6b096c3791f5d249bd8ccf48c36a5512fac8e5964a7486da42227a1860554",
+  "revision": "29a3d5bb4c440117c860424cac7e32337998c6431c36b49ff28dcafd8eb7a51c",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "ae964af6114876ce607170ea37fc4b5440165efefd3f10f6825b3697b67f19c1"
+      "sha256": "3b00f90ccae0aee47b5a78ff4181bc95207f06251cd514ff25063da9bbd20ade"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "eb504be06a98cfe7e55377118b7d867d18feab0747293974e777e55581889057"
+      "sha256": "feed719854aec62b7ac7d6081ad4ff3334b2e7dc3b9cfc179c10fa7aae042e38"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "40d66bf9cba691f11b9d0c96b29f2ef076831880b3c018442a5beccafd834b7a"
+      "sha256": "911943e7144565ee909afbbd44d777794f4a63cf6c629e3f5da6232a4adf4e01"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "9b9688c0e2d804eb6bd476b057c9d0fa7316c2d60a51f287948ea98a9b8d1718"
+      "sha256": "b36ec4992a85f54a15b2c26b9523a9188d0cf61d693ddfa8626757e441086737"
     },
     {
       "path": "clip_recovery.py",
@@ -85,7 +85,7 @@
     },
     {
       "path": "film_recovery.py",
-      "sha256": "b200e6f6464386b25de3cb2b47bc7c91cc1d567071946c27a5d16e7de0742e22"
+      "sha256": "75e7964ca7a1be44b92be41045b2930ada443bb1e798cac2d9be9494ab5fa3a1"
     },
     {
       "path": "generation_quality.py",
@@ -249,11 +249,11 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "bf6f9008c79bd96a35757ebb250e71ea675b5cc8dffe5ed6140581139e865a44"
+      "sha256": "d505fd952aeb10f56e64df182a717d133663f495018d45537c5e17ab326f4356"
     },
     {
       "path": "render/captions.py",
-      "sha256": "56715f2516ac7c4341807b16d5eaa475febf53e4b6636c1b25248c0c12805e3f"
+      "sha256": "f1c71724e9558e6355748c1d48e1fbe7b8eab17120448b365e09e749c6ed7d7b"
     },
     {
       "path": "render/check.py",
@@ -340,6 +340,10 @@
       "sha256": "df2e8d35b2019bac4d0a0168ebb50a05968c318a668ba2415d6b0a3879f75330"
     },
     {
+      "path": "rules/store-film-rules-v64.md",
+      "sha256": "88389322a40e91d8f2d0e613a0db61f5143d50f768f5f815654137eb3480abda"
+    },
+    {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
       "sha256": "a3cb492d22abe07a6a04e4d6e2a5bff76e1a1ad00c8dac60aebe02ee576eee05"
     },
@@ -373,15 +377,15 @@
     },
     {
       "path": "skills/\u6bcf\u65e5\u51fa\u7247\u89c4\u8303/SKILL.md",
-      "sha256": "15f09f4b8d9070aaf4cb87b398499c5842700e21418ee3a749697edfbcb58445"
+      "sha256": "d3c5c2f6e3d27163de70466e60e4e2134de3bef249b4f96ba4e829f6540ad722"
     },
     {
       "path": "skills/\u955c\u5934\u63d0\u793a\u8bcd/SKILL.md",
-      "sha256": "e331f8506ba0c8463be04ba3506a4ba48dffff7b739e3847f3f4eca6bde08a7a"
+      "sha256": "4deeb812dc0d687e53ba3fe9df1f8591cb3279ef9fa496e36456e3b7a4eff981"
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "fcaf5ecc9b6e46148d5d1de58198ee88797567f65a6e808253492106306b0713"
+      "sha256": "d61a2bc6c515d201d9f26bd6b694ead8877d52f484dedfbafb8a6dfd7b475010"
     },
     {
       "path": "speech_recovery.py",
@@ -389,11 +393,11 @@
     },
     {
       "path": "store_editorial.py",
-      "sha256": "326d9f32dd425c2be45f282a38d7662e353783592ed0334df7ea274144fa0aac"
+      "sha256": "2760e4b61400b66a8716d0f9ec49e1b0f9f721f552c6a4fc0533ea61a9f1d3a1"
     },
     {
       "path": "store_film.py",
-      "sha256": "1a329a970be7f07549d2f98017488c23921b30115b82377f21cc791dee6cd338"
+      "sha256": "3ef0e7687b396b6cc34fa0abd972eb4d2524a473b8079861cc777a3b5b030373"
     },
     {
       "path": "test_automation.py",
@@ -438,6 +442,10 @@
     {
       "path": "test_revision60.py",
       "sha256": "230b6652cc32455896f2529cd774fc73568a46a1ea5f235b319603ab371a759f"
+    },
+    {
+      "path": "test_revision64.py",
+      "sha256": "513f2ee2e4a2227b68e39f75ec4585913b683832b86126c8c894a0722a45f482"
     },
     {
       "path": "test_sparse_delivery.py",

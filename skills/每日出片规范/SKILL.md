@@ -68,10 +68,10 @@ Before drafting, record audience/problem, confirmed benefits and the intended ac
 
 ## English summary
 
-Use the project's editorial rules. Reuse the approved staff turnaround, and choose a different customer for each film. For revision 60 store films, speak the confirmed shop name, address and one booking action in the ending and captions. If the address is unknown, omit it without inventing it or blocking creation. Quote all segments and verify applied references. Review the first film and platform copy with the customer. Later qualifying films follow the active unattended grant, when enabled.
+Use the project's editorial rules. Reuse the approved staff turnaround, and choose a different customer for each film. For revision 64 store films, speak the confirmed shop name, address and one booking action in the ending and captions. If the address is unknown, omit it without inventing it or blocking creation. Quote all segments and verify applied references. Review the first film and platform copy with the customer. Later qualifying films follow the active unattended grant, when enabled.
 
 
-修订60执行补充：新脚本以 rules/store-film-rules-v60.md 为准，品类表不变。只知道产品或服务也先出片，店名可空。缺照片由工具包准备示意首帧和必要人物图；有授权实图优先引用。缺原话用店员陈述已核实信息，讲解首尾同样适用，不编造体验。创作自查重写一次后建议项记警告。质量政策由服务器返回；58政策下语速、停顿、低运动及30%～80%吻合度不拦交付，转写未知修复一次后记警告，实际严重错配进入有界恢复。费用包含素材和重做，不突破已有预算。旧计划保留原契约。
+修订64执行补充：按 rules/store-film-rules-v64.md 开工。先确认主推项、三条不同的卖点和一个收尾动作；缺资料先问并保存已确认规则。缺照片或顾客原话按规则使用示意素材或店员说明。脚本独立盲审，每段 4～6 句，逐句字幕保留原文标点。旧任务按原契约续跑。
 Revision 60 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.
 
 修订60：每段5～8句、总55～62字，短接话仍计对白与字幕，只免计情境句额度；第二段接第一段末句，第二卖点由对方问出，至少两处自然反应。门店结尾说已确认地址，缺地址不编造或停工。

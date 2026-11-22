@@ -44,6 +44,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from functools import lru_cache
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import quality_policy
 
@@ -495,11 +496,66 @@ def add_music(ff, joined, music, db, total, wk):
     return out
 
 
+@lru_cache(maxsize=1)
+def store_caption_font():
+    windows_fonts = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
+    if platform.system() == 'Windows' and (windows_fonts / 'msyh.ttc').is_file():
+        return 'Microsoft YaHei'
+    fc_list = shutil.which('fc-list')
+    families = ''
+    if fc_list:
+        try:
+            families = subprocess.run([fc_list, '--format', '%{family}\\n'], capture_output=True,
+                                      text=True, encoding='utf-8', errors='replace', timeout=6).stdout
+        except (OSError, subprocess.SubprocessError):
+            pass
+    if 'Microsoft YaHei' in families:
+        return 'Microsoft YaHei'
+    if 'Noto Sans SC' in families or any(
+        path.is_file() for directory in (windows_fonts, Path.home() / 'Library/Fonts', Path('/Library/Fonts'))
+        for path in directory.glob('NotoSansSC*')
+    ):
+        return 'Noto Sans SC'
+    if platform.system() == 'Windows':
+        return 'Microsoft JhengHei' if (windows_fonts / 'msjh.ttc').is_file() else 'Arial'
+    return FONTS.get(platform.system(), FONTS['Linux'])[0]
+
+
 def pick_font(job, text):
+    if job.get('script_rules_revision') == '64':
+        return store_caption_font()
     if job.get("font"):
         return job["font"]
     cjk, latin = FONTS.get(platform.system(), FONTS["Linux"])
     return cjk if CJK.search(text) else latin
+
+
+def store_script_caption(text, font, bottom=400):
+    return safe_subtitle_text(text, W, H, 87, bottom, 13, max_lines=2, allow_shrink=False,
+                              measure=store_font_measure(font))
+
+
+@lru_cache(maxsize=8)
+def store_font_measure(font):
+    windows_fonts = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts'
+    paths = {'Microsoft YaHei': windows_fonts / 'msyhbd.ttc', 'Microsoft JhengHei': windows_fonts / 'msjhbd.ttc',
+             'Arial': windows_fonts / 'arialbd.ttf', 'PingFang SC': Path('/System/Library/Fonts/PingFang.ttc')}
+    candidate = paths.get(font)
+    if not candidate or not candidate.is_file():
+        fontconfig = shutil.which('fc-match')
+        if not fontconfig:
+            return None
+        try:
+            candidate = Path(subprocess.run([fontconfig, '--format', '%{file}', f'{font}:style=Bold'],
+                                            capture_output=True, text=True, encoding='utf-8', errors='replace',
+                                            check=True, timeout=6).stdout.strip())
+        except (OSError, subprocess.SubprocessError):
+            return None
+    try:
+        from PIL import ImageFont
+        return ImageFont.truetype(str(candidate), 87).getlength
+    except (OSError, ImportError):
+        return None
 
 
 def ass_escape(s):
@@ -513,14 +569,17 @@ def write_ass(path, job, cues, card_span, font):
            "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding")
     style = u"Style: %s,{f},%d,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,1,%d,0,%d,60,60,%d,1\n"
     head = u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, %s\n" % (W, H, fmt)
-    boxed = job.get('film_profile') == 'store_v2' or job.get('subtitle_style') == 'box'
+    revision64 = job.get('script_rules_revision') == '64'
+    if revision64:
+        size, bottom = 87, round(H * 400 / 1920)
+    boxed = not revision64 and (job.get('film_profile') == 'store_v2' or job.get('subtitle_style') == 'box')
     size2 = max(24, round(size * 0.72))
     box = ("Style: %s,{f},%d,%s,%s,&H50141414,&H00000000,-1,0,0,0,100,100,0,0,"
            "3,16,0,2,60,60,%d,1\n")
-    for label, pixels, colour, outline in [('Sub', size, '&H00FFFFFF', 7),
+    for label, pixels, colour, outline in [('Sub', size, '&H00FFFFFF', 13 if revision64 else 7),
                                            ('Sub2', size2, '&H008AE0F5', 6)]:
         row = box % (label, pixels, colour, colour, bottom) if boxed else (
-            style % (label, pixels, colour, colour, '&H00141414', outline, 2, bottom))
+            style % (label, pixels, colour, colour, '&H00000000' if revision64 else '&H00141414', outline, 2, bottom))
         head += row.replace("{f}", font)
     head += (style % ("Badge", 30, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 3, 7, 60)).replace("{f}", font)
     head += (style % ("Card", 110, "&H00232D3C", "&H00232D3C", "&H00FFFFFF", 0, 5, 0)).replace("{f}", font)
@@ -532,7 +591,7 @@ def write_ass(path, job, cues, card_span, font):
     for index, cue in enumerate(cues, 1):
         start, end = ass_time(cue['start']), ass_time(cue['end'])
         upper = bottom
-        padding = 16 if boxed else 7
+        padding = 13 if revision64 else 16 if boxed else 7
         if cue.get('text2'):
             second = cue['text2'].strip()
             if len(re.sub(r'\s+', '', second)) > 26 or len(second.splitlines()) != 1:
@@ -545,7 +604,8 @@ def write_ass(path, job, cues, card_span, font):
             upper += size2 + 56
         if job.get('film_profile') == 'store_v2':
             try:
-                primary = safe_subtitle_text(cue['text'], W, H, size, upper, padding, max_lines=1, allow_shrink=False)
+                primary = store_script_caption(cue['text'], font, upper) if revision64 else safe_subtitle_text(
+                    cue['text'], W, H, size, upper, padding, max_lines=1, allow_shrink=False)
             except ValueError as exc:
                 raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds safe width', 2) from exc
         else:
@@ -790,10 +850,10 @@ def save_pending(ff, video, srt, sheet, output, options, result, diagnostics, re
               'output': os.path.basename(output), 'options': options, 'result': result}
     with open(receipt, 'w', encoding='utf-8') as stream:
         json.dump(record, stream, ensure_ascii=False)
-    return report_pending(preview, receipt, diagnostics, report, options.get('film_profile') == 'store_v2')
+    return report_pending(preview, receipt, diagnostics, report, options.get('film_profile') == 'store_v2', result)
 
 
-def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False):
+def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False, details=None):
     log = os.path.join(os.path.dirname(preview), 'check.log')
     with open(log, 'w', encoding='utf-8') as stream:
         stream.write(report)
@@ -802,10 +862,13 @@ def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False
           'exit_code': 2, 'error': 'CHECK_FAILED', 'preview': preview, 'pending_receipt': receipt,
           'diagnostic_log': log, 'diagnostics': diagnostics,
                     'contact_sheet': sheet if os.path.isfile(sheet) else None}
+    if details and details.get('missing_caption_lines'):
+        result.update(missing_caption_lines=details['missing_caption_lines'], subtitle_timing='review_required',
+                      next_action='Restore speech recognition and reassemble using the original clips.')
     if diagnostics_only and os.environ.get('THINKNOVA_REVIEW_PREVIEW') != '1':
         for key in ('preview', 'pending_receipt', 'contact_sheet'):
             result.pop(key)
-        result['next_action'] = 'Resolve the film check findings and ask support to recheck the local pending file.'
+        result.setdefault('next_action', 'Resolve the film check findings and ask support to recheck the local pending file.')
     emit(result)
     return 2
 
@@ -877,6 +940,23 @@ def main():
         return recheck(argv[1], overwrite)
     job, base = load_job(argv)
     store_film = job.get('film_profile') == 'store_v2'
+    revision64 = store_film and job.get('script_rules_revision') == '64'
+    if revision64:
+        if job.get('srt'):
+            raise Stop('FILM_STORE_USE_SCRIPT_DIALOGUE: revision 64 subtitles are derived from dialogue', 2)
+        for index, clip in enumerate(job.get('clips', []), 1):
+            lines = clip.get('dialogue')
+            if not isinstance(lines, list) or not 4 <= len(lines) <= 6 or any(
+                not isinstance(line, dict) or not isinstance(line.get('text'), str) or not line['text'].strip()
+                for line in lines
+            ):
+                raise Stop(f'FILM_STORE_USE_SCRIPT_DIALOGUE: clip {index} requires 4–6 lines', 2)
+            clip['subs'] = [line['text'] for line in lines]
+            for cue, text in enumerate(clip['subs'], 1):
+                try:
+                    store_script_caption(text, pick_font(job, text))
+                except ValueError as exc:
+                    raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: clip {index}, line {cue} exceeds two safe lines', 2) from exc
     verified_srt = bool(job.get('film_rules_revision') == '2.4' and job.get('srt'))
     if store_film and job.get('srt') and not verified_srt:
         raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
@@ -895,7 +975,7 @@ def main():
                 validate_beats(job.get('clips', []), job.get('film_type'))
             except ValueError as exc:
                 raise Stop(str(exc), 2) from exc
-        for key in (('featured_service',) if job.get('script_rules_revision') in ('59', '60') else ('shop_name', 'featured_service')):
+        for key in (('featured_service',) if job.get('script_rules_revision') in ('59', '60', '64') else ('shop_name', 'featured_service')):
             if not isinstance(job.get(key), str) or not job[key].strip():
                 raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
     validate_job(job)
@@ -931,6 +1011,7 @@ def main():
         caption_alignment_pending = False
         caption_alignment_used = False
         caption_alignment_estimated = False
+        missing_caption_lines = []
         prepared = []
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
@@ -1027,11 +1108,11 @@ def main():
                 or any(not isinstance(line, str) or not line.strip() for line in secondary)
             ):
                 raise Stop('SUBTITLE_SECONDARY_COUNT_MISMATCH: subs2 must match subs', 2)
-            if store_film and secondary is None:
+            if store_film and secondary is None and not revision64:
                 lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8, protected=protected_names)]
             if lines and not verified_srt:
                 shot_cues = None
-                if native_edit or job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
+                if revision64 or native_edit or job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
                     try:
                         from speech_review import recognize
                         if relaxed:
@@ -1039,19 +1120,25 @@ def main():
                         spoken = recognized[i] if native_edit else recognize(
                             shot, 'small', job.get('speech_language'), ff, word_timestamps=True, vad_filter=True)[0]
                         shot_cues = align_captions(lines, spoken, t)
-                        if shot_cues is None:
+                        if shot_cues is None and not revision64:
                             windows = recognized_caption_windows(spoken, dur)
                             if windows:
                                 shot_cues = time_subs(lines, windows, t)
                                 for cue, line in zip(shot_cues, lines):
                                     cue['text'] = line
                                 caption_alignment_estimated = True
-                        else:
+                        elif shot_cues is not None:
                             caption_alignment_used = True
                     except (RuntimeError, ImportError):
                         pass
                     caption_alignment_pending |= shot_cues is None
                 if shot_cues is None:
+                    if revision64:
+                        missing_caption_lines.append({'clip': i + 1, 'lines': list(range(1, len(lines) + 1))})
+                        t += dur
+                        if i + 1 < len(job['clips']):
+                            segment_boundaries.append(t)
+                        continue
                     shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
                 if secondary is not None:
                     if len(shot_cues) != len(secondary):
@@ -1087,7 +1174,7 @@ def main():
             if not cues or any(not (0 <= c['start'] < c['end'] <= t + 0.05) for c in cues):
                 raise Stop('INVALID_SUBTITLE_TIMELINE: cues must fit the finished video')
 
-        if job.get('film') and job.get('font_size') == 90:
+        if job.get('film') and job.get('font_size') == 90 and not revision64:
             for index, cue in enumerate(cues, 1):
                 if (not store_film or CJK.search(cue['text'])) and len(re.sub(r'\s+', '', cue['text'])) > (8 if store_film else 9):
                     raise Stop(f'FILM_SUBTITLE_SPLIT_REQUIRED: cue {index} exceeds {8 if store_film else 9} characters', 2)
@@ -1143,16 +1230,18 @@ def main():
             result['speech_pace'] = pace_report
         if native_edit:
             result['edit_timeline'] = edit_report
+        if missing_caption_lines:
+            result.update(subtitle_timing='review_required', missing_caption_lines=missing_caption_lines)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
         if relaxed and caption_alignment_pending:
             diagnostics.append({'code':'SPEECH_CHECK_PENDING', 'message':'Subtitle timing is estimated; recognition unavailable.'})
-        if caption_alignment_pending and job.get('film') and (not relaxed or job.get('require_caption_alignment')):
+        if caption_alignment_pending and job.get('film') and (revision64 or not relaxed or job.get('require_caption_alignment')):
             passed = False
             message = 'The spoken words could not be matched to the reviewed captions; reassemble with verified timing.'
             diagnostics.append({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'message': message})
             report += '\n  [FILM_CAPTION_ALIGNMENT_PENDING] ' + message
             options['caption_alignment_pending'] = True
-            options['require_caption_alignment'] = bool(job.get('require_caption_alignment'))
+            options['require_caption_alignment'] = revision64 or bool(job.get('require_caption_alignment'))
         if not passed:
             if job.get('film'):
                 return save_pending(ff, out, srt, sheet, final_out, options, result, diagnostics, report)

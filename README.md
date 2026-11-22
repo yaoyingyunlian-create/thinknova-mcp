@@ -1,4 +1,8 @@
-# ThinkNova 视频制作工具包 v3.1.29
+# ThinkNova 视频制作工具包 v3.1.30
+
+新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
+
+For new revision 64 store films, confirm the product or service, three distinct selling points, and the viewer’s next action before quoting. Use 4–6 spoken lines per segment and an independent dialogue review. Subtitles use the exact script text and spoken timestamps. Existing tasks resume under their original rules.
 
 工具包交付成片与待审包。自动发布推荐使用 **客户 AI 助理的原生定时任务 + Ego Lite**；工具包不再发布、登录社交账号或注册电脑系统任务。
 

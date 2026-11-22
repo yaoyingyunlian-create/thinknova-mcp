@@ -7,6 +7,38 @@ BEATS = ('pain', 'process', 'change', 'service')
 ASSET = re.compile(r'asset_[A-Za-z0-9]{1,58}')
 
 
+def missing_product_facts(shop):
+    product = (shop.get('featured_service') or '').strip() or (shop.get('products') or '').strip()
+    normalize = lambda value: ''.join(char for char in value.lower() if char.isalnum())
+    names = {normalize(value or '') for value in (product, shop.get('name'), shop.get('products'))}
+    facts = shop.get('confirmed_facts') or {}
+    independent = {normalize(fact) for key in ('methods_and_reasons', 'visible_details')
+                   for fact in facts.get(key, []) if isinstance(fact, str)} - names - {''}
+    missing = []
+    if not product:
+        missing.append('shop_profile.featured_service')
+    if len(independent) < 3:
+        missing.append('shop_profile.confirmed_facts')
+    if not (shop.get('viewer_action') or '').strip():
+        missing.append('shop_profile.viewer_action')
+    return missing
+
+
+def repeated_dialogue_lines(lines):
+    prior = ''
+    repeated = []
+    for index, line in enumerate(lines, 1):
+        head = line.lower().strip()
+        tail = re.sub(r'[^\w]+$', '', prior)
+        english = re.search(r'[a-z0-9]+$', tail)
+        han = re.search(r'[\u3400-\u9fff]{2,6}$', tail)
+        if (english and re.match(re.escape(english[0]) + r'(?![a-z0-9])', head)
+                or han and any(head.startswith(han[0][-size:]) for size in range(2, len(han[0]) + 1))):
+            repeated.append(index)
+        prior = head
+    return repeated if len(repeated) >= 2 else []
+
+
 def validate_beats(segments, film_type):
     if film_type not in ('story', 'showcase'):
         raise ValueError('FILM_TYPE_INVALID')
@@ -151,7 +183,7 @@ def validate_day_plan(plan):
     day = plan.get('date')
     if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or type(plan.get('rules_version')) is not int:
         raise ValueError('DAY_PLAN_DATE_OR_RULES_INVALID')
-    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') in ('59', '60')
+    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') in ('59', '60', '64')
                   else ('shop_name', 'featured_service', 'opening', 'visual_batch')):
         if not isinstance(plan.get(field), str) or not plan[field].strip():
             raise ValueError(f'DAY_PLAN_REQUIRED: {field}')
