@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.27
+# ThinkNova 视频制作工具包 v3.1.28
 
 工具包只负责制作：素材准备 → ThinkNova 生成与取件 → 拼片 → 字幕 → 质检 → 成片待审包。
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
@@ -16,7 +16,8 @@
 - 保留视频模型原生对白，不默认另做 TTS，不按语速自动调速。裁必要空白时不得截掉台词、伪造时长或导致片长越界。
 - 用 .venv Python 执行 toolkit.py film job.json，或 run-day plan.json --max-credits 已批准金额。对白、已有脚本可提供字幕，不为补字幕重新生成视频。
 - 语速与自然停顿记警告；损坏、黑屏、整片无声、严重错配和错误规格仍阻断。识别不可用如实记 unknown，不能虚报回听。保留预览，可从质检续跑，不重复收费制作。
-- 交付成片、联系表、对白、素材引用、质检和逐平台文案。按实际质检凭据与摘要判断，不以 READY.json 单个文件决定是否有成片。首条作品及发布信息待客户审核。
+- `delivery_status=delivered` 就把成片、封面和已有文案交给客户。`awaiting_review`、缺发布文案或缺平台授权只影响发布。旧片凭机器质检凭据运行 `film job.json --existing`，未通过的旧预览用 `film job.json --recheck` 接续。先复用原片和原任务，不为补 READY.json 重做。
+- 独立术语报告 `speech_review.json` 只用于定位需回听的词，报告的 `publication_ready` 不代表交付状态。复核聚焦报告列出的疑点并保留真实结论。
 
 ## 定时与发布交接
 先核对客户AI助理支持原生定时和本机执行；不支持则只做手动制作，不宣称任务已登记。
@@ -31,4 +32,4 @@ Check that the customer AI supports native timers and local execution; otherwise
 
 ## English
 The toolkit produces videos and review packages only. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.
-Scheduling belongs to the customer's AI assistant. Use existing MCP OAuth for quotes and generation, then toolkit.py film for local production. No pilot or pairing is needed. Publishing belongs to that assistant through Ego Lite, within confirmed accounts and consent. Never run retired toolkit publishers or install OS tasks. Old timer commands do nothing and return migration guidance. No Google Desktop OAuth or platform login is needed to create videos. Do not store platform credentials in memory; record actual outcomes without claiming unverified publication.
+Send the film and available assets whenever delivery_status=delivered. Use speech_review.json to identify terms that need listening. Its publication_ready field does not describe delivery status. Use film --existing for a checked legacy output and film --recheck for a failed preview. Reuse the original media and task IDs. Scheduling belongs to the customer's AI assistant. Use existing MCP OAuth for quotes and generation, then toolkit.py film for local production. Publishing uses Ego Lite within confirmed accounts and consent. Keep credentials out of memory and record actual outcomes.

@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.27",
+  "version": "thinknova-automation-toolkit-v3.1.28",
   "text_line_endings": "lf",
-  "revision": "bb04a9b35ca46b4c44144f962b51492e2fc1c2a6384aadd48998abe09b1e359e",
+  "revision": "93d0b31c41303d5573aa2a403a1396d706abab64a89fa60c2223ed4e185b28a6",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "65c2fc8420b2c7a7df0e6e69cc30b4422ac294ada0e2da3f000d3d9ae9da34bd"
+      "sha256": "30e55d600d9e594a96441200d2abf3ba9779a47570f3b42f7563589243f4c368"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "191887a287968421eb7baae7396cb409a607e7e608e832a9d61cb6530ce1c7bc"
+      "sha256": "01c29796dd5f01f58444175fd0965772d7a81e6315f8deaff64cf113eeab1085"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "66c6807fa5bdde4509ebb93152a8d44baf06faed8170d38b2c64adfa3a583a0d"
+      "sha256": "711f33b09214143821a17b4e0f51197bc29a9cc6df511776837a14d1ca6d06e8"
     },
     {
       "path": "clip_recovery.py",
@@ -85,7 +85,7 @@
     },
     {
       "path": "film_recovery.py",
-      "sha256": "a0ec2c9c44ac7ab0a11ba37c4a30ee32ae874b734106f1d60755ddcb296c1f5a"
+      "sha256": "b200e6f6464386b25de3cb2b47bc7c91cc1d567071946c27a5d16e7de0742e22"
     },
     {
       "path": "generation_quality.py",
@@ -125,7 +125,7 @@
     },
     {
       "path": "publication_handoff.py",
-      "sha256": "25694e83a197f65f09db17f7d50d1f70cbfb0b4e38316807e17dcadb31a077b9"
+      "sha256": "bc7e4fe19cba60a84731ebcf095cdde0580082ebe2f1ea290eede736460acf76"
     },
     {
       "path": "publish/common/__init__.py",
@@ -257,7 +257,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "1af83dc922d873cd42232ec535d297b8c8c32c60883ec6d574ef51ef502ef21d"
+      "sha256": "b5d140996e424c6fd638d755d85ff1dbd46f493ef0cd4163bcbed00d296e4893"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -417,7 +417,7 @@
     },
     {
       "path": "test_film_recovery.py",
-      "sha256": "17bead5d72a76fcf4e7eb54be91b518cfbd7eafdef3bac42f21ce57ae901f2ea"
+      "sha256": "f3e4265f43bbd00254d33aa57dc1b42303d2679d98567b540d77ef1bf109785f"
     },
     {
       "path": "test_local_workflow.py",
@@ -429,7 +429,7 @@
     },
     {
       "path": "test_publication_handoff.py",
-      "sha256": "03b7df5d717abb6aaca9bfa2325527446b12d2277248701fbb3afec133daa7f7"
+      "sha256": "aa069454e833966fd5114eda4bc7189b6c18ee0d20b4994f574fa9c72e7c51d2"
     },
     {
       "path": "test_render_pipeline.py",
@@ -445,7 +445,7 @@
     },
     {
       "path": "test_speech_review.py",
-      "sha256": "28b8833d08d1ee585f880af209d42fc46b3f2803353b5dea4a5833686e7a951f"
+      "sha256": "b387003659f876a963d35cd5c2b3da31e28892451d545cd52b6aad59e093e2e6"
     },
     {
       "path": "test_staged_workflow.py",
@@ -465,7 +465,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "3afae10020a006b115a24a4d4f46038822cf72df34358b2ef208ce8e58b4df23"
+      "sha256": "5aabdc77cacf77819823cb21a13ab367ede5c45b251420e9fec2512563e2bde0"
     },
     {
       "path": "update.py",

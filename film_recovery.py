@@ -90,6 +90,16 @@ def pending_events(job_path, acknowledged=()):
         return state['events'][:50]
 
 
+def delivery_context(job_path, digest):
+    state_path = job_path.with_name('.' + job_path.name + '.film-state.json')
+    with state_lock(state_path):
+        try:
+            state = json.loads(state_path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            return digest[:32], []
+        return state['run_id'], state['events'][:50]
+
+
 def _render(root, job_path, job, recheck, state_path, atomic):
     if not recheck and job.get('film') is not True and job.get('film_profile') != 'store_v2':
         raise ValueError('FILM_REVIEW_PROFILE_REQUIRED')
@@ -97,8 +107,11 @@ def _render(root, job_path, job, recheck, state_path, atomic):
         state = json.loads(state_path.read_text(encoding='utf-8'))
     except FileNotFoundError:
         state = {'run_id': uuid.uuid4().hex, 'events': []}
+    requested_receipt = job.get('pending_receipt') or state.get('result', {}).get('pending_receipt')
     toolkit_version = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))['version']
-    digest = hashlib.sha256(json.dumps([toolkit_version, job], sort_keys=True).encode())
+    media_job = {key: value for key, value in job.items()
+                 if key not in ('platforms', 'cover')}
+    digest = hashlib.sha256(json.dumps([toolkit_version, media_job], sort_keys=True).encode())
     for entry in [job.get('music'), job.get('srt'), *(clip.get('file') for clip in job.get('clips', [])),
                   *(clip.get('cutaway', {}).get('file') for clip in job.get('clips', []) if isinstance(clip.get('cutaway'), dict))]:
         if isinstance(entry, str):
@@ -173,7 +186,12 @@ def _render(root, job_path, job, recheck, state_path, atomic):
     if state.get('operation'):
         code, result = resume_stage()
     elif recheck:
-        code, result = run_stage('quality', ['--recheck', str(job_path.parent / job['pending_receipt'])])
+        if not requested_receipt:
+            return 2, {'error': 'FILM_PENDING_RECEIPT_MISSING'}
+        path = (job_path.parent / requested_receipt).resolve()
+        if job_path.parent not in path.parents or path.name != 'preview.mp4.film.json' or not path.is_file():
+            return 2, {'error': 'FILM_PENDING_RECEIPT_INVALID'}
+        code, result = run_stage('quality', ['--recheck', str(path)])
     elif state['code'] is None:
         code, result = run_stage('quality', [str(job_path)])
     else:

@@ -8,6 +8,7 @@ from automation import atomic
 from browser_receipt import record
 from file_integrity import sha256
 from publication_handoff import reserve, schedule_requests
+from toolkit import film_review
 
 
 class PublicationHandoffTests(unittest.TestCase):
@@ -44,6 +45,29 @@ class PublicationHandoffTests(unittest.TestCase):
         self.video.write_bytes(b'replaced')
         self.assertEqual(reserve(self.root, self.package, self.plan, 'youtube', '@right', now=self.now)['status'],
                          'quality_blocked')
+
+    def test_existing_deliverable_without_platform_copy_or_render(self):
+        job = self.root / 'job.json'
+        atomic(job, {'out': self.video.name, 'project_key': 'shop', 'platforms': {'youtube': {}}})
+        atomic(self.root / '.job.json.film-state.json', {'run_id': 'a' * 32, 'events': []})
+        with patch('film_recovery.render_film') as render, patch('toolkit.shutil.which', return_value=None):
+            result = film_review(job, existing=True)
+            self.assertEqual(result['delivery_status'], 'delivered')
+            self.assertEqual(result['sha256'], self.digest)
+            self.assertEqual(result['run_id'], 'a' * 32)
+            self.assertEqual(result['review_requirements']['copy_required_for'], ['youtube'])
+            self.assertEqual(reserve(self.root, Path(result['review_package']), self.plan, 'youtube', '@right')['status'],
+                             'copy_required')
+            self.video.write_bytes(b'replaced')
+            with self.assertRaisesRegex(ValueError, 'FILM_REVIEW'):
+                film_review(job, existing=True)
+            render.assert_not_called()
+
+    def test_uncertain_dialogue_remains_version_review(self):
+        atomic(self.proof, {'machine_check': 'pass', 'sha256': self.digest, 'speech_status': 'checked',
+                            'warnings': [{'code': 'FILM_DIALOGUE_REVIEW_REQUIRED'}]})
+        result = reserve(self.root, self.package, self.plan, 'youtube', '@right', now=self.now)
+        self.assertEqual(result['reason_code'], 'SPEECH_VERIFICATION_REQUIRED')
 
     def test_unknown_is_reconciled_and_cannot_upload_twice(self):
         with patch('browser_receipt.check_media'):

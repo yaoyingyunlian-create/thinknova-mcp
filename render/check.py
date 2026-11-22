@@ -341,6 +341,8 @@ def s6_speech(ff, path, dur, o):
             transcript = normalize(''.join(word.word for word in words))
             if not expected:
                 fail('FILM_DIALOGUE_CHECK_PENDING', 'expected dialogue subtitles are missing')
+            elif RELAXED and not transcript:
+                warn('SPEECH_CHECK_PENDING', 'recognition returned no dialogue; agreement could not be measured')
             else:
                 coverage = caption_agreement(expected, transcript)
                 INFO.append(f'dialogue ASR agreement: {coverage:.0%}')

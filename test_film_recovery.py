@@ -48,6 +48,30 @@ class FilmRecoveryTests(unittest.TestCase):
             self.assertEqual(pending_events(job_path, {events[0]['event_id']}), events[1:])
             self.assertNotIn(str(root), json.dumps(events))
 
+    def test_copy_changes_do_not_render_and_old_preview_can_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = root / 'manifest.json'
+            manifest.write_text('{"version":"old"}', encoding='utf-8')
+            job_path = root / 'job.json'
+            receipt = root / 'film_pending_test' / 'preview.mp4.film.json'
+            receipt.parent.mkdir()
+            receipt.touch()
+            job = {'film': True, 'clips': []}
+            failed = {'error': 'CHECK_FAILED', 'pending_receipt': str(receipt),
+                      'diagnostics': [{'code': 'FILM_DIALOGUE_MISMATCH'}]}
+            passed = {'machine_check': 'pass', 'film_receipt': 'tested'}
+            with patch('film_recovery.subprocess.run', side_effect=[
+                subprocess.CompletedProcess([], 2, json.dumps(failed)),
+                subprocess.CompletedProcess([], 0, json.dumps(passed)),
+            ]) as execute:
+                first = render_film(root, job_path, job)
+                self.assertEqual(render_film(root, job_path, {**job, 'platforms': {'youtube': {}}}), first)
+                self.assertEqual(execute.call_count, 1)
+                manifest.write_text('{"version":"new"}', encoding='utf-8')
+                self.assertEqual(render_film(root, job_path, job, recheck=True)[0], 0)
+                self.assertEqual(execute.call_args.args[0][2:4], ['--recheck', str(receipt)])
+
     def test_interrupted_parent_uses_completed_preview_check(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

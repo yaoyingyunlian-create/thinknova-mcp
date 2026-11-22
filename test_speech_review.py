@@ -70,6 +70,25 @@ class AutomationQualityTests(unittest.TestCase):
 
 
 class SpeechGateTests(unittest.TestCase):
+    def test_empty_recognition_is_unknown_but_observed_wrong_dialogue_fails(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from render import check
+
+        options = {'film': True, 'store_film': True, 'v3_dialogue': True, '--model': 'small',
+                   '--lang': 'en', '--srt': 'test.srt', 'outro_start': 2}
+        recognized = SimpleNamespace(word='wrong', start=0, end=1)
+        for words, expected in (([], 'SPEECH_CHECK_PENDING'), ([recognized], 'FILM_DIALOGUE_MISMATCH')):
+            segment = SimpleNamespace(words=words)
+            with patch.multiple(check, RELAXED=True, NATIVE=True, INFO=[], WARNS=[], FAILS=[]), \
+                 patch('speech_recovery.recognize', return_value=([segment], SimpleNamespace(language='en'))), \
+                 patch('speech_review.speech_pace', return_value=2.8), \
+                 patch('captions.parse_srt', return_value=[{'text': '12345678'}]):
+                check.s6_speech('ffmpeg', 'video.mp4', 2, options)
+                self.assertEqual([code for code, _ in check.FAILS], [expected] if words else [])
+                if not words:
+                    self.assertIn(expected, [code for code, _ in check.WARNS])
+
     def test_mismatch_stops_runner_and_no_media_is_rewritten(self):
         import automation
         import tempfile

@@ -13,7 +13,7 @@ import importlib.util
 import re
 from datetime import datetime
 from pathlib import Path
-from local_state import state_lock
+from local_state import LocalStateBusy, state_lock
 from file_integrity import manifest_mismatches
 
 ROOT = Path(__file__).resolve().parent
@@ -144,40 +144,56 @@ def uninstall_schedule() -> int:
     return 0
 
 
-def film_review(job_path, recheck=False):
+def film_review(job_path, recheck=False, existing=False):
     from file_integrity import sha256
     from automation import atomic
     from publish.dispatch import PLATFORMS
     job_path = job_path.resolve()
     job = json.loads(job_path.read_text(encoding='utf-8-sig'))
-    variants = job.get('platforms')
-    if not isinstance(variants, dict) or not variants:
-        raise ValueError('FILM_REVIEW_PLATFORMS_REQUIRED')
+    variants = job.get('platforms') or {}
     review = {}
+    copy_pending = []
+    if not isinstance(variants, dict):
+        copy_pending.append('unknown')
+        variants = {}
     for platform_name, copy in variants.items():
         if platform_name not in PLATFORMS or not isinstance(copy, dict):
-            raise ValueError('FILM_REVIEW_PLATFORM_INVALID')
+            copy_pending.append(platform_name)
+            continue
+        title = copy.get('title')
         body = copy.get('description') or copy.get('caption') or copy.get('body')
-        if not all(isinstance(value, str) and value.strip() for value in (copy.get('title'), body)):
-            raise ValueError(f'FILM_REVIEW_COPY_REQUIRED: {platform_name}')
         tags = copy.get('tags', [])
-        if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
-            raise ValueError(f'FILM_REVIEW_TAGS_INVALID: {platform_name}')
+        if (not all(isinstance(value, str) and value.strip() for value in (title, body))
+                or not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags)):
+            copy_pending.append(platform_name)
+            continue
         review[platform_name] = {
-            'title': copy['title'], 'description': body, 'tags': tags,
+            'title': title, 'description': body, 'tags': tags,
             'target_account': copy.get('target_account') or copy.get('expected_channel_id'),
             'publish_time': copy.get('publishAt') or copy.get('schedule'),
             'status': 'platform_rules_pending' if copy.get('platform_rules_status') == 'draft' else 'platform_review_required',
         }
-    from film_recovery import render_film
-    code, result = render_film(ROOT, job_path, job, recheck)
-    if code or result.get('machine_check') != 'pass' or not result.get('film_receipt'):
-        return {**result, 'status': 'blocked'}
+    from film_recovery import delivery_context, render_film
+    if existing:
+        video = (job_path.parent / job['out']).resolve()
+        proof_path = Path(str(video) + '.film.json')
+        sheet = video.with_name(video.stem + '_sheet.jpg')
+        result = {'output': str(video), 'film_receipt': str(proof_path),
+                  'contact_sheet': str(sheet) if sheet.is_file() else None}
+    else:
+        code, result = render_film(ROOT, job_path, job, recheck)
+        if code or result.get('machine_check') != 'pass' or not result.get('film_receipt'):
+            return {**result, 'status': 'blocked',
+                    'delivery_status': 'preview_available' if result.get('preview') else 'technical_fix_required'}
     video = Path(result['output'])
+    if not video.is_file() or not Path(result['film_receipt']).is_file():
+        raise ValueError('FILM_REVIEW_OUTPUT_OR_RECEIPT_MISSING')
     receipt = json.loads(Path(result['film_receipt']).read_text(encoding='utf-8'))
     digest = sha256(video)
     if receipt.get('machine_check') != 'pass' or receipt.get('sha256') != digest:
         raise ValueError('FILM_REVIEW_RECEIPT_INVALID')
+    if existing:
+        result['run_id'], result['diagnostic_events'] = delivery_context(job_path, digest)
     supplied_cover = job.get('cover')
     cover = job_path.parent / supplied_cover if isinstance(supplied_cover, str) else None
     if cover is None or not cover.is_file():
@@ -189,7 +205,15 @@ def film_review(job_path, recheck=False):
                                 '-frames:v', '1', str(cover)], capture_output=True, timeout=30)
             except (OSError, subprocess.TimeoutExpired):
                 pass
-    package = {'status': 'awaiting_review', 'video': str(video), 'sha256': digest,
+    speech_warnings = [item for item in receipt.get('warnings', []) if isinstance(item, dict)
+                       and item.get('code') in {'SPEECH_CHECK_PENDING', 'FILM_DIALOGUE_REVIEW_REQUIRED',
+                                                'FILM_CAPTION_ALIGNMENT_PENDING'}]
+    speech = receipt.get('speech_status', 'unknown')
+    package = {'status': 'awaiting_review', 'delivery_status': 'delivered', 'machine_check': 'pass',
+               'publication_status': 'copy_required' if copy_pending or not review else 'authorization_and_review_pending',
+               'review_requirements': {'speech_status': speech, 'speech_items': speech_warnings,
+                                       'visual_review': 'pending', 'copy_required_for': copy_pending},
+               'film_receipt': str(Path(result['film_receipt'])), 'video': str(video), 'sha256': digest,
                'cover': str(cover) if cover.is_file() else None,
                'contact_sheet': result.get('contact_sheet'), 'platforms': review, 'run_id': result['run_id'], 'project_key': job.get('project_key')}
     output = video.with_name(video.stem + '.review-package.json')
@@ -276,7 +300,9 @@ def main() -> int:
     handoff_parser.add_argument("--verified-absent", action="store_true")
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
-    film_parser.add_argument("--recheck", action="store_true")
+    film_mode = film_parser.add_mutually_exclusive_group()
+    film_mode.add_argument("--recheck", action="store_true")
+    film_mode.add_argument("--existing", action="store_true", help="Package the existing checked output without rendering")
     daily_film_parser = sub.add_parser("daily-film", help="Use today's authorized server store-film plan")
     daily_film_parser.add_argument("--project", required=True)
     daily_film_parser.add_argument("--date", required=True)
@@ -341,9 +367,12 @@ def main() -> int:
             return 2
     if args.command == "film":
         try:
-            result = film_review(args.job, args.recheck)
+            result = film_review(args.job, args.recheck, args.existing)
+        except LocalStateBusy:
+            result = {'status': 'blocked', 'error': 'FILM_RUN_BUSY'}
         except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
-            result = {'status': 'blocked', 'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
+            result = {'status': 'blocked', 'delivery_status': 'technical_fix_required',
+                      'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'awaiting_review' else 2
     if args.command == "assistant-schedule":

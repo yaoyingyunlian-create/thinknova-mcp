@@ -59,7 +59,9 @@ def reserve(workspace, package_path, plan, platform, observed_account, verified_
     digest = sha256(video)
     if proof.get('machine_check') != 'pass' or digest != proof.get('sha256') or digest != package.get('sha256'):
         return {'status': 'quality_blocked'}
-    copy = package['platforms'][platform]
+    copy = (package.get('platforms') or {}).get(platform)
+    if not isinstance(copy, dict):
+        return {'status': 'copy_required'}
     copy_digest = hashlib.sha256(json.dumps(copy, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
     approved = plan['targets'][platform].get('approval') or {}
     if approved.get('scope') == 'version':
@@ -70,10 +72,16 @@ def reserve(workspace, package_path, plan, platform, observed_account, verified_
                          ('content_review_pending', False)])
     else:
         permitted = False
-    if proof.get('speech_status') in ('unknown', 'degraded') and approved.get('scope') != 'version':
+    speech_pending = proof.get('speech_status', 'unknown') in ('unknown', 'degraded') or any(
+        isinstance(item, dict) and item.get('code') == 'FILM_DIALOGUE_REVIEW_REQUIRED'
+        for item in proof.get('warnings', [])
+    )
+    if speech_pending and approved.get('scope') != 'version':
         permitted = False
     if not permitted:
-        return {'status': 'awaiting_review', 'film_sha256': digest, 'copy_sha256': copy_digest}
+        return {'status': 'awaiting_review', 'film_sha256': digest, 'copy_sha256': copy_digest,
+                'reason_code': ('SPEECH_VERIFICATION_REQUIRED' if speech_pending
+                                and approved.get('scope') != 'version' else 'PUBLICATION_REVIEW_REQUIRED')}
     if copy.get('target_account') and copy['target_account'] != observed_account:
         return {'status': 'authorization_required'}
     now = now or datetime.now(timezone.utc)
