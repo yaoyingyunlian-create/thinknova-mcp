@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.26
+# ThinkNova 视频制作工具包 v3.1.27
 
 工具包交付成片与待审包。自动发布推荐使用 **客户 AI 助理的原生定时任务 + Ego Lite**；工具包不再发布、登录社交账号或注册电脑系统任务。
 
@@ -39,6 +39,18 @@ python toolkit.py doctor --json
 旧系统任务的 tick / tick-produce / tick-publish 入口不再执行。将已有 AI 助理任务的制作入口改为 MCP 报价、生成、取件及工具包拼片，发布继续走 Ego Lite。旧系统任务不会被悄悄删除；需要时显式清理已知 ThinkNova 任务，客户作品和登录态保留。
 
 发布前按客户现有确认范围核对作品、账号、标题、正文、标签、平台与时间；首次样片待审核。单个平台登录失败仅阻塞该平台，未知结果先核验，避免重复发布。
+
+### 发布任务原地升级
+
+制作、巡检和发布使用同一个客户工作目录。更新原定时任务的内容，沿用原时间和对话。在发布日之前把每个平台已确认的计划写入 publication-plan.json，并运行 `toolkit.py publication-handoff WORKSPACE publication-plan.json`。把返回的 reports 逐条通过 report_film_publication 上报。更新计划时，对已移除的目标先用原计划资料上报 confirmed=false。
+
+每个计划记录 project_key、local_date 和 targets。每个目标记录 target_account、confirmed、UTC 格式的 due_at、window_ends_at，并按已经确认的发布授权填写 approval。首次或逐版审核使用 scope=version 和实际 film_sha256、copy_sha256。已授权日常发布使用 scope=standing，包含 first_film_reviewed=true、requires_per_version_review=false、content_review_pending=false。成片后填入 review-package.json 返回的 run_id，再同步一次排期。
+
+实际到点后使用 Ego Lite 核对当前平台账号，运行 `toolkit.py publication-handoff WORKSPACE publication-plan.json --package REVIEW_PACKAGE --platform PLATFORM --observed-account ACCOUNT`。只有 ready_to_publish 才上传当前成片。submitted_unverified 时先核对平台作品，已发布则用 browser_receipt.py record 记录真实链接和时间。确认未发且仍在窗口内时，才以 --verified-absent 获取一次重试。上传结果从 browser_receipt.py 的 upload_report 上报，failure_reason 使用稳定错误码，例如 LOGIN_REQUIRED。上报失败时保留原回执，下一次巡检用 sync 重读后提交。
+
+### 已授权补拍
+
+paid_retake 默认关闭。启用后，只对原质检报告定位到的严重故障准备用一次补拍。决策文件记录 authorized、remaining_approved_credits、segment_index、reason_code、tool 和已核对的 arguments。运行 `toolkit.py film-replacement job.json replacement-decision.json` 获取只读报价请求，调用 get_balance 后用 --quoted-credits 传回报价金额。收到 ready_to_submit 后，由 AI 助理使用返回的稳定 client_request_id 和 max_credits 提交，断网续跑复用同一请求号。取得结果后把实际 charged_credits 记录到原制作任务，并用 film-events JOB --record-stage generation --outcome passed --code FILM_PAID_RETAKE --task-no TASK_ID 上报。后台只统计该补拍请求号对应的实际结算积分。用新片重新质检。工作目录保留已用过的补拍授权和请求。
 
 ## English
 

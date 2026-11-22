@@ -1,4 +1,5 @@
 """Run bounded local repairs and keep a replayable, structured event journal."""
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -69,7 +70,7 @@ def record_external_event(root, job_path, stage, outcome, code, task_no):
             state = {'run_id': uuid.uuid4().hex, 'events': []}
         version = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))['version']
         item = {'event_id': uuid.uuid4().hex, 'run_id': state['run_id'], 'stage': stage,
-                'outcome': outcome, 'code': code, 'toolkit_version': version, 'rule_version': 'default'}
+                'outcome': outcome, 'code': code, 'toolkit_version': version, 'rule_version': 'default', 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
         if task_no:
             item['task_no'] = task_no
         state['events'].append(item)
@@ -113,7 +114,8 @@ def _render(root, job_path, job, recheck, state_path, atomic):
     def event(stage, outcome, code='', details=None):
         state['events'].append({'event_id': uuid.uuid4().hex, 'run_id': state['run_id'], 'stage': stage,
                                 'outcome': outcome, 'code': code, 'toolkit_version': toolkit_version,
-                                'rule_version': rule_version, **(details or {})})
+                                'rule_version': rule_version, 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                **(details or {})})
         atomic(state_path, state)
 
     def execute(operation):
@@ -176,6 +178,7 @@ def _render(root, job_path, job, recheck, state_path, atomic):
         code, result = run_stage('quality', [str(job_path)])
     else:
         code, result = state['code'], state['result']
+    repair_policy = job.get('repair_policy') or {}
     for _ in range(2):
         if not code or len(state['repairs']) >= 2:
             break
@@ -192,8 +195,55 @@ def _render(root, job_path, job, recheck, state_path, atomic):
                 candidate = job_path.with_name('.' + job_path.name + '.caption-repair.json')
                 atomic(candidate, revised)
                 repair, args = 'captions', [str(candidate)]
-        if repair is None or repair in state['repairs'] or os.environ.get(RECOVERY_ACTIONS[repair], '1') == '0':
+        if (repair is None or repair in state['repairs'] or repair_policy.get(repair) is False
+                or os.environ.get(RECOVERY_ACTIONS[repair], '1') == '0'):
             break
         state['repairs'].append(repair)
         code, result = run_stage(repair, args)
     return code, {**result, 'diagnostic_events': state['events'][:50], 'run_id': state['run_id']}
+
+def replacement_request(job_path, decision, quoted=None):
+    """Prepare one idempotent, quoted opt-in replacement. The MCP host submits it."""
+    from automation import atomic
+
+    job = json.loads(job_path.read_text(encoding='utf-8-sig'))
+    if (job.get('repair_policy') or {}).get('paid_retake') is not True or decision.get('authorized') is not True:
+        return {'status': 'authorization_required'}
+    limit = decision.get('remaining_approved_credits')
+    index = decision.get('segment_index')
+    args = decision.get('arguments')
+    if (type(limit) is not int or limit <= 0 or type(index) is not int or index < 0
+            or index >= len(job.get('clips', [])) or not isinstance(args, dict)
+            or not isinstance(args.get('prompt'), str)
+            or decision.get('reason_code') not in ('MEDIA_BLACK', 'FILM_DIALOGUE_MISMATCH', 'S3_NEAR_SILENT')):
+        raise ValueError('FILM_REPLACEMENT_INVALID')
+    tool = decision.get('tool')
+    if tool not in ('animate_image', 'generate_video'):
+        raise ValueError('FILM_REPLACEMENT_INVALID')
+
+    state_path = job_path.with_name('.' + job_path.name + '.film-state.json')
+    with state_lock(state_path):
+        state = json.loads(state_path.read_text(encoding='utf-8'))
+        if not state.get('code') or decision['reason_code'] not in failure_codes(state['result']):
+            return {'status': 'qualification_required'}
+        previous = state.get('replacement')
+        options = {key: value for key, value in args.items()
+                   if key not in ('client_request_id', 'max_credits', 'automation_run_id', 'quote_only')}
+        options['client_request_id'] = 'film-' + state['run_id'] + '-retake-1'
+        intent = {'tool': tool, 'arguments': options, 'segment_index': index}
+        if previous and previous['intent'] != intent:
+            return {'status': 'replacement_already_reserved'}
+        if previous and previous.get('limit') is not None:
+            if previous['limit'] > limit:
+                return {'status': 'budget_blocked'}
+            return {'status': 'ready_to_submit', 'tool': tool,
+                    'arguments': {**options, 'max_credits': previous['limit']}}
+        if quoted is None:
+            state['replacement'] = {'intent': intent}
+            atomic(state_path, state)
+            return {'status': 'quote_required', 'arguments': {'quote_request': {'tool': tool, 'arguments': options}}}
+        if not previous or type(quoted) is not int or quoted <= 0 or quoted > limit:
+            return {'status': 'budget_blocked'}
+        state['replacement'] = {'intent': intent, 'limit': quoted}
+        atomic(state_path, state)
+        return {'status': 'ready_to_submit', 'tool': tool, 'arguments': {**options, 'max_credits': quoted}}

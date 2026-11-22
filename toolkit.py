@@ -191,7 +191,7 @@ def film_review(job_path, recheck=False):
                 pass
     package = {'status': 'awaiting_review', 'video': str(video), 'sha256': digest,
                'cover': str(cover) if cover.is_file() else None,
-               'contact_sheet': result.get('contact_sheet'), 'platforms': review}
+               'contact_sheet': result.get('contact_sheet'), 'platforms': review, 'run_id': result['run_id'], 'project_key': job.get('project_key')}
     output = video.with_name(video.stem + '.review-package.json')
     atomic(output, package)
     return {**package, 'review_package': str(output), 'diagnostic_events': result.get('diagnostic_events', []), 'run_id': result['run_id']}
@@ -263,6 +263,17 @@ def main() -> int:
     film_events_parser.add_argument("--outcome", choices=("started", "passed", "failed"))
     film_events_parser.add_argument("--code", default="")
     film_events_parser.add_argument("--task-no")
+    replacement_parser = sub.add_parser("film-replacement", help="Prepare one authorized, quoted replacement request")
+    replacement_parser.add_argument("job", type=Path)
+    replacement_parser.add_argument("decision", type=Path)
+    replacement_parser.add_argument("--quoted-credits", type=int)
+    handoff_parser = sub.add_parser("publication-handoff", help="Prepare an authorized Ego Lite browser handoff")
+    handoff_parser.add_argument("workspace", type=Path)
+    handoff_parser.add_argument("plan", type=Path)
+    handoff_parser.add_argument("--package", type=Path)
+    handoff_parser.add_argument("--platform")
+    handoff_parser.add_argument("--observed-account")
+    handoff_parser.add_argument("--verified-absent", action="store_true")
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
     film_parser.add_argument("--recheck", action="store_true")
@@ -288,6 +299,31 @@ def main() -> int:
                       else 'REFERENCE_IMAGE_PREPARATION_FAILED'}
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'ready' else 2
+    if args.command == "film-replacement":
+        from browser_receipt import read
+        from film_recovery import replacement_request
+        from local_state import LocalStateBusy
+        try:
+            result = replacement_request(args.job.resolve(), read(args.decision), args.quoted_credits)
+        except (OSError, ValueError, KeyError, TypeError, LocalStateBusy):
+            print('{"status":"blocked","error":"FILM_REPLACEMENT_UNAVAILABLE"}')
+            return 2
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    if args.command == "publication-handoff":
+        from browser_receipt import read
+        from local_state import LocalStateBusy
+        from publication_handoff import reserve, schedule_requests
+        try:
+            plan = read(args.plan)
+            result = (reserve(args.workspace.resolve(), args.package.resolve(), plan, args.platform,
+                              args.observed_account, args.verified_absent) if args.package
+                      else {'reports': schedule_requests(plan)})
+        except (OSError, ValueError, KeyError, TypeError, LocalStateBusy):
+            print('{"status":"blocked","error":"PUBLICATION_HANDOFF_UNAVAILABLE"}')
+            return 2
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
     if args.command == "film-events":
         from film_recovery import pending_events, record_external_event
         from local_state import LocalStateBusy

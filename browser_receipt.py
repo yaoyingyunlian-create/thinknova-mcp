@@ -148,7 +148,7 @@ def main():
     except (OSError, ValueError, KeyError, TypeError) as exc:
         parser.exit(2, f'Could not record receipt: {exc}\n')
     result = sync(value)
-    print(json.dumps({**result, 'receipt': str(args.receipt), 'platforms': value['platforms']}, ensure_ascii=False))
+    print(json.dumps({**result, 'receipt': str(args.receipt), 'platforms': value['platforms'], 'upload_report': {'action': 'receipt', 'data': value}}, ensure_ascii=False))
     return 0
 
 

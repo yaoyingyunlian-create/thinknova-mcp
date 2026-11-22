@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from film_recovery import caption_repair, pending_events, render_film
+from film_recovery import caption_repair, pending_events, render_film, replacement_request
 from local_state import state_lock
 
 
@@ -76,6 +76,27 @@ class FilmRecoveryTests(unittest.TestCase):
                 self.assertEqual(execute.call_count, 2)
             self.assertEqual([(e['stage'], e['outcome']) for e in pending_events(job_path)],
                              [('quality', 'started'), ('quality', 'failed'), ('recheck', 'started'), ('recheck', 'passed')])
+
+    def test_paid_replacement_uses_one_stable_budget_checked_intent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            job = root / 'job.json'
+            job.write_text('{"repair_policy":{"paid_retake":true},"clips":[{},{}]}', encoding='utf8')
+            (root / '.job.json.film-state.json').write_text(json.dumps({
+                'run_id': 'a' * 32, 'code': 2, 'result': {'error': 'MEDIA_BLACK'},
+            }), encoding='utf8')
+            decision = {'authorized': True, 'remaining_approved_credits': 60, 'segment_index': 0,
+                        'reason_code': 'MEDIA_BLACK', 'tool': 'animate_image', 'arguments': {'prompt': 'A clip'}}
+            self.assertEqual(replacement_request(job, {**decision, 'authorized': False})['status'], 'authorization_required')
+            quoted = replacement_request(job, decision)
+            self.assertEqual(quoted['status'], 'quote_required')
+            self.assertEqual(replacement_request(job, decision, 61)['status'], 'budget_blocked')
+            request = replacement_request(job, decision, 60)
+            self.assertEqual(request['arguments']['client_request_id'],
+                             quoted['arguments']['quote_request']['arguments']['client_request_id'])
+            self.assertEqual(request, replacement_request(job, decision))
+            self.assertEqual(replacement_request(job, {**decision, 'segment_index': 1})['status'],
+                             'replacement_already_reserved')
 
     def test_second_run_does_not_start_during_repair(self):
         with tempfile.TemporaryDirectory() as tmp:
