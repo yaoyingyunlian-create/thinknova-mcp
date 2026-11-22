@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.25
+# ThinkNova 视频制作工具包 v3.1.26
 
 工具包交付成片与待审包。自动发布推荐使用 **客户 AI 助理的原生定时任务 + Ego Lite**；工具包不再发布、登录社交账号或注册电脑系统任务。
 
@@ -25,6 +25,12 @@ python toolkit.py doctor --json
 开工时从已安装工具包运行 `python bootstrap.py update --workspace "<客户工作目录>" --json`。命令在原目录尝试安全更新；遇到源码冲突或完整性错误时自动准备官方干净副本。按返回的 active_toolkit 和 python 继续，同一个客户工作目录和执行记录保持原位。两个官方源都不可达时，验证原副本本机制作可用后继续，版本显示未知。
 
 遇到 AUTOMATION_PILOT_NOT_ALLOWED 或旧制作入口时，原 AI 定时任务就地改用现有 MCP 连接报价、生成、取件，再调用 toolkit.py film。保留时间、对话和原请求号，先查当天已有任务再决定是否生成。
+
+## 成片诊断与自动复检
+
+制作和巡检使用同一份 job.json。工具包记录失败原因，自动尝试字幕修复或原预览复检。可恢复的下载故障由 AI 助理回查原任务并取回原产物。
+
+助理运行 `toolkit.py film-events job.json`，使用 MCP 的 report_film_events 提交 events，随后只对服务端返回的 acknowledged ID 使用 `toolkit.py film-events job.json --ack EVENT_ID`（多个 ID 重复传入 --ack）。断网时留在本地，下次巡检继续递送。日志仅包含结构化诊断字段。
 
 ## 客户 AI 定时任务
 

@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.25",
+  "version": "thinknova-automation-toolkit-v3.1.26",
   "text_line_endings": "lf",
-  "revision": "9f528dfec3003c186cea1c884a8a2db28f26552db1ac48904f81d83dc3a11ef5",
+  "revision": "f3fd49e0bfc5e1448248d3cd106184fc980492a7469c9d8560c4554aae82e48b",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "605fe587621d2df09ef55230bb8a22b252b55ba0cffabcf44af9a137e9531808"
+      "sha256": "47ad033ec7e3de0bfc329a808c0fd5aac299e9d61fc5ff2da39796b0ad362f92"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "91707d667ca755437eba20b1b8d798cbbfe5a05a8b5ae6f25d22671ccf934d3a"
+      "sha256": "3d5283f872b8fc9093e446ed65b30931dde799fc637756bdeb2e1cc38b7bab64"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "a5954cbd7bc202c662c5e86e8dbc273b3766910de5f8ed184e1bef2b3718378b"
+      "sha256": "c0aac3d085c8bb44d107ef1491c1e7198c2c0aec5b278d2a55640ac086f6d409"
     },
     {
       "path": "clip_recovery.py",
@@ -82,6 +82,10 @@
     {
       "path": "film_inventory.py",
       "sha256": "18749865c0297c5d59aa87257a62b4884a8cc15bb35f197815a5d1b56e629d71"
+    },
+    {
+      "path": "film_recovery.py",
+      "sha256": "e017161797bf9f73d3ccf4460a47d70c4eeca5783cc198b57c7dd9ea79be519c"
     },
     {
       "path": "generation_quality.py",
@@ -241,7 +245,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "ca5efa19cd12dbfc271e4f9e38cbd0badeea33d66c611865d540b8821bf6d754"
+      "sha256": "fc0364b9514baa5f0956ba044bdb57422d473632a4644c3ffea0713ed1f9e582"
     },
     {
       "path": "render/captions.py",
@@ -408,6 +412,10 @@
       "sha256": "430f66693ecbef10b0de97774d434fdfeebdc05432602fb9c5edf9fa90d5df9f"
     },
     {
+      "path": "test_film_recovery.py",
+      "sha256": "c2b000daf380b3e0e85591ca947ab66da5ab99e4c055939494e428e3f19a375d"
+    },
+    {
       "path": "test_local_workflow.py",
       "sha256": "b1eb402427ea2ba8f1cdbb57439d6e8afcf22f2db73ffe2cb9f2c57bae952762"
     },
@@ -449,7 +457,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "162c7853bb1f08d9197b028952de5a1766e99154ef2fd8f03bb95f5549737be7"
+      "sha256": "c52b7aca97671bbc82e873ae8e4f57723b09343199c76a9719974e6d5dc7060e"
     },
     {
       "path": "update.py",

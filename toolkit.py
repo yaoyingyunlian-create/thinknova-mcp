@@ -169,23 +169,9 @@ def film_review(job_path, recheck=False):
             'publish_time': copy.get('publishAt') or copy.get('schedule'),
             'status': 'platform_rules_pending' if copy.get('platform_rules_status') == 'draft' else 'platform_review_required',
         }
-    print('Preparing local film / 正在本机制作成片', file=sys.stderr, flush=True)
-    if recheck:
-        pending = Path(job['pending_receipt'])
-        args = ['--recheck', str(job_path.parent / pending)]
-    else:
-        if job.get('film') is not True and job.get('film_profile') != 'store_v2':
-            raise ValueError('FILM_REVIEW_PROFILE_REQUIRED')
-        args = [str(job_path)]
-    run = subprocess.run([sys.executable, str(ROOT / 'render' / 'assemble.py'), *args, '--json'],
-                         cwd=job_path.parent, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW="1"),
-                         stdout=subprocess.PIPE, stderr=sys.stderr,
-                         encoding='utf-8', errors='replace', timeout=1800)
-    try:
-        result = json.loads(run.stdout)
-    except ValueError:
-        return {'status': 'blocked', 'error': 'FILM_RENDER_REPORT_UNAVAILABLE'}
-    if run.returncode or result.get('machine_check') != 'pass' or not result.get('film_receipt'):
+    from film_recovery import render_film
+    code, result = render_film(ROOT, job_path, job, recheck)
+    if code or result.get('machine_check') != 'pass' or not result.get('film_receipt'):
         return {**result, 'status': 'blocked'}
     video = Path(result['output'])
     receipt = json.loads(Path(result['film_receipt']).read_text(encoding='utf-8'))
@@ -208,7 +194,7 @@ def film_review(job_path, recheck=False):
                'contact_sheet': result.get('contact_sheet'), 'platforms': review}
     output = video.with_name(video.stem + '.review-package.json')
     atomic(output, package)
-    return {**package, 'review_package': str(output)}
+    return {**package, 'review_package': str(output), 'diagnostic_events': result.get('diagnostic_events', []), 'run_id': result['run_id']}
 
 
 def prepare_reference(source: Path, output: Path, min_edge: int = 256, max_edge: int = 5760) -> dict:
@@ -270,6 +256,13 @@ def main() -> int:
     reference_parser.add_argument("--output", required=True, type=Path)
     reference_parser.add_argument("--min-edge", type=int, default=256)
     reference_parser.add_argument("--max-edge", type=int, default=5760)
+    film_events_parser = sub.add_parser("film-events", help="List pending film diagnostics or acknowledge delivered events")
+    film_events_parser.add_argument("job", type=Path)
+    film_events_parser.add_argument("--ack", action="append", default=[])
+    film_events_parser.add_argument("--record-stage", choices=("generation", "download"))
+    film_events_parser.add_argument("--outcome", choices=("started", "passed", "failed"))
+    film_events_parser.add_argument("--code", default="")
+    film_events_parser.add_argument("--task-no")
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
     film_parser.add_argument("--recheck", action="store_true")
@@ -295,6 +288,21 @@ def main() -> int:
                       else 'REFERENCE_IMAGE_PREPARATION_FAILED'}
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'ready' else 2
+    if args.command == "film-events":
+        from film_recovery import pending_events, record_external_event
+        from local_state import LocalStateBusy
+        try:
+            if args.record_stage:
+                record_external_event(ROOT, args.job.resolve(), args.record_stage, args.outcome, args.code, args.task_no)
+            events = pending_events(args.job.resolve(), set(args.ack))
+            if events:
+                print(json.dumps({'events': events}, ensure_ascii=False))
+            else:
+                print('{"events":[]}')
+            return 0
+        except (OSError, ValueError, LocalStateBusy):
+            print('{"error":"FILM_EVENTS_UNAVAILABLE"}')
+            return 2
     if args.command == "film":
         try:
             result = film_review(args.job, args.recheck)

@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.25
+# ThinkNova 视频制作工具包 v3.1.26
 
 工具包只负责制作：素材准备 → ThinkNova 生成与取件 → 拼片 → 字幕 → 质检 → 成片待审包。
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
@@ -26,6 +26,8 @@ Check that the customer AI supports native timers and local execution; otherwise
 - 发布任务由客户 AI 助理另行创建，使用 Ego Lite 核对实际账号、成片版本、文案、披露与现有授权后操作。结果不明先核对已发作品；单个平台失败只影响该平台。
 - 不调用已退休的 enable-youtube、tick、tick-produce、tick-publish、install 或平台发布脚本；旧入口只返回迁移说明，不生成、不上传、不安装。遇到旧制作命令或 AUTOMATION_PILOT_NOT_ALLOWED，自动更新原 AI 任务的执行方式，先查当天原任务，旧系统任务可用显式清理命令移除，仅限已知 ThinkNova 任务。
 - 本包不持有客户平台 OAuth Token。凭据不写提示词或 memory。只记录任务号、文件位置、用户偏好、确认范围和客户 AI 提供的实际发布结果。
+
+制作及巡检调用 film-events，向 MCP report_film_events 递送并仅确认已接收的 ID。断网后补传。
 
 ## English
 The toolkit produces videos and review packages only. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.

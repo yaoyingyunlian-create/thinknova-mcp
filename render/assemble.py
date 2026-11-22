@@ -55,6 +55,12 @@ except Exception:
 STAGE = 'input'
 REPORT_STREAM = sys.stdout
 def emit(value):
+    checkpoint = os.environ.get('THINKNOVA_RENDER_CHECKPOINT')
+    if checkpoint:
+        target = Path(checkpoint)
+        temp = target.with_suffix('.tmp')
+        temp.write_text(json.dumps(value, ensure_ascii=False), encoding='utf-8')
+        os.replace(temp, target)
     print(json.dumps(value, ensure_ascii=False), file=REPORT_STREAM)
 
 
@@ -668,8 +674,14 @@ def run_delivery_check(ff, fp, video, srt, options):
     except subprocess.TimeoutExpired:
         report, code = '  [FILM_CHECK_TIMEOUT] Film check timed out.', 2
     print(report, file=sys.stderr)
-    diagnostics = [{'code': code, 'message': message}
-                   for code, message in re.findall(r'^  \[([A-Za-z0-9_]+)\] (.+)$', report, re.M)]
+    diagnostics = []
+    severity = 'error'
+    for line in report.splitlines():
+        if line.startswith('-- '):
+            severity = 'warning' if line.startswith('-- WARN') else 'error'
+        match = re.fullmatch(r'  \[([A-Za-z0-9_]+)\] (.+)', line)
+        if match:
+            diagnostics.append({'code': match[1], 'message': match[2], 'severity': severity})
     sheet = os.path.splitext(video)[0] + '_sheet.jpg'
     if code == 0 and not os.path.isfile(sheet):
         code = 0 if quality_policy.enabled(options.get('quality_policy')) else 2
@@ -799,7 +811,7 @@ def recheck(receipt, overwrite):
             temp_srt = None
         if options.get('film_profile') == 'store_v2':
             options['quality_policy'] = quality_policy.store_policy(options.get('quality_policy'))
-        if options.get('caption_alignment_pending') and not quality_policy.enabled(options.get('quality_policy')):
+        if options.get('caption_alignment_pending') and (options.get('require_caption_alignment') or not quality_policy.enabled(options.get('quality_policy'))):
             raise Stop('FILM_CAPTION_ALIGNMENT_PENDING: reassemble with verified subtitle timing', 2)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, video, temp_srt, options)
         if options.get('caption_alignment_pending') and quality_policy.native(options.get('quality_policy')):
@@ -1048,12 +1060,13 @@ def main():
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
         if relaxed and caption_alignment_pending:
             diagnostics.append({'code':'SPEECH_CHECK_PENDING', 'message':'Subtitle timing is estimated; recognition unavailable.'})
-        if caption_alignment_pending and job.get('film') and not relaxed:
+        if caption_alignment_pending and job.get('film') and (not relaxed or job.get('require_caption_alignment')):
             passed = False
             message = 'The spoken words could not be matched to the reviewed captions; reassemble with verified timing.'
             diagnostics.append({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'message': message})
             report += '\n  [FILM_CAPTION_ALIGNMENT_PENDING] ' + message
             options['caption_alignment_pending'] = True
+            options['require_caption_alignment'] = bool(job.get('require_caption_alignment'))
         if not passed:
             if job.get('film'):
                 return save_pending(ff, out, srt, sheet, final_out, options, result, diagnostics, report)
@@ -1065,14 +1078,27 @@ def main():
 
 
 
-if __name__ == "__main__":
+def cli():
     try:
         with contextlib.redirect_stdout(sys.stderr) if '--json' in sys.argv else contextlib.nullcontext():
             code = main()
-        sys.exit(code)
+        return code
     except (OSError, ValueError, TypeError, subprocess.SubprocessError) as e:
         emit({"status": "failed", "error": "LOCAL_RENDER_FAILED", "failure": type(e).__name__, "stage": STAGE, "exit_code": 3})
-        sys.exit(3)
+        return 3
     except Stop as e:
         emit({"status": "failed", "error": str(e), "stage": STAGE, "exit_code": e.code})
-        sys.exit(e.code)
+        return e.code
+
+
+if __name__ == "__main__":
+    checkpoint = os.environ.get('THINKNOVA_RENDER_CHECKPOINT')
+    if checkpoint:
+        from local_state import LocalStateBusy, state_lock
+        try:
+            with state_lock(checkpoint, timeout=0):
+                sys.exit(cli())
+        except LocalStateBusy:
+            print(json.dumps({'error': 'FILM_RUN_BUSY'}))
+            sys.exit(2)
+    sys.exit(cli())
