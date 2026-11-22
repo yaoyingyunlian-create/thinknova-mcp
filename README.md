@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.28
+# ThinkNova 视频制作工具包 v3.1.29
 
 工具包交付成片与待审包。自动发布推荐使用 **客户 AI 助理的原生定时任务 + Ego Lite**；工具包不再发布、登录社交账号或注册电脑系统任务。
 
@@ -59,5 +59,7 @@ paid_retake 默认关闭。启用后，只对原质检报告定位到的严重�
 ## English
 
 This is a video-production toolkit. Install with bootstrap.py setup --json, make and check videos with toolkit.py film or run-day, and deliver a review package. Preserve original model dialogue; do not default to TTS or automatic pace adjustment. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
+
+Before quoting, check that the dialogue fits the requested duration. If FILM_DIALOGUE_OVER_CAPACITY identifies a segment, shorten its dialogue and update its captions together. The edit_timeline report records source in/out points and the remaining dialogue gap at each join.
 
 Scheduling and publishing use the customer's AI assistant's native timers and Ego Lite. The toolkit installs no OS tasks and no longer supplies active upload/login implementations. Old commands return migration guidance. Reuse MCP OAuth for quotes, generation and downloads, then use the toolkit to assemble the video. Keep the confirmed budget and existing idempotency keys. No pilot or device pairing is needed. No platform OAuth or browser login is required for creation. Preserve customer memory, assets, platform sessions and work during upgrades.

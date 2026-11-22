@@ -340,13 +340,53 @@ def trim_store_blank(ff, shot, duration, work, index, count, max_trim=None):
         return shot, duration, None
     if max_trim is not None and duration - (end - start) > max_trim:
         return shot, duration, None
+    target = trim_dialogue_shot(ff, shot, start, end, work, index)
+    return target, end - start, {'clip':index + 1,'start_trim':start,'end_trim':duration - end}
+
+
+def trim_dialogue_shot(ff, shot, start, end, work, index):
     target = os.path.join(work, f'trimmed_{index:03d}.mp4')
     run_ff(ff, ['-i', shot, '-filter_complex',
                 f'[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[v];'
                 f'[0:a]atrim=start={start}:end={end},asetpts=PTS-STARTPTS[a]',
                 '-map','[v]','-map','[a]','-c:v','libx264','-preset','veryfast','-crf','18',
-                '-c:a','aac',target], 'trim boundary blanks')
-    return target, end - start, {'clip':index + 1,'start_trim':start,'end_trim':duration - end}
+                '-c:a','aac',target], f'trim boundary blanks for clip {index + 1} ({start:.2f}–{end:.2f}s)')
+    return target
+
+
+def plan_dialogue_cuts(durations, windows, budget):
+    """Allocate safe boundary trims across the whole film, preserving 0.2s either side of each line."""
+    starts = [0.0] * len(durations)
+    ends = list(durations)
+    gaps = []
+    for index, (left, right) in enumerate(zip(windows, windows[1:])):
+        if left and right:
+            tail, head = durations[index] - left[-1][1], right[0][0]
+            gaps.append((tail + head, index, max(0.0, tail - 0.2), max(0.0, head - 0.2)))
+    low, high = 0.5, max((item[0] for item in gaps), default=0.5)
+    for _ in range(32):
+        target = (low + high) / 2
+        needed = sum(min(tail + head, max(0.0, gap - target)) for gap, _, tail, head in gaps)
+        if needed > budget:
+            low = target
+        else:
+            high = target
+    for gap, index, tail, head in gaps:
+        available = tail + head
+        take = min(available, max(0.0, gap - high))
+        if take < 0.04:
+            continue
+        ends[index] -= take * tail / available
+        starts[index + 1] += take * head / available
+    return list(zip(starts, ends))
+
+
+def shift_dialogue(spoken, start, end):
+    from types import SimpleNamespace
+
+    return [SimpleNamespace(words=[SimpleNamespace(word=word.word, start=word.start - start, end=word.end - start)
+                                   for word in span.words or [] if start <= word.start < word.end <= end])
+            for span in spoken]
 
 
 def dialogue_pace_adjustment(rate, language, duration, intervals, max_duration=None):
@@ -882,7 +922,7 @@ def main():
     try:
         parts, cues, t = [], [], 0.0
         pace_report = []
-        trim_budget = max(2, float(job.get("short_dialogue_seconds") or 30) * 0.1)
+        native_edit = store_film and quality_policy.native(job.get('quality_policy')) and not job.get('srt')
         segment_boundaries = []
         protected_names = ()
         if job.get('film_rules_revision') == '2.4':
@@ -891,6 +931,7 @@ def main():
         caption_alignment_pending = False
         caption_alignment_used = False
         caption_alignment_estimated = False
+        prepared = []
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
             if store_film:
@@ -924,13 +965,56 @@ def main():
                 pace_report.append(pace)
             if not relaxed and job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
                 raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)
-            if relaxed:
-                shot, dur, trimming = trim_store_blank(ff, shot, dur, wk, i, len(job['clips']),
-                    max_trim=trim_budget if quality_policy.native(job.get('quality_policy')) else None)
-                if trimming and quality_policy.native(job.get('quality_policy')):
-                    trim_budget -= trimming['start_trim'] + trimming['end_trim']
+            if relaxed and not quality_policy.native(job.get('quality_policy')):
+                shot, dur, trimming = trim_store_blank(ff, shot, dur, wk, i, len(job['clips']))
                 if trimming:
                     pace_report.append({'status':'boundary_trimmed', **trimming})
+            prepared.append((shot, dur))
+        recognized = {}
+        windows = [[] for _ in prepared]
+        reliable = [[] for _ in prepared]
+        cuts = [(0, duration) for _, duration in prepared]
+        edit_report = []
+        if native_edit:
+            from speech_recovery import recognize
+            for i, (shot, dur) in enumerate(prepared):
+                try:
+                    spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
+                                          word_timestamps=True, vad_filter=True)
+                    recognized[i] = spoken
+                    windows[i] = recognized_caption_windows(spoken, dur)
+                    clip = job['clips'][i]
+                    lines = clip.get('subs') or [line['text'] for line in clip.get('dialogue', [])
+                                                if isinstance(line, dict) and isinstance(line.get('text'), str)]
+                    if lines and 'cutaway' not in clip and align_captions(lines, spoken, 0) is not None:
+                        reliable[i] = windows[i]
+                except (RuntimeError, ImportError):
+                    recognized[i] = []
+            planned = job.get('short_dialogue_seconds')
+            minimum = planned - max(2, planned * 0.1) if planned else (45 if job.get('film_type') == 'explainer' else 30)
+            if not planned and job.get('end_card'):
+                minimum -= float(job['end_card'].get('dur') or 2.2)
+            budget = max(0.0, sum(dur for _, dur in prepared) - minimum - 0.08)
+            cuts = plan_dialogue_cuts([dur for _, dur in prepared], reliable, budget)
+        for i, (c, (shot, dur), (start, end)) in enumerate(zip(job['clips'], prepared, cuts)):
+            if native_edit:
+                points = windows[i]
+                preceding = windows[i - 1] if i else []
+                gap = original_gap = None
+                if preceding and points:
+                    gap = cuts[i - 1][1] - preceding[-1][1] + points[0][0] - start
+                    original_gap = prepared[i - 1][1] - preceding[-1][1] + points[0][0]
+                edit_report.append({'clip': i + 1, 'source': c['file'], 'source_in': c.get('start', 0) + start,
+                                    'source_out': c.get('start', 0) + end, 'timeline_start': t,
+                                    'speech_start': points[0][0] if points else None,
+                                    'speech_end': points[-1][1] if points else None,
+                                    'original_gap_seconds': original_gap, 'gap_before_seconds': gap,
+                                    'status': 'checked' if reliable[i] else
+                                    ('speech_alignment_uncertain' if points else 'speech_unavailable')})
+                if start or end < dur:
+                    shot = trim_dialogue_shot(ff, shot, start, end, wk, i)
+                    recognized[i] = shift_dialogue(recognized[i], start, end)
+                    dur = end - start
             if 'cutaway' in c:
                 shot = apply_cutaway(ff, fp, base, shot, dur, c['cutaway'], i, wk)
             parts.append(shot)
@@ -947,13 +1031,13 @@ def main():
                 lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8, protected=protected_names)]
             if lines and not verified_srt:
                 shot_cues = None
-                if job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
+                if native_edit or job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
                     try:
                         from speech_review import recognize
                         if relaxed:
                             from speech_recovery import recognize
-                        spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
-                                              word_timestamps=True, vad_filter=True)
+                        spoken = recognized[i] if native_edit else recognize(
+                            shot, 'small', job.get('speech_language'), ff, word_timestamps=True, vad_filter=True)[0]
                         shot_cues = align_captions(lines, spoken, t)
                         if shot_cues is None:
                             windows = recognized_caption_windows(spoken, dur)
@@ -1057,6 +1141,8 @@ def main():
                                       else 'provided' if job.get('srt') else 'estimated' if cues else 'not_applicable')}
         if store_film:
             result['speech_pace'] = pace_report
+        if native_edit:
+            result['edit_timeline'] = edit_report
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
         if relaxed and caption_alignment_pending:
             diagnostics.append({'code':'SPEECH_CHECK_PENDING', 'message':'Subtitle timing is estimated; recognition unavailable.'})

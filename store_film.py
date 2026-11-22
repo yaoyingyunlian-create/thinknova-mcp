@@ -124,6 +124,25 @@ def generation_arguments(segment, shop_assets, authorized_assets):
 
 
 
+def check_dialogue_capacity(segment, index, language=None, duration=None):
+    """Check the spoken script against the requested or quoted video duration."""
+    lines = segment.get('dialogue') or []
+    seconds = segment.get('duration_seconds') if duration is None else duration
+    if not lines or type(seconds) is not int or not all(
+        isinstance(line, dict) and isinstance(line.get('text'), str) for line in lines
+    ):
+        return
+    spoken = ' '.join(line['text'] for line in lines)
+    cjk = len(re.findall(r'[\u3400-\u9fff]', spoken))
+    english = len(re.findall(r"[A-Za-z0-9]+(?:['’][A-Za-z0-9]+)*", spoken))
+    if language and language.split('-')[0].lower() not in ('zh', 'en') and not cjk:
+        return
+    switches = sum(first.get('speaker') != second.get('speaker') for first, second in zip(lines, lines[1:]))
+    required = cjk / 4.6 + english / 2.8 + switches * 0.25 + 0.4
+    if required > seconds + 1e-9:
+        raise ValueError(f'FILM_DIALOGUE_OVER_CAPACITY: segment {index}, needs {required:.2f}s, available {seconds}s')
+
+
 def validate_day_plan(plan):
     from datetime import date
 

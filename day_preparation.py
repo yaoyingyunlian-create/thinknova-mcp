@@ -7,6 +7,11 @@ from pathlib import Path
 
 
 def prepare_assets(client, claim, plan, directory, budget, quote, atomic):
+    from store_film import check_dialogue_capacity
+    existing = claim.get('steps') or {}
+    for index, segment in enumerate(plan.get('segments', [])):
+        if not existing.get(f'task_{index}') and f'quote_credits_{index}' not in existing:
+            check_dialogue_capacity(segment, index + 1, plan.get('speech_language'))
     state_file = Path(directory) / 'asset-preparation.json'
     graph = plan.get('asset_preparation') or []
     digest = hashlib.sha256(json.dumps(graph, sort_keys=True, ensure_ascii=False).encode('utf-8')).hexdigest()

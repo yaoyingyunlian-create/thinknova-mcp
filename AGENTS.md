@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.28
+# ThinkNova 视频制作工具包 v3.1.29
 
 工具包只负责制作：素材准备 → ThinkNova 生成与取件 → 拼片 → 字幕 → 质检 → 成片待审包。
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
@@ -14,6 +14,7 @@
 - 真实人物、产品、门店优先选授权素材。edit_image 做首帧，animate_image 第一张必须是实际首帧，三视图是补充。最多三张，回读实际采用结果；缺图可在批准预算内准备明确的示意画面。
 - 明确 ratio=9:16、时长及可用分辨率，规格以服务器报价为准。先 quote_request，再用相同参数、max_credits 和 client_request_id 建单；断网复用原请求号。任务失败后新生成另计费，不自动免费重做。
 - 保留视频模型原生对白，不默认另做 TTS，不按语速自动调速。裁必要空白时不得截掉台词、伪造时长或导致片长越界。
+- 报价前以逐句稿核算片段能说完的时长，并让对白与字幕共用该稿。收到 `FILM_DIALOGUE_OVER_CAPACITY` 时，只改对应片段的台词与字幕，再报价。拼片报告的 `edit_timeline` 给出原素材实剪入出点和剩余接话空档。
 - 用 .venv Python 执行 toolkit.py film job.json，或 run-day plan.json --max-credits 已批准金额。对白、已有脚本可提供字幕，不为补字幕重新生成视频。
 - 语速与自然停顿记警告；损坏、黑屏、整片无声、严重错配和错误规格仍阻断。识别不可用如实记 unknown，不能虚报回听。保留预览，可从质检续跑，不重复收费制作。
 - `delivery_status=delivered` 就把成片、封面和已有文案交给客户。`awaiting_review`、缺发布文案或缺平台授权只影响发布。旧片凭机器质检凭据运行 `film job.json --existing`，未通过的旧预览用 `film job.json --recheck` 接续。先复用原片和原任务，不为补 READY.json 重做。

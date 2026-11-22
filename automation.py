@@ -114,7 +114,7 @@ def review_spoken_terms(path, prompt):
     # ASR agreement is evidence only, never a pronunciation certificate.
 
 
-def quoted_generation_args(client, tool, args, balance, require_duration=False):
+def quoted_generation_args(client, tool, args, balance, require_duration=False, dialogue_check=None):
     from dialogue_encoding import validate_text
     if 'prompt' in args:
         validate_text(args['prompt'], args.get('dialogue_language'))
@@ -129,6 +129,11 @@ def quoted_generation_args(client, tool, args, balance, require_duration=False):
         specification = quote.get('configured_video_specification') or quote.get('specification') or {}
         if not isinstance(specification, dict) or specification.get('ratio') != args['ratio']:
             raise RuntimeError('MCP_VIDEO_QUOTE_RATIO_MISMATCH')
+        if dialogue_check:
+            if type(specification.get('duration_seconds')) is not int:
+                raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_UNAVAILABLE')
+            from store_film import check_dialogue_capacity
+            check_dialogue_capacity(*dialogue_check, duration=specification['duration_seconds'])
         if require_duration and specification.get('duration_seconds') != args['duration_seconds']:
             raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_MISMATCH')
     if 'reference_roles' in args and quote.get('applied_reference_asset_ids') != args['reference_asset_ids']:
@@ -159,6 +164,10 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
         if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
         if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
         if day_plan is not None:
+            from store_film import check_dialogue_capacity
+            for index, segment in enumerate(day_plan['segments']):
+                if not steps.get(f'task_{index}') and f'quote_credits_{index}' not in steps:
+                    check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'))
             if (day_plan.get('script_rules_revision') in ('59', '60') and day_plan.get('asset_preparation')
                     and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
                 from day_preparation import prepare_assets
@@ -273,6 +282,7 @@ def render_store_candidate(job_path):
 
     code, report = render([str(job_path)])
     if not code:
+        atomic(report_path, {**report, 'render_input_sha256': input_digest})
         return report
 
     transient = {'SPEECH_CHECK_PENDING', 'FILM_PACE_UNAVAILABLE', 'FILM_CHECK_TIMEOUT', 'CONTACT_SHEET_FAILED'}
@@ -386,7 +396,9 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             args['max_credits'] = int(steps[price_key])
         else:
             args = quoted_generation_args(client, 'animate_image', args, balance,
-                                          require_duration=plan.get('film_type') == 'explainer')
+                                          require_duration=plan.get('film_type') == 'explainer',
+                                          dialogue_check=None if not segment.get('dialogue') or price_key in steps or f'task_{index}' in steps else
+                                          (segment, index + 1, plan.get('speech_language')))
         requests.append(args)
     total = sum(args['max_credits'] for args in requests)
     if total + int(plan.get('preparation_credits', 0)) > min(budget, int(grant['daily_budget'])):

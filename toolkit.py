@@ -217,6 +217,8 @@ def film_review(job_path, recheck=False, existing=False):
                'cover': str(cover) if cover.is_file() else None,
                'contact_sheet': result.get('contact_sheet'), 'platforms': review, 'run_id': result['run_id'], 'project_key': job.get('project_key')}
     output = video.with_name(video.stem + '.review-package.json')
+    if 'edit_timeline' in result:
+        package['edit_timeline'] = result['edit_timeline']
     atomic(output, package)
     return {**package, 'review_package': str(output), 'diagnostic_events': result.get('diagnostic_events', []), 'run_id': result['run_id']}
 

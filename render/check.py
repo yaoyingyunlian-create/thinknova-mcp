@@ -311,6 +311,9 @@ def s6_speech(ff, path, dur, o):
         return
     words = [word for segment in segments for word in (segment.words or []) if word.word.strip()]
     INFO.append("speech: %d words transcribed" % len(words))
+    if RELAXED and o.get('store_film') and not words:
+        warn('SPEECH_CHECK_PENDING', 'recognition returned no dialogue timestamps; speech gaps and agreement could not be measured')
+        return
     if o.get('store_film'):
         dialogue_film = o.get('--planned-film-seconds') is not None
         language = (o["--lang"] or info.language).split('-')[0]

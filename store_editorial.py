@@ -367,8 +367,13 @@ def scripted_segment(segment, script, shop):
         dialogue = '\n'.join(f'{line["speaker"]}（{line.get("action", "")} {line["emotion"]}）对{line["listener"]}说：「{line["text"].strip()}」'
                              + (f' Visual: {line["visual"]} Camera: {line["camera"]}' if 'visual' in line else '')
                              for line in segment['dialogue'])
+        notes = ''
+        if shop.get('name') and shop.get('name_pronunciation') and any(
+            shop['name'] in line['text'] for line in segment['dialogue']
+        ):
+            notes = f"\nPronounce {shop['name']} as {shop['name_pronunciation']}. Do not read pronunciation notes aloud."
         return {**segment, 'prompt': segment['prompt'].rstrip()
-                + f'\nIn-scene dialogue:\n{dialogue}\nVoice identity: {identity}'}
+                + f'\nIn-scene dialogue:\n{dialogue}\nVoice identity: {identity}' + notes}
     dialogue = ' '.join(line['text'].strip() for line in segment['dialogue'])
     return {**segment, 'prompt': segment['prompt'].rstrip()
             + f'\nUse only this approved dialogue: 「{dialogue}」'

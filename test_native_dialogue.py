@@ -10,6 +10,36 @@ from render import check, assemble
 
 
 class NativeDialogueTests(unittest.TestCase):
+    def test_partial_trim_preserves_dialogue_and_prefers_longest_join(self):
+        cuts = assemble.plan_dialogue_cuts([15, 15, 15], [[(0, 11)], [(2, 14.5)], [(1, 15)]], 2)
+        self.assertAlmostEqual(sum(end - start for start, end in cuts), 43)
+        self.assertGreaterEqual(cuts[0][1], 11.2)
+        self.assertLessEqual(cuts[1][0], 1.8)
+        self.assertEqual(cuts[1][1], 15)
+        self.assertEqual(cuts[2], (0, 15))
+        self.assertEqual(assemble.plan_dialogue_cuts([15, 15], [[(0, 11)], []], 2), [(0, 15), (0, 15)])
+
+    def test_quote_checks_effective_capacity_without_creating(self):
+        from automation import quoted_generation_args
+        from store_film import check_dialogue_capacity
+        segment = {'duration_seconds': 15, 'dialogue': [
+            {'speaker': 'a', 'text': ' '.join(['word'] * 20)},
+            {'speaker': 'b', 'text': ' '.join(['word'] * 8)},
+        ]}
+        check_dialogue_capacity(segment, 2, 'en')
+        client = Mock()
+        client.tool.return_value = {'generation_quote': {'quote_only': True, 'creates_task': False,
+            'reserves_credits': False, 'estimated_credits': 60,
+            'configured_video_specification': {'ratio': '9:16', 'duration_seconds': 10}}}
+        with self.assertRaisesRegex(ValueError, r'segment 2, needs 10.65s, available 10s'):
+            quoted_generation_args(client, 'animate_image', {'ratio': '9:16', 'duration_seconds': 15},
+                                   {'quote_mode_supported': True}, dialogue_check=(segment, 2, 'en'))
+        self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_balance'])
+        segment['dialogue'][0]['text'] = '测' * 67
+        segment['dialogue'][1]['text'] = '对'
+        with self.assertRaisesRegex(ValueError, 'FILM_DIALOGUE_OVER_CAPACITY'):
+            check_dialogue_capacity(segment, 2, 'zh')
+
     def tearDown(self):
         check.NATIVE = check.RELAXED = False
         check.FAILS.clear();check.WARNS.clear()
