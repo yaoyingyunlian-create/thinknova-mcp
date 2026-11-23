@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.32
+# ThinkNova 视频制作工具包 v3.1.33
 
 新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
 
@@ -15,10 +15,15 @@ For new revision 64 store films, confirm the product or service, three distinct 
 使用虚拟环境 Python：
 
 ```text
+python toolkit.py film-preflight
 python toolkit.py film job.json
 python toolkit.py run-day plan.json --max-credits APPROVED_BUDGET
 python toolkit.py doctor --json
 ```
+
+新收费任务前用 `film-preflight` 检查 FFmpeg 渲染、字幕和本地转写运行时。单段已确认存在原生对白缺陷时，自动流程暂停后续新建单，已有素材保留。
+
+Run `film-preflight` before new paid jobs to check rendering, subtitles and the local speech runtime. Confirmed dialogue defects stop new requests while preserving existing media.
 
 只使用 ThinkNova 生成视频的原生对白。门店片禁止本地合成、静音或替换音轨；裁边界空白，添加字幕和片尾叠字。语速与自然停顿提示，不单独否决整片。损坏、黑屏、整片无声、严重错配和错误规格仍拦截。缺字幕时先复用已知台词，未知时保留预览并说明缺项。新默认策略 `native_dialogue_v1`，原58号灰度配置仍兼容。
 

@@ -282,27 +282,40 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
     def checkpoint(status='running',error=None):
         atomic(state_path,steps);client.receipt(run_no,steps,status,error)
     try:
-        preflight = connected_report(require_publication=False) if day_plan is None else connected_report(require_codex=False, require_publication=False)
-        if not preflight['automation_ready']:
-            raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
+        resuming_paid_plan = bool(day_plan and day_plan.get('segments')) and all(
+            steps.get(f'task_{index}') and f'quote_credits_{index}' in steps
+            for index in range(len(day_plan['segments']))
+        )
+        if not resuming_paid_plan:
+            preflight = connected_report(require_codex=day_plan is None, require_publication=False)
+            if not preflight['automation_ready']:
+                raise RuntimeError('AUTOMATION_PREFLIGHT_INCOMPLETE')
         project = grant.get('project_key')
         rules = client.tool('get_content_rules', {'project_key': project}) if project else client.tool('get_content_rules')
         if rules['version'] != grant['rules_version']:
             raise RuntimeError('RULES_CHANGED')
         if rules.get('needs_onboarding') and not rules.get('defaults_revision'):
             raise RuntimeError('CREATION_PROFILE_INCOMPLETE')
-        balance=client.tool('get_balance')
-        if not balance.get('generation_available') or balance.get('available_credits',0)<=0:raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
-        if balance.get('quote_mode_supported') is not True:raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
+        balance = {}
+        if not resuming_paid_plan:
+            balance = client.tool('get_balance')
+            if not balance.get('generation_available') or balance.get('available_credits', 0) <= 0:
+                raise RuntimeError('CREDITS_OR_PLAN_REQUIRED')
+            if balance.get('quote_mode_supported') is not True:
+                raise RuntimeError('MCP_QUOTE_NOT_SUPPORTED')
         if day_plan is not None:
             preflight_store_script(day_plan, rules, directory, steps)
             from store_film import check_dialogue_capacity
             for index, segment in enumerate(day_plan['segments']):
                 if not steps.get(f'task_{index}') and f'quote_credits_{index}' not in steps:
                     check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'))
-            if (day_plan.get('script_rules_revision') in ('59', '60', '64') and day_plan.get('asset_preparation')
+            if (not resuming_paid_plan and day_plan.get('script_rules_revision') in ('59', '60', '64')
+                    and day_plan.get('asset_preparation')
                     and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
                 from day_preparation import prepare_assets
+                if any(not steps.get(f'task_{i}') for i in range(len(day_plan['segments']))):
+                    from render.preflight import require_film_preflight
+                    require_film_preflight(steps)
                 day_plan = prepare_assets(client, claim, day_plan, directory, budget,
                                           quoted_generation_args, atomic)
                 steps.update(claim.get('steps') or {})
@@ -562,10 +575,16 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             raise RuntimeError('DAY_PLAN_OVER_BUDGET')
     steps['stage'] = 'generation'
     checkpoint()
-    clips = []
+    clips, native_issues = [], []
     for index, (segment, args) in enumerate(zip(plan['segments'], requests)):
         key = f'task_{index}'
         if key not in steps:
+            if native_issues:
+                checkpoint('waiting_user', 'FILM_NATIVE_AUDIO_REVIEW_REQUIRED')
+                return {'status': 'waiting_user', 'stage': 'native_dialogue', 'run_no': run_no,
+                        'native_audio_issues': native_issues}
+            from render.preflight import require_film_preflight
+            require_film_preflight(steps)
             steps[f'quote_credits_{index}'] = str(args['max_credits'])
             checkpoint()
             created = client.tool('animate_image', args)
@@ -612,8 +631,10 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         from render.assemble import probe, tool
         from render.native_dialogue import inspect, script_lines
         source_seconds, _, has_audio = probe(tool('ffprobe'), str(path))
-        inspect(path, script_lines(clip), plan.get('speech_language'), tool('ffmpeg'), source_seconds,
-                has_audio, directory / '.native-dialogue', selected_task)
+        dialogue = inspect(path, script_lines(clip), plan.get('speech_language'), tool('ffmpeg'), source_seconds,
+                           has_audio, directory / '.native-dialogue', selected_task)
+        if dialogue['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
+            native_issues.append({'clip': index + 1, 'task_no': selected_task, 'code': dialogue['code']})
         if plan.get('film_type') == 'explainer':
             clip['planned_seconds'] = segment['duration_seconds']
         clips.append(clip)
@@ -891,6 +912,8 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 if result['plan'].get('script_rules_revision') == '64':
                     execute(client, claim, day_plan=result['plan'], budget=int(grant['daily_budget']))
                     return
+                from render.preflight import require_film_preflight
+                require_film_preflight(claim.setdefault('steps', {}))
                 raw_plan = prepare_assets(client, claim, result['plan'], directory, int(grant['daily_budget']), quoted_generation_args, atomic)
                 plan = validate_day_plan(raw_plan)
                 atomic(path, plan)

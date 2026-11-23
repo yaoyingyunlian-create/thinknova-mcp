@@ -329,7 +329,7 @@ class StoreFilmTests(unittest.TestCase):
             steps['day_plan_sha256'] = hashlib.sha256(json.dumps(plan, sort_keys=True,
                                                                ensure_ascii=False).encode('utf-8')).hexdigest()
             with patch('automation.validate_media'), patch('render.assemble.probe', return_value=(15.0, (768, 1344), True)), \
-                    patch('render.native_dialogue.inspect') as dialogue_inspect, \
+                    patch('render.native_dialogue.inspect', return_value={'status': 'aligned'}) as dialogue_inspect, \
                     patch('automation.subprocess.run',
                     return_value=Mock(returncode=2, stdout='{}')):
                 with self.assertRaisesRegex(RuntimeError, 'FILM_CHECK_FAILED'):
@@ -341,4 +341,27 @@ class StoreFilmTests(unittest.TestCase):
             self.assertEqual(job['short_dialogue_seconds'], 45)
             self.assertEqual([clip['dialogue'] for clip in job['clips']],
                              [segment['dialogue'] for segment in segments])
-        self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_task'] * 4)
+            self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_task'] * 4)
+            client.reset_mock()
+            steps.pop('task_3')
+            with patch('automation.validate_media'), \
+                    patch('render.assemble.probe', return_value=(15.0, (768, 1344), True)), \
+                    patch('render.native_dialogue.inspect', return_value={
+                        'status': 'silent_audio', 'code': 'FILM_NATIVE_AUDIO_SILENT'}), \
+                    patch('automation.quoted_generation_args', return_value={'max_credits': 40}), \
+                    patch('render.preflight.require_film_preflight') as readiness:
+                client.post.return_value = ({'data': {'remaining_credits': 100}}, {})
+                result = execute_store_day(client, claim, plan, 250, rules, {'available_credits': 100}, root, steps, Mock())
+            self.assertEqual(result['status'], 'waiting_user')
+            self.assertEqual(len(result['native_audio_issues']), 3)
+            self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_task'] * 3)
+            readiness.assert_not_called()
+            client.reset_mock()
+            with patch('automation.validate_media'), \
+                    patch('render.assemble.probe', return_value=(15.0, (768, 1344), True)), \
+                    patch('render.native_dialogue.inspect', return_value={'status': 'aligned'}), \
+                    patch('automation.quoted_generation_args', return_value={'max_credits': 40}), \
+                    patch('render.preflight.require_film_preflight', side_effect=RuntimeError('SPEECH_WORKER_CRASH')):
+                with self.assertRaisesRegex(RuntimeError, 'SPEECH_WORKER_CRASH'):
+                    execute_store_day(client, claim, plan, 250, rules, {'available_credits': 100}, root, steps, Mock())
+            self.assertEqual([call.args[0] for call in client.tool.call_args_list], ['get_task'] * 3)

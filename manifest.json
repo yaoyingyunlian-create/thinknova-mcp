@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.32",
+  "version": "thinknova-automation-toolkit-v3.1.33",
   "text_line_endings": "lf",
-  "revision": "43cb00b0be2acae9592e5181970306b468d30514a0caf0492c80d31866882429",
+  "revision": "958dfbae324a510b1c678e4c53c3a61081f646ac5e7f2603d2b2f16a475b35c3",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "c823074a5f520928ee38b1e6910c3baf0ad80a1f02225124385db09c09eb10b7"
+      "sha256": "771b58257810b3e5509627fdf2eee33923d23c6ab7fc694e6d9b77c800035f2b"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "f070254cff363356cddf3b7874b22fbeb399be4e832da6ee8e0fd9dbb88ee5c9"
+      "sha256": "4a6d267e88ec9c28f965e6eb2e5d8ab8d5a1e618db9f7c8ca9969106dcf0f178"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "e29219f838b7db6ba6c19201cceb67282c47361a4f2593d506be65d107cca213"
+      "sha256": "847acb23aadc7c80bb75d2378613926724776e57298e070579857f88aad6c55d"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "315dd8d1534c95c2e637d8ecb68de392397e08dfd6d27e4b57577d3fe6884972"
+      "sha256": "ef097926449a6629c6efff7c0197f1e899e4f946730e3a452863455b43a50a28"
     },
     {
       "path": "clip_recovery.py",
@@ -296,6 +296,10 @@
       "sha256": "ee767619c8c4f311bec7c3522b3a944d3e76e60bbf723621510d7a5a24f1b64a"
     },
     {
+      "path": "render/preflight.py",
+      "sha256": "5c341b54bf7e0fad0e63e75f6c0c8690df426befc0d7a3fd2d96fc299a0c4995"
+    },
+    {
       "path": "render/speech_review.py",
       "sha256": "9cd922f471231f84e9178755530c5a93da9cb8d5c3249a3d3feb6cdf7e9105bf"
     },
@@ -473,7 +477,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "64c53fed214f8ee39397c8b628854b4bafe890be95638426bfc4735bfa574c2a"
+      "sha256": "cb275ee6c1a146515562ea09083c1d778672a57bb906a76b5f83bececf4780e6"
     },
     {
       "path": "test_subtitle_layout.py",
@@ -481,7 +485,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "cf06b394c3fb805900d0f2bed059a5292de2be1a9077dd81ee0adb9539111cf7"
+      "sha256": "2be8e5aefc3039046b5263d3edd59026e2ea3ef32e3e97411df3e1f5c0d099f0"
     },
     {
       "path": "update.py",

@@ -304,6 +304,7 @@ def main() -> int:
     handoff_parser.add_argument("--platform")
     handoff_parser.add_argument("--observed-account")
     handoff_parser.add_argument("--verified-absent", action="store_true")
+    sub.add_parser("film-preflight", help="Test local rendering, captions and speech before creating paid jobs")
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
     film_mode = film_parser.add_mutually_exclusive_group()
@@ -322,6 +323,11 @@ def main() -> int:
     week_parser = sub.add_parser("validate-week", description="Validate weekly rotation, opening and supplied platform copy. JSON: {schema_version: 3, rows: [...], history: [...], shop_profile: {...}, platforms: {...}}. Exit 2 if invalid.")
     week_parser.add_argument("input", type=Path)
     args = parser.parse_args()
+    if args.command == "film-preflight":
+        from render.preflight import film_preflight
+        result = film_preflight()
+        print(json.dumps(result, ensure_ascii=False))
+        return 0 if result["status"] == "ready" else 2
     if args.command == "prepare-reference":
         try:
             result = prepare_reference(args.source, args.output, args.min_edge, args.max_edge)

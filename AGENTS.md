@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.32
+# ThinkNova 视频制作工具包 v3.1.33
 
 新门店片用服务端修订 64。先确认主推项、三条不同卖点、一个观众下一步。缺项只问一次，客户确认后读取并合并项目规则，用 expected_version 保存。没有顾客原话可以用已确认的手册。脚本逐段 4～6 句，先独立盲审再报价。一句台词对应一条原文字幕。已有任务沿用原计划。
 
@@ -14,6 +14,7 @@
 - 已知产品或服务就继续，复用客户资料。多项目必须选定项目，禁止混入另一项目角色和素材；只有关键事实未知或批准预算不可用才暂停收费制作。
 - 读取服务器当前主规则和品类表；用户风格偏好在可自定义范围内保留。不可编造地址、价格、案例或素材授权。
 - 真实人物、产品、门店优先选授权素材。edit_image 做首帧，animate_image 第一张必须是实际首帧，三视图是补充。最多三张，回读实际采用结果；缺图可在批准预算内准备明确的示意画面。
+- 新收费制作前用同一个 .venv Python 运行 `toolkit.py film-preflight`。若失败，先修复该阶段再建新任务。已有任务仍可取件并用 `film --recheck` 复检。
 - 明确 ratio=9:16、时长及可用分辨率，规格以服务器报价为准。先 quote_request，再用相同参数、max_credits 和 client_request_id 建单；断网复用原请求号。任务失败后新生成另计费，不自动免费重做。
 - 门店片只使用 ThinkNova 生成视频的原生对白。禁止用本地 TTS、macOS say 或替换音轨兜底。原片无声、乱读或漏台词时说明镜头与原任务号，保留预览。裁必要空白时不得截掉台词、伪造时长或导致片长越界。
 - 报价前以逐句稿核算片段能说完的时长，并让对白与字幕共用该稿。收到 `FILM_DIALOGUE_OVER_CAPACITY` 时，只改对应片段的台词与字幕，再报价。拼片报告的 `edit_timeline` 给出原素材实剪入出点和剩余接话空档。
@@ -34,5 +35,5 @@ Check that the customer AI supports native timers and local execution; otherwise
 制作及巡检调用 film-events，向 MCP report_film_events 递送并仅确认已接收的 ID。断网后补传。
 
 ## English
-The toolkit produces videos and review packages only. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.
+The toolkit produces videos and review packages only. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Run toolkit.py film-preflight with the production Python before new paid work. Keep fetching and rechecking existing work if the preflight fails. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.
 Send the film and available assets whenever delivery_status=delivered. Use speech_review.json to identify terms that need listening. Its publication_ready field does not describe delivery status. Use film --existing for a checked legacy output and film --recheck for a failed preview. Reuse the original media and task IDs. Scheduling belongs to the customer's AI assistant. Use existing MCP OAuth for quotes and generation, then toolkit.py film for local production. Publishing uses Ego Lite within confirmed accounts and consent. Keep credentials out of memory and record actual outcomes.
