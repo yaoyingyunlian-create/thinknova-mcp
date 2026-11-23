@@ -11,8 +11,16 @@ def native(value):
     return isinstance(value, dict) and value.get('version') == NATIVE_VERSION
 
 
+def store_job(job):
+    if 'film_profile' in job:
+        return job['film_profile'] == 'store_v2'
+    return (job.get('film_schema_version') == 3 and job.get('short_dialogue_seconds') is not None
+            and job.get('dialogue_segment_count') is not None
+            and (job.get('film_rules_revision') == '2.4' or job.get('script_rules_revision') in ('59', '60', '64')))
+
+
 def native_film(job):
-    return job.get('film') is True or job.get('film_profile') == 'store_v2'
+    return job.get('film') is True or store_job(job)
 
 
 def check_film_audio_inputs(job):

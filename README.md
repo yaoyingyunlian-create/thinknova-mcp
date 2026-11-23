@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.33
+# ThinkNova 视频制作工具包 v3.1.34
 
 新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
 
@@ -47,7 +47,11 @@ After download, the toolkit checks the original audio and saves line timings aga
 
 ## 成片交付与发布确认
 
-机器质检通过后，delivery_status=delivered 表示可交付成片。语音和画面复核列在 review_requirements，平台文案或授权待补列在 publication_status。先交付成片，再按需处理发布。只改文案或封面可再次运行 film，复用同一成片。旧安装已有成片和匹配的 .film.json 凭据时，用 python toolkit.py film job.json --existing 生成当前交付包，不重新渲染或生成。
+机器质检通过后，delivery_status=delivered 表示可交付成片。语音和画面复核列在 review_requirements，平台文案或授权待补列在 publication_status。先交付成片，再按需处理发布。若旧待审预览误用通用片型，`film job.json --recheck` 校验预览摘要后，从本机原镜头按门店片型重新检查，缺镜头时返回序号，沿用原任务取件。
+
+When rechecking an old store-film preview created under the generic film profile, the toolkit validates the preview hash and reuses the original local clips under the store profile. Missing sources are reported by clip number.
+
+只改文案或封面可再次运行 film，复用同一成片。旧安装已有成片和匹配的 .film.json 凭据时，用 python toolkit.py film job.json --existing 生成当前交付包，不重新渲染或生成。
 
 ## 客户 AI 定时任务
 

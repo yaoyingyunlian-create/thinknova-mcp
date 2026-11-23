@@ -399,7 +399,8 @@ def render_store_candidate(job_path):
 
     job_bytes = job_path.read_bytes()
     job = json.loads(job_bytes)
-    digest = hashlib.sha256(job_bytes)
+    toolkit_version = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))['version']
+    digest = hashlib.sha256(toolkit_version.encode('utf-8') + b'\0' + job_bytes)
     for clip in job['clips']:
         source = directory / clip['file']
         if source.is_file():

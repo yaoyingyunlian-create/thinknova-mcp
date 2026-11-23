@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.33",
+  "version": "thinknova-automation-toolkit-v3.1.34",
   "text_line_endings": "lf",
-  "revision": "958dfbae324a510b1c678e4c53c3a61081f646ac5e7f2603d2b2f16a475b35c3",
+  "revision": "289b4b0fe026d9e1f9a8f7d11b4f49b8362ee344cf97bd3cf801b09eefcb683f",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "771b58257810b3e5509627fdf2eee33923d23c6ab7fc694e6d9b77c800035f2b"
+      "sha256": "c654b31ff39fc28c8052de4dc3f9b52e9b4af4198482830e08289b6be4d4986d"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "4a6d267e88ec9c28f965e6eb2e5d8ab8d5a1e618db9f7c8ca9969106dcf0f178"
+      "sha256": "1634108202a7b967b846752467521eb4550d99a45ff45ea5f21148247ed6f4e3"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "847acb23aadc7c80bb75d2378613926724776e57298e070579857f88aad6c55d"
+      "sha256": "de4b3113f61db17c6d6fff18e65a7d270350215932aec367e61c15f920d934c4"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "ef097926449a6629c6efff7c0197f1e899e4f946730e3a452863455b43a50a28"
+      "sha256": "6574a13a54462cb035eb025ed9119bf54ae6d934411df7d9f15a96ecd95106fa"
     },
     {
       "path": "clip_recovery.py",
@@ -85,7 +85,7 @@
     },
     {
       "path": "film_recovery.py",
-      "sha256": "7e8ffd169e25c157025aa0a450a076c755aa5aaef1a1893a33222953b36095aa"
+      "sha256": "70044c48a5f011c3d0525da59c335f3173bcfe576dd4887ff2809bcc39377aef"
     },
     {
       "path": "generation_quality.py",
@@ -241,7 +241,7 @@
     },
     {
       "path": "quality_policy.py",
-      "sha256": "583ef07c587033db67413d94b0baefbd3e0267dab43f8ae52ecb15b21c83f6ba"
+      "sha256": "ca97930a4ff4d0c6c331a86c9b41a98fd07f6352c0a9c7a43bc8e2ac6143d20d"
     },
     {
       "path": "render/assemble.example.json",
@@ -249,7 +249,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "c43d70691a0b481656153ec981b564b569a42efc5c15287370b6b9d772c9ea47"
+      "sha256": "f62ad9e27ce689734fe3a0260fb9e62ad7322d634ad8ecc1580d66ad27c2918d"
     },
     {
       "path": "render/captions.py",
@@ -429,7 +429,7 @@
     },
     {
       "path": "test_film_recovery.py",
-      "sha256": "f3e4265f43bbd00254d33aa57dc1b42303d2679d98567b540d77ef1bf109785f"
+      "sha256": "f16c8fbd6617b93bce6e3809570812030844cd76d296826b8f6fbe024e6bf36a"
     },
     {
       "path": "test_local_workflow.py",
@@ -441,7 +441,7 @@
     },
     {
       "path": "test_native_dialogue.py",
-      "sha256": "08eb4b11cb8df575a504728ef714f073e001f117bc55d1f4d99433d47974e39a"
+      "sha256": "360b5e6e5f07b5cb772f3be72684a318666fc40363300e4327f2db83b6bd5a20"
     },
     {
       "path": "test_publication_handoff.py",

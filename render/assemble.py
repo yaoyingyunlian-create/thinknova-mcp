@@ -872,7 +872,7 @@ def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False
     return 2
 
 
-def recheck(receipt, overwrite):
+def pending_media(receipt):
     receipt = os.path.abspath(receipt)
     folder = os.path.dirname(receipt)
     if os.path.basename(receipt) != 'preview.mp4.film.json' or not os.path.basename(folder).startswith('film_pending_'):
@@ -890,6 +890,13 @@ def recheck(receipt, overwrite):
             raise Stop('SUBTITLE_DIGEST_MISMATCH', 2)
     else:
         srt = None
+    return record, preview, srt
+
+
+def recheck(receipt, overwrite):
+    receipt = os.path.abspath(receipt)
+    folder = os.path.dirname(receipt)
+    record, preview, srt = pending_media(receipt)
     name = record.get('output', '')
     options = record.get('options', {})
     outro = options.get('outro_start')
@@ -946,7 +953,9 @@ def main():
         quality_policy.check_film_audio_inputs(job)
     except ValueError as exc:
         raise Stop(str(exc), 2) from exc
-    store_film = job.get('film_profile') == 'store_v2'
+    store_film = quality_policy.store_job(job)
+    if store_film:
+        job['film_profile'] = 'store_v2'
     revision64 = store_film and job.get('script_rules_revision') == '64'
     if store_film:
         from render.native_dialogue import inspect, script_lines

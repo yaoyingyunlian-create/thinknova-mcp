@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -56,7 +57,10 @@ class FilmRecoveryTests(unittest.TestCase):
             job_path = root / 'job.json'
             receipt = root / 'film_pending_test' / 'preview.mp4.film.json'
             receipt.parent.mkdir()
-            receipt.touch()
+            preview = receipt.with_name('preview.mp4')
+            preview.write_bytes(b'preview')
+            receipt.write_text(json.dumps({'state': 'pending_check', 'machine_check': 'failed',
+                                          'sha256': hashlib.sha256(preview.read_bytes()).hexdigest()}), encoding='utf-8')
             job = {'film': True, 'clips': []}
             failed = {'error': 'CHECK_FAILED', 'pending_receipt': str(receipt),
                       'diagnostics': [{'code': 'FILM_DIALOGUE_MISMATCH'}]}
@@ -71,6 +75,37 @@ class FilmRecoveryTests(unittest.TestCase):
                 manifest.write_text('{"version":"new"}', encoding='utf-8')
                 self.assertEqual(render_film(root, job_path, job, recheck=True)[0], 0)
                 self.assertEqual(execute.call_args.args[0][2:4], ['--recheck', str(receipt)])
+
+    def test_store_recheck_recovers_from_generic_receipt_using_originals(self):
+        from quality_policy import store_job
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / 'manifest.json').write_text('{"version":"fixture"}', encoding='utf-8')
+            job_path = root / 'job.json'
+            receipt = root / 'film_pending_test' / 'preview.mp4.film.json'
+            receipt.parent.mkdir()
+            preview = receipt.with_name('preview.mp4')
+            preview.write_bytes(b'preview')
+            receipt.write_text(json.dumps({'state': 'pending_check', 'machine_check': 'failed',
+                                          'sha256': hashlib.sha256(preview.read_bytes()).hexdigest(),
+                                          'options': {}, 'result': {}}), encoding='utf-8')
+            job = {'film_rules_revision': '2.4', 'film_schema_version': 3, 'short_dialogue_seconds': 30,
+                   'dialogue_segment_count': 2, 'pending_receipt': str(receipt), 'clips': [{'file': 'original.mp4'}]}
+            self.assertTrue(store_job(job))
+            self.assertFalse(store_job({'film': True}))
+            self.assertFalse(store_job({**job, 'film_profile': 'other'}))
+            with patch('film_recovery.subprocess.run', return_value=subprocess.CompletedProcess([], 0, '{}')) as run:
+                failure = render_film(root, job_path, job, recheck=True)[1]
+                self.assertEqual(failure['error'], 'FILM_RECHECK_SOURCE_MISSING')
+                self.assertEqual(failure['missing_clips'], [1])
+                run.assert_not_called()
+                (root / 'original.mp4').write_bytes(b'paid source')
+                self.assertEqual(render_film(root, job_path, job, recheck=True)[0], 0)
+                self.assertEqual(run.call_args.args[0][2:], [str(job_path), '--json'])
+                preview.write_bytes(b'changed')
+                self.assertEqual(render_film(root, job_path, job, recheck=True)[1]['error'],
+                                 'PREVIEW_DIGEST_MISMATCH')
+                self.assertEqual(run.call_count, 1)
 
     def test_interrupted_parent_uses_completed_preview_check(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -108,7 +108,9 @@ def delivery_context(job_path, digest):
 
 
 def _render(root, job_path, job, recheck, state_path, atomic):
-    if not recheck and job.get('film') is not True and job.get('film_profile') != 'store_v2':
+    from quality_policy import store_job
+    store_film = store_job(job)
+    if not recheck and job.get('film') is not True and not store_film:
         raise ValueError('FILM_REVIEW_PROFILE_REQUIRED')
     try:
         state = json.loads(state_path.read_text(encoding='utf-8'))
@@ -202,15 +204,26 @@ def _render(root, job_path, job, recheck, state_path, atomic):
         path = (job_path.parent / requested_receipt).resolve()
         if job_path.parent not in path.parents or path.name != 'preview.mp4.film.json' or not path.is_file():
             return 2, {'error': 'FILM_PENDING_RECEIPT_INVALID'}
+        from render.assemble import pending_media, Stop
         try:
-            pending = json.loads(path.read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            pending = {}
+            pending, _, _ = pending_media(str(path))
+        except (OSError, ValueError, Stop) as exc:
+            error = str(exc) if isinstance(exc, Stop) else 'FILM_PENDING_RECEIPT_INVALID'
+            return 2, {'error': error}
         options = pending.get('options', {})
         saved = pending.get('result', {})
-        if (pending.get('state') == 'pending_check' and options.get('caption_alignment_pending')
-                and saved.get('missing_caption_lines') and not options.get('native_audio_issues')
-                and not saved.get('native_audio_issues')):
+        obsolete_profile = store_film and options.get('film_profile') != 'store_v2'
+        stale_captions = options.get('caption_alignment_pending') and (
+            saved.get('missing_caption_lines') or store_film)
+        if obsolete_profile or (stale_captions and not options.get('native_audio_issues')
+                                and not saved.get('native_audio_issues')):
+            clips = job.get('clips', [])
+            missing = [index for index, clip in enumerate(clips, 1)
+                       if not isinstance(clip, dict) or not clip.get('file')
+                       or not (job_path.parent / clip['file']).is_file()]
+            if not clips or missing:
+                return 2, {'error': 'FILM_RECHECK_SOURCE_MISSING', 'missing_clips': missing,
+                           'preview': str(path.with_name('preview.mp4')), 'pending_receipt': str(path)}
             code, result = run_stage('recheck', [str(job_path)])
         else:
             code, result = run_stage('quality', ['--recheck', str(path)])

@@ -37,9 +37,15 @@ class NativeDialogueTests(unittest.TestCase):
             job = root / 'job.json'
             pending = root / 'film_pending_test' / 'preview.mp4.film.json'
             pending.parent.mkdir()
-            pending.write_text(json.dumps({'state': 'pending_check', 'options': {'caption_alignment_pending': True},
+            preview = pending.with_name('preview.mp4')
+            preview.write_bytes(b'preview')
+            pending.write_text(json.dumps({'state': 'pending_check', 'machine_check': 'failed',
+                                           'sha256': hashlib.sha256(preview.read_bytes()).hexdigest(),
+                                           'options': {'caption_alignment_pending': True},
                                            'result': {'missing_caption_lines': [{'clip': 1, 'lines': [2]}]}}), encoding='utf-8')
-            arguments = {'pending_receipt': str(pending), 'film': True}
+            source = root / 'original.mp4'
+            source.write_bytes(b'original')
+            arguments = {'pending_receipt': str(pending), 'film': True, 'clips': [{'file': source.name}]}
             with patch('film_recovery.subprocess.run', return_value=CompletedProcess([], 0, stdout='{"status":"succeeded"}')) as run:
                 self.assertEqual(render_film(root, job, arguments, recheck=True)[0], 0)
                 self.assertEqual(run.call_args.args[0][2:], [str(job), '--json'])
