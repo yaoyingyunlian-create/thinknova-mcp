@@ -382,6 +382,7 @@ def render_store_candidate(job_path):
     directory = job_path.parent
     report_path = directory / 'film-check.json'
     from file_integrity import sha256
+    from film_recovery import can_rebuild_caption_timeline
 
     job_bytes = job_path.read_bytes()
     job = json.loads(job_bytes)
@@ -395,8 +396,13 @@ def render_store_candidate(job_path):
         saved = json.loads(report_path.read_text(encoding='utf-8'))
     except (OSError, ValueError):
         saved = {}
+    rebuild = False
     if isinstance(saved, dict) and saved.get('render_input_sha256') == input_digest and saved.get('render_failed'):
-        return saved
+        if not can_rebuild_caption_timeline(saved) or saved.get('caption_rebuild_attempted'):
+            return saved
+        rebuild = True
+        # Persist the retry before rendering so a killed process does not loop.
+        atomic(report_path, {**saved, 'caption_rebuild_attempted': True})
 
     def render(args):
         try:
@@ -413,6 +419,8 @@ def render_store_candidate(job_path):
         return 2, {'diagnostics': [{'code': 'FILM_RENDER_REPORT_UNAVAILABLE'}]}
 
     code, report = render([str(job_path)])
+    if rebuild:
+        report['caption_rebuild_attempted'] = True
     if not code:
         atomic(report_path, {**report, 'render_input_sha256': input_digest})
         return report
@@ -431,8 +439,7 @@ def render_store_candidate(job_path):
                 return checked
             report.update(checked, automatic_recheck='failed')
 
-    report['next_action'] = ('recheck_after_local_fix' if codes and codes <= transient
-                             else 'fix_render_input_before_retry')
+    report.setdefault('next_action', 'recheck_after_local_fix' if codes and codes <= transient else 'fix_render_input_before_retry')
     report.update(render_input_sha256=input_digest, render_failed=True)
     atomic(report_path, report)
     return report
@@ -635,6 +642,13 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if not output.exists():
         report = render_store_candidate(job_path)
         if report.get('render_failed') or not output.is_file():
+            from film_recovery import can_rebuild_caption_timeline
+            if can_rebuild_caption_timeline(report):
+                retry_pending = not report.get('caption_rebuild_attempted')
+                checkpoint('pending' if retry_pending else 'waiting_user', 'FILM_CAPTION_ALIGNMENT_PENDING')
+                return {'status': 'running' if retry_pending else 'preview_available', 'stage': 'caption_alignment',
+                        'run_no': run_no, 'preview': report.get('preview'), 'report': str(directory / 'film-check.json'),
+                        'missing_caption_lines': report['missing_caption_lines'], 'next_action': report.get('next_action')}
             if (plan.get('quality_policy') or {}).get('version') == '58':
                 from film_inventory import reserve, copy_artifacts
                 inventory = reserve(STATE, grant['project_key'], plan['date'], plan['platforms'], run_no, plan['rules_version'])

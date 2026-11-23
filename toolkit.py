@@ -150,6 +150,8 @@ def film_review(job_path, recheck=False, existing=False):
     from publish.dispatch import PLATFORMS
     job_path = job_path.resolve()
     job = json.loads(job_path.read_text(encoding='utf-8-sig'))
+    from quality_policy import check_film_audio_inputs
+    check_film_audio_inputs({**job, 'film': True})
     variants = job.get('platforms') or {}
     review = {}
     copy_pending = []

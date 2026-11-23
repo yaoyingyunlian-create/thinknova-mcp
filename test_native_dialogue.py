@@ -10,6 +10,58 @@ from render import check, assemble
 
 
 class NativeDialogueTests(unittest.TestCase):
+    def test_cached_caption_failure_can_render_once_from_original_sources(self):
+        from automation import render_store_candidate
+        from subprocess import CompletedProcess
+
+        failure = {'error': 'CHECK_FAILED', 'missing_caption_lines': [{'clip': 1, 'lines': [2]}],
+                   'diagnostics': [{'code': 'FILM_CAPTION_ALIGNMENT_PENDING'}]}
+        with tempfile.TemporaryDirectory() as folder:
+            job = Path(folder) / 'job.json'
+            job.write_text(json.dumps({'clips': [{'file': 'paid-source.mp4'}]}), encoding='utf-8')
+            stopped = CompletedProcess([], 2, stdout=json.dumps(failure))
+            with patch('automation.subprocess.run', side_effect=[stopped, stopped]) as execute:
+                self.assertFalse(render_store_candidate(job).get('caption_rebuild_attempted', False))
+                self.assertTrue(render_store_candidate(job)['caption_rebuild_attempted'])
+                self.assertTrue(render_store_candidate(job)['caption_rebuild_attempted'])
+                self.assertEqual(execute.call_count, 2)
+                self.assertIn(str(job), execute.call_args.args[0])
+
+    def test_caption_pending_receipt_recheck_assembles_again(self):
+        from film_recovery import render_film
+        from subprocess import CompletedProcess
+
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / 'manifest.json').write_text('{"version":"fixture"}', encoding='utf-8')
+            job = root / 'job.json'
+            pending = root / 'film_pending_test' / 'preview.mp4.film.json'
+            pending.parent.mkdir()
+            pending.write_text(json.dumps({'state': 'pending_check', 'options': {'caption_alignment_pending': True},
+                                           'result': {'missing_caption_lines': [{'clip': 1, 'lines': [2]}]}}), encoding='utf-8')
+            arguments = {'pending_receipt': str(pending), 'film': True}
+            with patch('film_recovery.subprocess.run', return_value=CompletedProcess([], 0, stdout='{"status":"succeeded"}')) as run:
+                self.assertEqual(render_film(root, job, arguments, recheck=True)[0], 0)
+                self.assertEqual(run.call_args.args[0][2:], [str(job), '--json'])
+
+    def test_store_film_and_repack_reject_audio_replacement(self):
+        from toolkit import film_review
+        from io import StringIO
+        import sys
+
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'job.json'
+            for override in ({'voice': 'local.aiff'}, {'audio': 'mute'}):
+                job = {'film_profile': 'store_v2', 'clips': [{'file': 'original.mp4', **override}]}
+                path.write_text(json.dumps(job), encoding='utf-8')
+                with self.assertRaisesRegex(ValueError, r'FILM_NATIVE_AUDIO_REQUIRED: clip 1'):
+                    film_review(path, existing=True)
+                output = StringIO()
+                with patch.object(sys, 'argv', ['assemble.py', str(path)]), patch.object(assemble, 'REPORT_STREAM', output):
+                    self.assertEqual(assemble.cli(), 2)
+                self.assertIn('FILM_NATIVE_AUDIO_REQUIRED: clip 1', output.getvalue())
+                quality_policy.check_film_audio_inputs({'clips': job['clips']})
+
     def test_partial_trim_preserves_dialogue_and_prefers_longest_join(self):
         cuts = assemble.plan_dialogue_cuts([15, 15, 15], [[(0, 11)], [(2, 14.5)], [(1, 15)]], 2)
         self.assertAlmostEqual(sum(end - start for start, end in cuts), 43)

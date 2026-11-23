@@ -657,7 +657,7 @@ def load_job(argv):
     if not os.path.isfile(path):
         raise Stop("Job file not found: %s" % path)
     try:
-        job = json.loads(io.open(path, encoding="utf-8-sig").read())
+        job = json.loads(Path(path).read_text(encoding="utf-8-sig"))
     except ValueError as e:
         raise Stop("job file is not valid JSON: %s" % e)
     return job, os.path.dirname(os.path.abspath(path))
@@ -865,6 +865,9 @@ def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False
     if details and details.get('missing_caption_lines'):
         result.update(missing_caption_lines=details['missing_caption_lines'], subtitle_timing='review_required',
                       next_action='Restore speech recognition and reassemble using the original clips.')
+    if details and details.get('native_audio_issues'):
+        result.update(native_audio_issues=details['native_audio_issues'],
+                      next_action='Check the original ThinkNova result for the affected clip and retain its native audio.')
     if diagnostics_only and os.environ.get('THINKNOVA_REVIEW_PREVIEW') != '1':
         for key in ('preview', 'pending_receipt', 'contact_sheet'):
             result.pop(key)
@@ -896,6 +899,10 @@ def recheck(receipt, overwrite):
     outro = options.get('outro_start')
     if not name or os.path.basename(name) != name or name in ('.', '..') or not isinstance(outro, (int, float)) or not math.isfinite(outro) or outro <= 0:
         raise Stop('INVALID_PENDING_RECEIPT')
+    if options.get('native_audio_issues'):
+        issues = options['native_audio_issues']
+        return report_pending(preview, receipt, issues, '\n'.join(item['message'] for item in issues),
+                              options.get('film_profile') == 'store_v2', record['result'])
     output = os.path.join(os.path.dirname(folder), name)
     ensure_output_available(output, overwrite)
     ff, fp = tool('ffmpeg'), tool('ffprobe')
@@ -939,6 +946,10 @@ def main():
             raise Stop('Usage: assemble.py --recheck <preview.mp4.film.json> [--json] [--overwrite]')
         return recheck(argv[1], overwrite)
     job, base = load_job(argv)
+    try:
+        quality_policy.check_film_audio_inputs(job)
+    except ValueError as exc:
+        raise Stop(str(exc), 2) from exc
     store_film = job.get('film_profile') == 'store_v2'
     revision64 = store_film and job.get('script_rules_revision') == '64'
     if revision64:
@@ -1013,6 +1024,7 @@ def main():
         caption_alignment_estimated = False
         missing_caption_lines = []
         prepared = []
+        native_issues = []
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
             if store_film:
@@ -1025,6 +1037,9 @@ def main():
                     if not relaxed or not str(error).startswith(('FILM_SOURCE_NOT_PORTRAIT', 'FILM_SOURCE_BLACK_BARS')):
                         raise
                     pace_report.append({'clip':i + 1,'status':'portrait_reframed','reason':str(error)})
+                if not source.lower().endswith(IMAGE_EXT) and not probe(fp, source)[2]:
+                    native_issues.append({'code': 'FILM_NATIVE_AUDIO_MISSING', 'clip': i + 1,
+                                          'message': f'Clip {i + 1} has no native audio track.'})
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
             if not relaxed and job.get('explainer_preview') and not 9.95 <= dur <= 15.05:
                 raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} is outside 10-15 seconds', 2)
@@ -1058,6 +1073,7 @@ def main():
         edit_report = []
         if native_edit:
             from speech_recovery import recognize
+            from speech_review import caption_agreement
             for i, (shot, dur) in enumerate(prepared):
                 try:
                     spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
@@ -1067,6 +1083,13 @@ def main():
                     clip = job['clips'][i]
                     lines = clip.get('subs') or [line['text'] for line in clip.get('dialogue', [])
                                                 if isinstance(line, dict) and isinstance(line.get('text'), str)]
+                    transcript = ''.join(word.word for span in spoken for word in span.words or [])
+                    if lines and transcript.strip():
+                        agreement = caption_agreement(''.join(lines), transcript)
+                        if agreement < 0.30:
+                            native_issues.append({'code': 'FILM_DIALOGUE_MISMATCH', 'clip': i + 1,
+                                                  'agreement': round(agreement, 3),
+                                                  'message': f'Clip {i + 1} native dialogue does not match the script.'})
                     if lines and 'cutaway' not in clip and align_captions(lines, spoken, 0) is not None:
                         reliable[i] = windows[i]
                 except (RuntimeError, ImportError):
@@ -1233,6 +1256,12 @@ def main():
         if missing_caption_lines:
             result.update(subtitle_timing='review_required', missing_caption_lines=missing_caption_lines)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
+        if native_issues:
+            passed = False
+            options['native_audio_issues'] = native_issues
+            result['native_audio_issues'] = native_issues
+            diagnostics.extend(native_issues)
+            report += '\n' + '\n'.join(item['message'] for item in native_issues)
         if relaxed and caption_alignment_pending:
             diagnostics.append({'code':'SPEECH_CHECK_PENDING', 'message':'Subtitle timing is estimated; recognition unavailable.'})
         if caption_alignment_pending and job.get('film') and (revision64 or not relaxed or job.get('require_caption_alignment')):

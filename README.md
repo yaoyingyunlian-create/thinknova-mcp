@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.30
+# ThinkNova 视频制作工具包 v3.1.31
 
 新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
 
@@ -20,7 +20,7 @@ python toolkit.py run-day plan.json --max-credits APPROVED_BUDGET
 python toolkit.py doctor --json
 ```
 
-默认保留模型原声，不另做 TTS、不自动调速；裁边界空白，添加字幕和片尾叠字。语速与自然停顿提示，不单独否决整片。损坏、黑屏、整片无声、严重错配和错误规格仍拦截。缺字幕时先复用已知台词，未知时保留预览并说明缺项。新默认策略 `native_dialogue_v1`，原58号灰度配置仍兼容。
+只使用 ThinkNova 生成视频的原生对白。门店片禁止本地合成、静音或替换音轨；裁边界空白，添加字幕和片尾叠字。语速与自然停顿提示，不单独否决整片。损坏、黑屏、整片无声、严重错配和错误规格仍拦截。缺字幕时先复用已知台词，未知时保留预览并说明缺项。新默认策略 `native_dialogue_v1`，原58号灰度配置仍兼容。
 
 `publish/dispatch.py --dry` 只准备本地文案与文件清单；其 `--execute` 及旧平台上传、登录脚本均已退休。实际发布由客户 AI 助理在 Ego Lite 完成，不使用本包发布器。
 
@@ -62,7 +62,7 @@ paid_retake 默认关闭。启用后，只对原质检报告定位到的严重�
 
 ## English
 
-This is a video-production toolkit. Install with bootstrap.py setup --json, make and check videos with toolkit.py film or run-day, and deliver a review package. Preserve original model dialogue; do not default to TTS or automatic pace adjustment. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
+This is a video-production toolkit. Install with bootstrap.py setup --json, make and check videos with toolkit.py film or run-day, and deliver a review package. Store films must retain the original ThinkNova audio. Do not use local TTS, macOS say, muting, or replacement audio. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
 
 Before quoting, check that the dialogue fits the requested duration. If FILM_DIALOGUE_OVER_CAPACITY identifies a segment, shorten its dialogue and update its captions together. The edit_timeline report records source in/out points and the remaining dialogue gap at each join.
 

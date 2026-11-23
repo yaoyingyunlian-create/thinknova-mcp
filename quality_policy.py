@@ -11,6 +11,18 @@ def native(value):
     return isinstance(value, dict) and value.get('version') == NATIVE_VERSION
 
 
+def native_film(job):
+    return job.get('film') is True or job.get('film_profile') == 'store_v2'
+
+
+def check_film_audio_inputs(job):
+    if not native_film(job):
+        return
+    for index, clip in enumerate(job.get('clips', []), 1):
+        if isinstance(clip, dict) and (clip.get('voice') or clip.get('audio') == 'mute'):
+            raise ValueError(f'FILM_NATIVE_AUDIO_REQUIRED: clip {index}; use the original generated video and its original audio')
+
+
 def store_policy(value=None):
     if isinstance(value, dict) and (value.get('version') in ('58', NATIVE_VERSION)
                                   or value.get('audio_source') == 'legacy_processing'):

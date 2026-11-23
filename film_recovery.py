@@ -23,6 +23,12 @@ def failure_codes(report):
     return {value for value in values if isinstance(value, str) and re.fullmatch(r'[A-Z0-9_]{2,64}', value)} - {'CHECK_FAILED'}
 
 
+def can_rebuild_caption_timeline(report):
+    return bool(report.get('missing_caption_lines')) and not report.get('native_audio_issues') and (
+        failure_codes(report) <= {'FILM_CAPTION_ALIGNMENT_PENDING', 'FILM_CAPTIONS_REQUIRED'}
+    )
+
+
 def caption_repair(job):
     if job.get('srt') or any(clip.get('subs2') for clip in job.get('clips', [])):
         return None
@@ -191,7 +197,18 @@ def _render(root, job_path, job, recheck, state_path, atomic):
         path = (job_path.parent / requested_receipt).resolve()
         if job_path.parent not in path.parents or path.name != 'preview.mp4.film.json' or not path.is_file():
             return 2, {'error': 'FILM_PENDING_RECEIPT_INVALID'}
-        code, result = run_stage('quality', ['--recheck', str(path)])
+        try:
+            pending = json.loads(path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            pending = {}
+        options = pending.get('options', {})
+        saved = pending.get('result', {})
+        if (pending.get('state') == 'pending_check' and options.get('caption_alignment_pending')
+                and saved.get('missing_caption_lines') and not options.get('native_audio_issues')
+                and not saved.get('native_audio_issues')):
+            code, result = run_stage('recheck', [str(job_path)])
+        else:
+            code, result = run_stage('quality', ['--recheck', str(path)])
     elif state['code'] is None:
         code, result = run_stage('quality', [str(job_path)])
     else:
