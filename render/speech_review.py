@@ -62,12 +62,13 @@ def ensure_runtime(model_name='small'):
     return WhisperModel(model_name, device='cpu', compute_type='int8', local_files_only=True)
 
 
-def decode_audio(path, ffmpeg=None):
+def decode_audio(path, ffmpeg=None, audio_window=None):
     import numpy as np
     import os
     ffmpeg = ffmpeg or os.getenv('FFMPEG') or 'ffmpeg'
     try:
-        result = subprocess.run([ffmpeg, '-v', 'error', '-i', str(path), '-vn', '-ac', '1',
+        selection = ['-ss', str(audio_window[0]), '-t', str(audio_window[1])] if audio_window else []
+        result = subprocess.run([ffmpeg, '-v', 'error', *selection, '-i', str(path), '-vn', '-ac', '1',
                                  '-ar', '16000', '-f', 'f32le', 'pipe:1'],
                                 check=True, capture_output=True, timeout=120)
     except (OSError, subprocess.SubprocessError) as exc:
@@ -77,14 +78,14 @@ def decode_audio(path, ffmpeg=None):
     return np.frombuffer(result.stdout, dtype=np.float32).copy()
 
 
-def recognize_local(path, model_name, language, ffmpeg=None, **options):
+def recognize_local(path, model_name, language, ffmpeg=None, audio_window=None, **options):
     print("SPEECH_PHASE:model_load", file=sys.stderr, flush=True)
     try:
         model = ensure_runtime(model_name)
     except Exception as exc:
         raise RuntimeError('SPEECH_MODEL_UNAVAILABLE: prepare faster-whisper and the local model cache') from exc
     print("SPEECH_PHASE:audio_decode", file=sys.stderr, flush=True)
-    audio = decode_audio(path, ffmpeg)
+    audio = decode_audio(path, ffmpeg, audio_window) if audio_window else decode_audio(path, ffmpeg)
     print("SPEECH_PHASE:transcription", file=sys.stderr, flush=True)
     try:
         segments, info = model.transcribe(audio, language=language, **options)

@@ -328,10 +328,14 @@ class StoreFilmTests(unittest.TestCase):
             rules['effective_rules']['authorized_asset_ids'].extend(('asset_customer', 'asset_staff'))
             steps['day_plan_sha256'] = hashlib.sha256(json.dumps(plan, sort_keys=True,
                                                                ensure_ascii=False).encode('utf-8')).hexdigest()
-            with patch('automation.validate_media'), patch('automation.subprocess.run',
+            with patch('automation.validate_media'), patch('render.assemble.probe', return_value=(15.0, (768, 1344), True)), \
+                    patch('render.native_dialogue.inspect') as dialogue_inspect, \
+                    patch('automation.subprocess.run',
                     return_value=Mock(returncode=2, stdout='{}')):
                 with self.assertRaisesRegex(RuntimeError, 'FILM_CHECK_FAILED'):
                     execute_store_day(client, claim, plan, 250, rules, {'available_credits': 0}, root, steps, Mock())
+            self.assertEqual([call.args[7] for call in dialogue_inspect.call_args_list],
+                             [f'task_old_{index}' for index in range(4)])
             job = json.loads((root / 'assemble.json').read_text(encoding='utf-8'))
             self.assertEqual([clip['planned_seconds'] for clip in job['clips']], durations)
             self.assertEqual(job['short_dialogue_seconds'], 45)

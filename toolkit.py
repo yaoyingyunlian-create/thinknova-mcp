@@ -221,6 +221,8 @@ def film_review(job_path, recheck=False, existing=False):
     output = video.with_name(video.stem + '.review-package.json')
     if 'edit_timeline' in result:
         package['edit_timeline'] = result['edit_timeline']
+    if 'native_dialogue' in result:
+        package['native_dialogue'] = result['native_dialogue']
     atomic(output, package)
     return {**package, 'review_package': str(output), 'diagnostic_events': result.get('diagnostic_events', []), 'run_id': result['run_id']}
 

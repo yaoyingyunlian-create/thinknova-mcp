@@ -25,7 +25,8 @@ def failure_codes(report):
 
 def can_rebuild_caption_timeline(report):
     return bool(report.get('missing_caption_lines')) and not report.get('native_audio_issues') and (
-        failure_codes(report) <= {'FILM_CAPTION_ALIGNMENT_PENDING', 'FILM_CAPTIONS_REQUIRED'}
+        failure_codes(report) <= {'FILM_CAPTION_ALIGNMENT_PENDING', 'FILM_CAPTIONS_REQUIRED', 'SPEECH_CHECK_PENDING',
+                                  'FILM_SHOP_NAME_MISSING', 'FILM_FEATURED_SERVICE_MISSING'}
     )
 
 
@@ -144,7 +145,8 @@ def _render(root, job_path, job, recheck, state_path, atomic):
             return report.get('exit_code', 0 if report.get('status') == 'succeeded' else 2), report
         try:
             process = subprocess.run([sys.executable, str(root / 'render' / 'assemble.py'), *operation['args'], '--json'],
-                cwd=job_path.parent, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW='1', THINKNOVA_RENDER_CHECKPOINT=str(checkpoint)),
+                cwd=job_path.parent, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW='1', THINKNOVA_RENDER_CHECKPOINT=str(checkpoint),
+                                              THINKNOVA_RESUME_CAPTIONS='1' if recheck else '0'),
                 stdout=subprocess.PIPE, stderr=sys.stderr, encoding='utf-8', errors='replace', timeout=1800)
             report = json.loads(process.stdout)
             if isinstance(report, dict):
@@ -159,19 +161,22 @@ def _render(root, job_path, job, recheck, state_path, atomic):
         state.update(code=code, result=report, operation=None)
         codes = sorted(failure_codes(report)) if code else []
         for reason in (codes or ['FILM_CHECK_FAILED' if code else '']):
-            details = {}
-            if code:
-                for diagnostic in report.get('diagnostics', []):
-                    if not isinstance(diagnostic, dict) or diagnostic.get('code') != reason:
-                        continue
-                    match = re.search(r'\(([0-9]+(?:\.[0-9]+)?)[–-]([0-9]+(?:\.[0-9]+)?)s\)$',
-                                      str(diagnostic.get('message', '')))
-                    if match:
-                        start, end = (round(float(value) * 1000) for value in match.groups())
-                        if 0 <= start <= end <= 3600000:
-                            details = {'start_ms': start, 'end_ms': end}
-                            break
-            event(stage, 'failed' if code else 'passed', reason if code else '', details)
+            matches = [item for item in report.get('diagnostics', [])
+                       if isinstance(item, dict) and item.get('code') == reason] if code else []
+            for diagnostic in matches or [{}]:
+                details = {}
+                clip, task = diagnostic.get('clip'), diagnostic.get('task_no')
+                if type(clip) is int and 1 <= clip <= 200:
+                    details['segment'] = clip
+                if isinstance(task, str) and re.fullmatch(r'task_[a-f0-9]{12}', task):
+                    details['task_no'] = task
+                match = re.search(r'\(([0-9]+(?:\.[0-9]+)?)[–-]([0-9]+(?:\.[0-9]+)?)s\)$',
+                                  str(diagnostic.get('message', '')))
+                if match:
+                    start, end = (round(float(value) * 1000) for value in match.groups())
+                    if 0 <= start <= end <= 3600000:
+                        details.update(start_ms=start, end_ms=end)
+                event(stage, 'failed' if code else 'passed', reason if code else '', details)
 
     def run_stage(stage, args):
         state['operation'] = {'id': uuid.uuid4().hex, 'stage': stage, 'args': args}
@@ -250,7 +255,8 @@ def replacement_request(job_path, decision, quoted=None):
     if (type(limit) is not int or limit <= 0 or type(index) is not int or index < 0
             or index >= len(job.get('clips', [])) or not isinstance(args, dict)
             or not isinstance(args.get('prompt'), str)
-            or decision.get('reason_code') not in ('MEDIA_BLACK', 'FILM_DIALOGUE_MISMATCH', 'S3_NEAR_SILENT')):
+            or decision.get('reason_code') not in ('MEDIA_BLACK', 'FILM_DIALOGUE_MISMATCH', 'S3_NEAR_SILENT',
+                                                   'FILM_NATIVE_AUDIO_MISSING', 'FILM_NATIVE_AUDIO_SILENT')):
         raise ValueError('FILM_REPLACEMENT_INVALID')
     tool = decision.get('tool')
     if tool not in ('animate_image', 'generate_video'):
@@ -260,6 +266,12 @@ def replacement_request(job_path, decision, quoted=None):
     with state_lock(state_path):
         state = json.loads(state_path.read_text(encoding='utf-8'))
         if not state.get('code') or decision['reason_code'] not in failure_codes(state['result']):
+            return {'status': 'qualification_required'}
+        dialogue_codes = {'FILM_DIALOGUE_MISMATCH', 'FILM_NATIVE_AUDIO_MISSING', 'FILM_NATIVE_AUDIO_SILENT'}
+        if decision['reason_code'] in dialogue_codes and not any(
+            item.get('code') == decision['reason_code'] and item.get('clip') == index + 1
+            for item in state['result'].get('native_audio_issues', []) if isinstance(item, dict)
+        ):
             return {'status': 'qualification_required'}
         previous = state.get('replacement')
         options = {key: value for key, value in args.items()

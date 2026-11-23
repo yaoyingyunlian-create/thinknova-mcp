@@ -1,7 +1,6 @@
 """Bounded speech recovery; original videos and local transcript evidence are retained."""
 import json
 from pathlib import Path
-import subprocess
 import time
 
 from render.speech_review import caption_agreement
@@ -20,7 +19,7 @@ def recover_clip(client, claim, plan, index, args, path, steps, checkpoint, quot
     expected = ''.join(plan['segments'][index].get('subs') or [])
     evidence = Path(path).with_suffix('.speech-attempts.json')
     record = json.loads(evidence.read_text(encoding='utf-8')) if evidence.exists() else {'expected': expected, 'attempts': []}
-    if record.get('selected'):
+    if record.get('selected') and record['selected'].endswith('-recovery.mp4'):
         selected = Path(path).parent / record['selected']
         if selected.is_file():
             return selected, record
@@ -92,13 +91,7 @@ def recover_clip(client, claim, plan, index, args, path, steps, checkpoint, quot
                 record.update(selected=repaired_path.name, speech_status='unknown', warning='SPEECH_CHECK_PENDING')
                 atomic(evidence, record)
                 return repaired_path, record
-    # A local silent shot + the approved captions is the final per-shot fallback.
-    # The complete film still has to pass its non-silent audio and mismatch checks.
-    muted = Path(path).with_name(Path(path).stem + '-caption-only.mp4')
-    if not muted.exists():
-        command = ['ffmpeg', '-nostdin', '-v', 'error', '-n', '-i', str(path), '-f', 'lavfi', '-i',
-                   'anullsrc=r=48000:cl=stereo', '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-shortest', str(muted)]
-        subprocess.run(command, check=True, capture_output=True, timeout=120)
-    record.update(selected=muted.name, warning='CAPTION_ONLY_SHOT', speech_status='degraded')
+    record.pop('selected', None)
+    record.update(warning=record.get('warning') or 'SPEECH_REVIEW_REQUIRED', speech_status='unknown')
     atomic(evidence, record)
-    return muted, record
+    return path, record

@@ -1,15 +1,15 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.31",
+  "version": "thinknova-automation-toolkit-v3.1.32",
   "text_line_endings": "lf",
-  "revision": "45a3faafb33e1f2a59627d8c7ac99d21eaff09d1e5dd35fe7b0b32a8cf8bea3c",
+  "revision": "43cb00b0be2acae9592e5181970306b468d30514a0caf0492c80d31866882429",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "fb87163d3e47d4fe1a3c85ab7d5bf3c302ca9af01d2faa76ca3553bd78acd792"
+      "sha256": "b92143a297e4c98e169d3c3f1c92d52c675323f9d9fd3c344a39b6c51e3b7200"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "38fbd1bdaf85e8e671c6ef3b8c99ca5394b11a56d165360270821df1a08f5543"
+      "sha256": "c823074a5f520928ee38b1e6910c3baf0ad80a1f02225124385db09c09eb10b7"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "becb7f035e647f51fdfb798926b9f2333746af9187abfa94013b132345795195"
+      "sha256": "f070254cff363356cddf3b7874b22fbeb399be4e832da6ee8e0fd9dbb88ee5c9"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "e450703b33b955caea471bcf358808dc0b9d702f9748ceffe0cfb7479e11976c"
+      "sha256": "e29219f838b7db6ba6c19201cceb67282c47361a4f2593d506be65d107cca213"
     },
     {
       "path": "automation_client.py",
@@ -49,11 +49,11 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "e0e617be35494604d81f90a808b8f518dca7670f67e4430ba4cf37bdc57f3fe6"
+      "sha256": "315dd8d1534c95c2e637d8ecb68de392397e08dfd6d27e4b57577d3fe6884972"
     },
     {
       "path": "clip_recovery.py",
-      "sha256": "8c331f716e147fa90667c68b8128f5c9594c9ed654d323ab2346c70283102745"
+      "sha256": "0423031b50b4fb9681b64a04a08f1469f2eaac5ad07cd473f33acb51344d7dd2"
     },
     {
       "path": "day_preparation.py",
@@ -85,7 +85,7 @@
     },
     {
       "path": "film_recovery.py",
-      "sha256": "2330ef497913429a5e142a835aa850d3ae1635df9531d74a00d50a020a6034d1"
+      "sha256": "7e8ffd169e25c157025aa0a450a076c755aa5aaef1a1893a33222953b36095aa"
     },
     {
       "path": "generation_quality.py",
@@ -249,7 +249,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "63060e0e641b0e1e58b09a2af19ff00975d99338560e487f012b5dc7bd036440"
+      "sha256": "c43d70691a0b481656153ec981b564b569a42efc5c15287370b6b9d772c9ea47"
     },
     {
       "path": "render/captions.py",
@@ -257,7 +257,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "9f8e3b69df2a559015bd6c756eaddc20c91ee80fa655828362dee54ccae38e0a"
+      "sha256": "1efb861de0dcd0d822b16057ddb6cdef9bfb6fbb004e9a2f3b03e6c89e8c3236"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -292,8 +292,12 @@
       "sha256": "cdc58c72f0cd36927246e70e7ea30d37aa7372b9714ae5f4940cac9936922af3"
     },
     {
+      "path": "render/native_dialogue.py",
+      "sha256": "ee767619c8c4f311bec7c3522b3a944d3e76e60bbf723621510d7a5a24f1b64a"
+    },
+    {
       "path": "render/speech_review.py",
-      "sha256": "aac3939191834b65ca8d9aa453fb7b139bf1dbb86cbbbbce84515453ef8dec66"
+      "sha256": "9cd922f471231f84e9178755530c5a93da9cb8d5c3249a3d3feb6cdf7e9105bf"
     },
     {
       "path": "render/templates/store-film-v24.example.json",
@@ -428,6 +432,10 @@
       "sha256": "b1eb402427ea2ba8f1cdbb57439d6e8afcf22f2db73ffe2cb9f2c57bae952762"
     },
     {
+      "path": "test_native_clip_dialogue.py",
+      "sha256": "c766ee0fa646f95e0fd24092aaec5684e0262c09d37ba902a0c79c892ca5e4ef"
+    },
+    {
       "path": "test_native_dialogue.py",
       "sha256": "08eb4b11cb8df575a504728ef714f073e001f117bc55d1f4d99433d47974e39a"
     },
@@ -449,7 +457,7 @@
     },
     {
       "path": "test_sparse_delivery.py",
-      "sha256": "671a9c99716bcae0ec7f2c3f877e5a430cf1de5f76e30d70075eac28c5d843d5"
+      "sha256": "f36e0c2d6303de7ae42313b8fea6df50928c28d4f2979eb212376ac10f9f5116"
     },
     {
       "path": "test_speech_review.py",
@@ -465,7 +473,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "257b5e0d3ed843a7cef063b4fd57186f324a8b07c6c54c0832a6112589c6ab2c"
+      "sha256": "64c53fed214f8ee39397c8b628854b4bafe890be95638426bfc4735bfa574c2a"
     },
     {
       "path": "test_subtitle_layout.py",
@@ -473,7 +481,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "c2bd5e6da62cea5e628fea4d4c28a91dea190770a062118a3753c14a2ff7bef9"
+      "sha256": "cf06b394c3fb805900d0f2bed059a5292de2be1a9077dd81ee0adb9539111cf7"
     },
     {
       "path": "update.py",

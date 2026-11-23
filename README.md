@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.31
+# ThinkNova 视频制作工具包 v3.1.32
 
 新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
 
@@ -33,6 +33,10 @@ python toolkit.py doctor --json
 ## 成片诊断与自动复检
 
 制作和巡检使用同一份 job.json。工具包记录失败原因，自动尝试字幕修复或原预览复检。可恢复的下载故障由 AI 助理回查原任务并取回原产物。
+
+每段取件后检查原生音轨，并按原任务号和素材摘要保留已确认的逐句时间戳。字幕缺项时仅复查对应音频区间；转写不可用时保留原声预览，并返回镜头和未对齐的句子序号。补拍只处理有缺陷证据的镜头，并沿用已批准的预算。
+
+After download, the toolkit checks the original audio and saves line timings against the original task and source hash. It retries the affected audio window for missing timings and retains a playable preview with the original audio if recognition is unavailable. Retakes require evidence for the affected clip and an approved budget.
 
 助理运行 `toolkit.py film-events job.json`，使用 MCP 的 report_film_events 提交 events，随后只对服务端返回的 acknowledged ID 使用 `toolkit.py film-events job.json --ack EVENT_ID`（多个 ID 重复传入 --ack）。断网时留在本地，下次巡检继续递送。日志仅包含结构化诊断字段。
 

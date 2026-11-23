@@ -407,7 +407,8 @@ def render_store_candidate(job_path):
     def render(args):
         try:
             result = subprocess.run([sys.executable, str(ROOT / 'render/assemble.py'), *args, '--json'],
-                                    cwd=directory, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW='1'),
+                                    cwd=directory, env=dict(os.environ, THINKNOVA_REVIEW_PREVIEW='1',
+                                                            THINKNOVA_RESUME_CAPTIONS='1' if rebuild else '0'),
                                     capture_output=True, encoding='utf-8', errors='replace', timeout=900)
             report = json.loads(result.stdout)
             if isinstance(report, dict):
@@ -595,7 +596,9 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             if not assets:
                 raise RuntimeError('VIDEO_DELIVERY_MISSING')
             download(assets[0]['download_url'], path, task_id=steps[key])
-        if (plan.get('quality_policy') or {}).get('version') == '58':
+        if (plan.get('quality_policy') or {}).get('version') == '58' and (
+            f'recovery_task_{index}' in steps or path.with_suffix('.recovery-request.json').is_file()
+        ):
             from clip_recovery import recover_clip
             budget_used = total + int(plan.get('preparation_credits', 0)) + sum(
                 int(value) for key, value in steps.items() if key.startswith('recovery_cost_'))
@@ -603,8 +606,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                                             quoted_generation_args, download, atomic, budget_used, budget_limit=budget)
             if assessment.get('warning'):
                 plan.setdefault('warnings', []).append({'code':assessment['warning'], 'clip':index})
-        clip = {'file': path.name, 'fit': 'cover', **{
+        selected_task = steps.get(f'recovery_task_{index}') if path.name.endswith('-recovery.mp4') else steps[key]
+        clip = {'file': path.name, 'fit': 'cover', 'task_id': selected_task, **{
             key: segment[key] for key in ('beats', 'dialogue', 'subs', 'subs2') if key in segment}}
+        from render.assemble import probe, tool
+        from render.native_dialogue import inspect, script_lines
+        source_seconds, _, has_audio = probe(tool('ffprobe'), str(path))
+        inspect(path, script_lines(clip), plan.get('speech_language'), tool('ffmpeg'), source_seconds,
+                has_audio, directory / '.native-dialogue', selected_task)
         if plan.get('film_type') == 'explainer':
             clip['planned_seconds'] = segment['duration_seconds']
         clips.append(clip)
@@ -643,6 +652,11 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         report = render_store_candidate(job_path)
         if report.get('render_failed') or not output.is_file():
             from film_recovery import can_rebuild_caption_timeline
+            if report.get('native_audio_issues'):
+                checkpoint('waiting_user', 'FILM_NATIVE_AUDIO_REVIEW_REQUIRED')
+                return {'status': 'preview_available', 'stage': 'native_dialogue', 'run_no': run_no,
+                        'preview': report.get('preview'), 'native_audio_issues': report['native_audio_issues'],
+                        'report': str(directory / 'film-check.json'), 'next_action': report.get('next_action')}
             if can_rebuild_caption_timeline(report):
                 retry_pending = not report.get('caption_rebuild_attempted')
                 checkpoint('pending' if retry_pending else 'waiting_user', 'FILM_CAPTION_ALIGNMENT_PENDING')

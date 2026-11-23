@@ -382,14 +382,6 @@ def plan_dialogue_cuts(durations, windows, budget):
     return list(zip(starts, ends))
 
 
-def shift_dialogue(spoken, start, end):
-    from types import SimpleNamespace
-
-    return [SimpleNamespace(words=[SimpleNamespace(word=word.word, start=word.start - start, end=word.end - start)
-                                   for word in span.words or [] if start <= word.start < word.end <= end])
-            for span in spoken]
-
-
 def dialogue_pace_adjustment(rate, language, duration, intervals, max_duration=None):
     """Prefer exact duration, then use a bounded amount of the film duration tolerance."""
     high = 5.2 if language == 'zh' else 3.0
@@ -767,6 +759,8 @@ def run_delivery_check(ff, fp, video, srt, options):
         cmd += ['--srt', srt]
     if options['max_dur']:
         cmd += ['--max-dur', str(options['max_dur'])]
+    if options.get('dialogue_checked_per_clip'):
+        cmd += ['--dialogue-checked-per-clip']
     try:
         checked = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=240)
         report = checked.stdout + '\n' + checked.stderr
@@ -862,6 +856,8 @@ def report_pending(preview, receipt, diagnostics, report, diagnostics_only=False
           'exit_code': 2, 'error': 'CHECK_FAILED', 'preview': preview, 'pending_receipt': receipt,
           'diagnostic_log': log, 'diagnostics': diagnostics,
                     'contact_sheet': sheet if os.path.isfile(sheet) else None}
+    if details and details.get('native_dialogue'):
+        result['native_dialogue'] = details['native_dialogue']
     if details and details.get('missing_caption_lines'):
         result.update(missing_caption_lines=details['missing_caption_lines'], subtitle_timing='review_required',
                       next_action='Restore speech recognition and reassemble using the original clips.')
@@ -952,6 +948,8 @@ def main():
         raise Stop(str(exc), 2) from exc
     store_film = job.get('film_profile') == 'store_v2'
     revision64 = store_film and job.get('script_rules_revision') == '64'
+    if store_film:
+        from render.native_dialogue import inspect, script_lines
     if revision64:
         if job.get('srt'):
             raise Stop('FILM_STORE_USE_SCRIPT_DIALOGUE: revision 64 subtitles are derived from dialogue', 2)
@@ -1025,6 +1023,7 @@ def main():
         missing_caption_lines = []
         prepared = []
         native_issues = []
+        native_reports = []
         for i, c in enumerate(job["clips"]):
             print("Shot %d/%d: %s" % (i + 1, len(job["clips"]), os.path.basename(c.get("file", "?"))))
             if store_film:
@@ -1037,9 +1036,22 @@ def main():
                     if not relaxed or not str(error).startswith(('FILM_SOURCE_NOT_PORTRAIT', 'FILM_SOURCE_BLACK_BARS')):
                         raise
                     pace_report.append({'clip':i + 1,'status':'portrait_reframed','reason':str(error)})
-                if not source.lower().endswith(IMAGE_EXT) and not probe(fp, source)[2]:
-                    native_issues.append({'code': 'FILM_NATIVE_AUDIO_MISSING', 'clip': i + 1,
-                                          'message': f'Clip {i + 1} has no native audio track.'})
+            if store_film:
+                source = Path(resolve(base, c['file']))
+                if not str(source).lower().endswith(IMAGE_EXT):
+                    duration, _, has_audio = probe(fp, str(source))
+                    start = float(c.get('start') or 0)
+                    source_duration = float(c.get('dur') or duration - start)
+                    native = inspect(source, script_lines(c), job.get('speech_language'), ff, source_duration, has_audio,
+                                     Path(base) / '.native-dialogue', c.get('task_id'), start,
+                                     resume=os.environ.get('THINKNOVA_RESUME_CAPTIONS') == '1')
+                    if native['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
+                        native_issues.append({'code': native['code'], 'clip': i + 1, 'task_no': native['task_id'],
+                                              'message': f"Clip {i + 1}: {native['status']}." +
+                                              (f" Evidence: {native['evidence']}." if native.get('evidence') else '')})
+                    native_reports.append(native)
+                else:
+                    native_reports.append({})
             shot, dur = norm_shot(ff, fp, base, c, i, wk)
             if not relaxed and job.get('explainer_preview') and not 9.95 <= dur <= 15.05:
                 raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} is outside 10-15 seconds', 2)
@@ -1066,34 +1078,15 @@ def main():
                 if trimming:
                     pace_report.append({'status':'boundary_trimmed', **trimming})
             prepared.append((shot, dur))
-        recognized = {}
         windows = [[] for _ in prepared]
         reliable = [[] for _ in prepared]
         cuts = [(0, duration) for _, duration in prepared]
         edit_report = []
         if native_edit:
-            from speech_recovery import recognize
-            from speech_review import caption_agreement
             for i, (shot, dur) in enumerate(prepared):
-                try:
-                    spoken, _ = recognize(shot, 'small', job.get('speech_language'), ff,
-                                          word_timestamps=True, vad_filter=True)
-                    recognized[i] = spoken
-                    windows[i] = recognized_caption_windows(spoken, dur)
-                    clip = job['clips'][i]
-                    lines = clip.get('subs') or [line['text'] for line in clip.get('dialogue', [])
-                                                if isinstance(line, dict) and isinstance(line.get('text'), str)]
-                    transcript = ''.join(word.word for span in spoken for word in span.words or [])
-                    if lines and transcript.strip():
-                        agreement = caption_agreement(''.join(lines), transcript)
-                        if agreement < 0.30:
-                            native_issues.append({'code': 'FILM_DIALOGUE_MISMATCH', 'clip': i + 1,
-                                                  'agreement': round(agreement, 3),
-                                                  'message': f'Clip {i + 1} native dialogue does not match the script.'})
-                    if lines and 'cutaway' not in clip and align_captions(lines, spoken, 0) is not None:
-                        reliable[i] = windows[i]
-                except (RuntimeError, ImportError):
-                    recognized[i] = []
+                windows[i] = sorted(native_reports[i].get('cues', {}).values())
+                if native_reports[i].get('status') == 'aligned' and 'cutaway' not in job['clips'][i]:
+                    reliable[i] = windows[i]
             planned = job.get('short_dialogue_seconds')
             minimum = planned - max(2, planned * 0.1) if planned else (45 if job.get('film_type') == 'explainer' else 30)
             if not planned and job.get('end_card'):
@@ -1117,7 +1110,6 @@ def main():
                                     ('speech_alignment_uncertain' if points else 'speech_unavailable')})
                 if start or end < dur:
                     shot = trim_dialogue_shot(ff, shot, start, end, wk, i)
-                    recognized[i] = shift_dialogue(recognized[i], start, end)
                     dur = end - start
             if 'cutaway' in c:
                 shot = apply_cutaway(ff, fp, base, shot, dur, c['cutaway'], i, wk)
@@ -1125,6 +1117,8 @@ def main():
             lines = c.get("subs") or (split_text(c["text"]) if c.get("text") else [])
             if not lines and quality_policy.native(job.get("quality_policy")):
                 lines = [line["text"] for line in c.get("dialogue", []) if isinstance(line, dict) and isinstance(line.get("text"), str) and line["text"].strip()]
+            if revision64:
+                lines = script_lines(c)
             secondary = c.get('subs2')
             if secondary is not None and (
                 job.get('srt') or not isinstance(secondary, list) or len(secondary) != len(lines)
@@ -1133,17 +1127,34 @@ def main():
                 raise Stop('SUBTITLE_SECONDARY_COUNT_MISMATCH: subs2 must match subs', 2)
             if store_film and secondary is None and not revision64:
                 lines = [fragment for line in lines for fragment in split_text(line, cjk_limit=8, protected=protected_names)]
+            if revision64:
+                report = native_reports[i]
+                for index, (begin, finish) in sorted(((int(key), timing) for key, timing in report.get('cues', {}).items())):
+                    cue = {'text': lines[index], 'start': t + max(0, begin - start),
+                           'end': t + min(dur, finish - start)}
+                    if cue['end'] > cue['start']:
+                        if secondary is not None:
+                            cue['text2'] = secondary[index]
+                        cues.append(cue)
+                missing = report.get('missing_lines') or (
+                    list(range(1, len(lines) + 1)) if report.get('status') != 'aligned' else [])
+                if missing:
+                    caption_alignment_pending = True
+                    missing_caption_lines.append({'clip': i + 1, 'lines': missing, 'task_no': c.get('task_id'),
+                                                  'reason': report.get('code') or 'FILM_CAPTION_ALIGNMENT_PENDING'})
+                elif lines:
+                    caption_alignment_used = True
+                lines = []
             if lines and not verified_srt:
                 shot_cues = None
-                if revision64 or native_edit or job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
+                if native_edit or job.get('film_rules_revision') == '2.4' or job.get('align_subtitles'):
                     try:
                         from speech_review import recognize
                         if relaxed:
                             from speech_recovery import recognize
-                        spoken = recognized[i] if native_edit else recognize(
-                            shot, 'small', job.get('speech_language'), ff, word_timestamps=True, vad_filter=True)[0]
+                        spoken = recognize(shot, 'small', job.get('speech_language'), ff, word_timestamps=True, vad_filter=True)[0]
                         shot_cues = align_captions(lines, spoken, t)
-                        if shot_cues is None and not revision64:
+                        if shot_cues is None:
                             windows = recognized_caption_windows(spoken, dur)
                             if windows:
                                 shot_cues = time_subs(lines, windows, t)
@@ -1156,12 +1167,6 @@ def main():
                         pass
                     caption_alignment_pending |= shot_cues is None
                 if shot_cues is None:
-                    if revision64:
-                        missing_caption_lines.append({'clip': i + 1, 'lines': list(range(1, len(lines) + 1))})
-                        t += dur
-                        if i + 1 < len(job['clips']):
-                            segment_boundaries.append(t)
-                        continue
                     shot_cues = time_subs(lines, speech_chunks(ff, shot, dur), t)
                 if secondary is not None:
                     if len(shot_cues) != len(secondary):
@@ -1245,12 +1250,18 @@ def main():
             options['segment_boundaries'] = segment_boundaries
         if store_film:
             options.update(film_profile='store_v2', shop_name=job.get('shop_name',''), featured_service=job['featured_service'], quality_policy=job.get('quality_policy', {}))
+        if revision64:
+            options['dialogue_checked_per_clip'] = relaxed
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
                   'subtitle_timing': ('estimated_unverified' if relaxed and caption_alignment_pending else 'review_required' if caption_alignment_pending else 'asr_estimated' if caption_alignment_estimated
                                       else 'aligned' if caption_alignment_used
                                       else 'provided' if job.get('srt') else 'estimated' if cues else 'not_applicable')}
         if store_film:
             result['speech_pace'] = pace_report
+            result['native_dialogue'] = [
+                {key: report[key] for key in ('task_id', 'source_sha256', 'status', 'code', 'missing_lines', 'cause', 'evidence') if key in report}
+                for report in native_reports
+            ]
         if native_edit:
             result['edit_timeline'] = edit_report
         if missing_caption_lines:
@@ -1263,11 +1274,16 @@ def main():
             diagnostics.extend(native_issues)
             report += '\n' + '\n'.join(item['message'] for item in native_issues)
         if relaxed and caption_alignment_pending:
-            diagnostics.append({'code':'SPEECH_CHECK_PENDING', 'message':'Subtitle timing is estimated; recognition unavailable.'})
+            diagnostics.append({'code': 'SPEECH_CHECK_PENDING', 'severity': 'warning',
+                                'message': 'Some subtitle timings could not be verified.'})
         if caption_alignment_pending and job.get('film') and (revision64 or not relaxed or job.get('require_caption_alignment')):
             passed = False
             message = 'The spoken words could not be matched to the reviewed captions; reassemble with verified timing.'
-            diagnostics.append({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'message': message})
+            if missing_caption_lines:
+                diagnostics.extend({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'clip': item['clip'],
+                                    'task_no': item['task_no'], 'message': message} for item in missing_caption_lines)
+            else:
+                diagnostics.append({'code': 'FILM_CAPTION_ALIGNMENT_PENDING', 'message': message})
             report += '\n  [FILM_CAPTION_ALIGNMENT_PENDING] ' + message
             options['caption_alignment_pending'] = True
             options['require_caption_alignment'] = revision64 or bool(job.get('require_caption_alignment'))

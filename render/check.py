@@ -88,7 +88,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58", "--native-dialogue"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58", "--native-dialogue", "--dialogue-checked-per-clip"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -497,7 +497,7 @@ def main():
             term = normalize(o[flag] or '')
             if not term or term not in text:
                 fail(code, 'required confirmed term missing from subtitles')
-    if "--speech" in on or o["film"]:
+    if "--dialogue-checked-per-clip" not in on and ("--speech" in on or o["film"]):
         s6_speech(ff, path, dur, o)
     if o["--sheet"]:
         os.makedirs(o["--sheet"], exist_ok=True)

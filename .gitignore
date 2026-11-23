@@ -35,3 +35,4 @@ publication_attempts/
 
 # Customer local instructions are never shipped or overwritten.
 /AGENTS.local.md
+.native-dialogue/

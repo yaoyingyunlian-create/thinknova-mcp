@@ -138,13 +138,12 @@ class SparseDeliveryTests(unittest.TestCase):
             claim={'grant':{'daily_budget':100}}
             args={'client_request_id':'run_fixture:store:0','prompt':'Original verified dialogue'}
             def atomic(file,value):file.write_text(json.dumps(value),encoding='utf-8')
-            def make_mute(command,**kwargs):Path(command[-1]).write_bytes(b'local mute fixture')
-            with patch.object(clip_recovery,'inspect_speech',return_value={'agreement':0.05,'transcript':'wrong'}), \
-                 patch.object(clip_recovery.subprocess,'run',side_effect=make_mute):
+            with patch.object(clip_recovery,'inspect_speech',return_value={'agreement':0.05,'transcript':'wrong'}):
                 result,report=clip_recovery.recover_clip(client,claim,plan,0,args,path,state,lambda:None,
                     lambda c,t,a,b:{**a,'max_credits':20},None,atomic,60)
             self.assertEqual(len(report['attempts']),3)
-            self.assertEqual(report['warning'],'CAPTION_ONLY_SHOT')
+            self.assertEqual(result,path)
+            self.assertEqual(report['warning'],'SPEECH_REVIEW_REQUIRED')
             self.assertEqual(path.read_bytes(),b'original')
             calls=[call for call in client.tool.call_args_list if call.args[0]=='animate_image']
             self.assertEqual(len(calls),1)
@@ -198,14 +197,14 @@ class SparseDeliveryTests(unittest.TestCase):
             path=Path(directory)/'shot.mp4';path.write_bytes(b'original')
             client=Mock();client.tool.return_value={}
             def atomic(file,value):file.write_text(json.dumps(value),encoding='utf-8')
-            with patch.object(clip_recovery,'inspect_speech',return_value={'agreement':0.01,'transcript':'wrong'}), \
-                 patch.object(clip_recovery.subprocess,'run',side_effect=lambda command,**kw:Path(command[-1]).write_bytes(b'muted')):
+            with patch.object(clip_recovery,'inspect_speech',return_value={'agreement':0.01,'transcript':'wrong'}):
                 result,report=clip_recovery.recover_clip(client,{'grant':{'daily_budget':100}},
                     {'quality_policy':{'version':'58'},'segments':[{'subs':['correct']}]},0,
                     {'prompt':'Original','client_request_id':'run:store:0'},path,{},lambda:None,
                     lambda c,t,args,b:{**args,'max_credits':20},None,atomic,60,budget_limit=70)
             self.assertTrue(result.is_file())
-            self.assertEqual(report['warning'],'CAPTION_ONLY_SHOT')
+            self.assertEqual(result,path)
+            self.assertEqual(report['warning'],'RECOVERY_BUDGET_INSUFFICIENT')
             self.assertFalse(any(call.args[0]=='animate_image' for call in client.tool.call_args_list))
 
     def test_publication_reuses_only_hash_matched_policy(self):
