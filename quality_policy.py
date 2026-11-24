@@ -16,7 +16,7 @@ def store_job(job):
         return job['film_profile'] == 'store_v2'
     return (job.get('film_schema_version') == 3 and job.get('short_dialogue_seconds') is not None
             and job.get('dialogue_segment_count') is not None
-            and (job.get('film_rules_revision') == '2.4' or job.get('script_rules_revision') in ('59', '60', '64')))
+            and (job.get('film_rules_revision') == '2.4' or job.get('script_rules_revision') in ('59', '60', '64', '65')))
 
 
 def native_film(job):

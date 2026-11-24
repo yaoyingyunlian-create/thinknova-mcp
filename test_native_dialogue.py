@@ -77,6 +77,29 @@ class NativeDialogueTests(unittest.TestCase):
         self.assertEqual(cuts[2], (0, 15))
         self.assertEqual(assemble.plan_dialogue_cuts([15, 15], [[(0, 11)], []], 2), [(0, 15), (0, 15)])
 
+    def test_revised_pauses_share_budget_and_retime_subtitles(self):
+        reliable = [[(0.25, 2), (4.8, 13.5)], [(1, 3.1), (4.3, 14.6)]]
+        edges, removed, gaps = assemble.plan_store_dialogue_edits([15, 15], reliable, 2.9)
+        self.assertAlmostEqual(gaps[0][0]['source_seconds'], 2.8)
+        self.assertLessEqual(gaps[0][0]['remaining_seconds'], 1.201)
+        removed_total = sum(right - left for ranges in removed for left, right in ranges)
+        self.assertLessEqual(removed_total + 30 - sum(end - start for start, end in edges), 2.901)
+        self.assertGreater(removed[0][0][0], 2.2)
+        self.assertLess(removed[0][0][1], 4.6)
+        self.assertAlmostEqual(assemble.edited_timestamp(4.8, 0, removed[0]), 4.8 - (removed[0][0][1] - removed[0][0][0]))
+        self.assertEqual(assemble.plan_store_dialogue_edits([15], [[]], 2)[1], [[]])
+
+    def test_revision65_dialogue_uses_quoted_duration_in_both_languages(self):
+        from store_film import check_dialogue_capacity
+
+        for language, line in [('zh', '这款样品今天可试用'), ('en', 'Please take a look today')]:
+            segment = {'duration_seconds': 10, 'dialogue': [
+                {'speaker': 'staff' if index % 2 else 'customer', 'text': line} for index in range(4)]}
+            check_dialogue_capacity(segment, 1, language, revision='65')
+            for seconds in (6, 15):
+                with self.assertRaisesRegex(ValueError, 'FILM_DIALOGUE_CAPACITY'):
+                    check_dialogue_capacity(segment, 1, language, duration=seconds, revision='65')
+
     def test_quote_checks_effective_capacity_without_creating(self):
         from automation import quoted_generation_args
         from store_film import check_dialogue_capacity

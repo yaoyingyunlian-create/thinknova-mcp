@@ -156,7 +156,7 @@ def inspect_store_dialogue(lines, directory):
 
 
 def preflight_store_script(plan, rules, directory, steps):
-    if plan.get('script_rules_revision') != '64':
+    if plan.get('script_rules_revision') not in ('64', '65'):
         return
     repair_file = directory / 'dialogue-repair.json'
     if repair_file.is_file():
@@ -186,7 +186,7 @@ def preflight_store_script(plan, rules, directory, steps):
     def checked_lines(candidate):
         validate_dialogue_v3(candidate)
         for clip, segment in enumerate(candidate['segments'], 1):
-            check_dialogue_capacity(segment, clip, candidate.get('speech_language'))
+            check_dialogue_capacity(segment, clip, candidate.get('speech_language'), revision=candidate.get('script_rules_revision'))
             if re.search(r'\b(?:invent no|make no|demonstration only)\b', segment.get('prompt', ''), re.I):
                 raise ValueError(f'FILM_PROMPT_UNSUPPORTED_RESTRICTION: segment {clip}')
             for index, line in enumerate(segment['dialogue'], 1):
@@ -264,7 +264,7 @@ def quoted_generation_args(client, tool, args, balance, require_duration=False, 
             if type(specification.get('duration_seconds')) is not int:
                 raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_UNAVAILABLE')
             from store_film import check_dialogue_capacity
-            check_dialogue_capacity(*dialogue_check, duration=specification['duration_seconds'])
+            check_dialogue_capacity(*dialogue_check[:3], revision=dialogue_check[3] if len(dialogue_check) > 3 else None, duration=specification['duration_seconds'])
         if require_duration and specification.get('duration_seconds') != args['duration_seconds']:
             raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_MISMATCH')
     if 'reference_roles' in args and quote.get('applied_reference_asset_ids') != args['reference_asset_ids']:
@@ -308,8 +308,8 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
             from store_film import check_dialogue_capacity
             for index, segment in enumerate(day_plan['segments']):
                 if not steps.get(f'task_{index}') and f'quote_credits_{index}' not in steps:
-                    check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'))
-            if (not resuming_paid_plan and day_plan.get('script_rules_revision') in ('59', '60', '64')
+                    check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'), revision=day_plan.get('script_rules_revision'))
+            if (not resuming_paid_plan and day_plan.get('script_rules_revision') in ('59', '60', '64', '65')
                     and day_plan.get('asset_preparation')
                     and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
                 from day_preparation import prepare_assets
@@ -473,15 +473,15 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     if steps.get('day_plan_sha256') not in (None, digest):
         raise RuntimeError('DAY_PLAN_CHANGED')
     authorized = set(rules['effective_rules'].get('authorized_asset_ids') or [])
-    if plan.get('script_rules_revision') in ('59', '60', '64'):
+    if plan.get('script_rules_revision') in ('59', '60', '64', '65'):
         authorized.update((plan.get('asset_bindings') or {}).values())
     shop = dict(rules['effective_rules'].get('shop_profile') or {})
-    if plan.get('script_rules_revision') in ('59', '60', '64'):
+    if plan.get('script_rules_revision') in ('59', '60', '64', '65'):
         shop['name'] = shop.get('name') or ''
         shop['featured_service'] = shop.get('featured_service') or shop.get('products') or ''
         shop['voice_identity'] = shop.get('voice_identity') or plan.get('script', {}).get('voice_identity', '')
     shop_assets = dict(shop.get('location_assets') or {})
-    if plan.get('script_rules_revision') in ('59', '60', '64'):
+    if plan.get('script_rules_revision') in ('59', '60', '64', '65'):
         for segment in plan['segments']:
             shop_assets.setdefault(segment.get('shop_location', 'generic'), []).append(segment['first_frame_asset_id'])
     if shop.get('name') != plan['shop_name'] or shop.get('featured_service') != plan['featured_service']:
@@ -507,10 +507,10 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                 if (previous.get('customer_identity') == plan['customer_identity']
                         or any(row['date'] == plan['date'] and row.get('customer_identity') == plan['customer_identity']
                                for row in history)):
-                    if plan.get('script_rules_revision') not in ('59', '60', '64'):
+                    if plan.get('script_rules_revision') not in ('59', '60', '64', '65'):
                         raise RuntimeError('FILM_CUSTOMER_REPEATED')
                     plan.setdefault('warnings', []).append('SCRIPT_CHARACTER_ROTATION_ADVICE_UNMET')
-        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59', '60', '64') else shop.get('editorial')
+        editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59', '60', '64', '65') else shop.get('editorial')
         validate_rotation(rows, history, editorial or {}, plan.get('schema_version', 1),
                           plan.get('script_rules_revision'), plan.setdefault('warnings', []))
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
@@ -533,19 +533,34 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['day_plan_sha256'] = digest
     requests = []
     for index, segment in enumerate(plan['segments']):
-        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') not in ('59', '60', '64'):
+        if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') not in ('59', '60', '64', '65'):
             roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
             segment = {**segment, 'reference_roles': roles,
                        'reference_boards': {**(shop.get('reference_boards') or {}), **(segment.get('reference_boards') or {})}}
-        prepared_segment = scripted_segment(segment, plan.get("script"), shop)
-        if plan.get('script_rules_revision') == '64':
+        revision65 = plan.get('script_rules_revision') == '65'
+        prepared_segment = segment if revision65 else scripted_segment(segment, plan.get("script"), shop)
+        if plan.get('script_rules_revision') in ('64', '65'):
             prepared_segment = {**prepared_segment, 'prompt': prepared_segment['prompt']
                                 + '\nSpeak the approved dialogue exactly. Preserve its product names and confirmed facts.'}
         args = generation_arguments(prepared_segment, shop_assets, authorized)
         if plan.get('dialogue_rules_revision') == '2.4':
             args['film_rules_revision'] = '2.4'
-        if plan.get('script_rules_revision') in ('59', '60', '64'):
+        if plan.get('script_rules_revision') in ('59', '60', '64', '65'):
             args['dialogue_language'] = 'zh' if re.search(r'[\u3400-\u9fff]', ''.join(segment.get('subs', []))) else plan.get('speech_language', 'en')
+        if revision65:
+            from film_recovery import film_run_id
+            boards = segment.get('reference_boards') or {}
+            args.update(dialogue=[{key: line[key] for key in ('speaker', 'text')}
+                                  for line in segment['dialogue']],
+                        film_run_id=film_run_id(directory / 'assemble.json'),
+                        film_segment_count=len(plan['segments']))
+            if len(plan['segments']) > 1:
+                args['continuity_asset_id'] = boards.get('cast') or boards.get('staff')
+                if not args['continuity_asset_id']:
+                    raise ValueError('FILM_CONTINUITY_BOARD_REQUIRED')
+            args['reference_asset_ids'] = args['reference_asset_ids'][:1]
+            args.pop('reference_roles', None)
+            args.pop('film_rules_revision', None)
         args.update(client_request_id=f'{run_no}:store:{index}', automation_run_id=run_no)
         if grant.get('project_key'):
             args['project_key'] = grant['project_key']
@@ -556,7 +571,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             args = quoted_generation_args(client, 'animate_image', args, balance,
                                           require_duration=plan.get('film_type') == 'explainer',
                                           dialogue_check=None if not segment.get('dialogue') or price_key in steps or f'task_{index}' in steps else
-                                          (segment, index + 1, plan.get('speech_language')))
+                                          (segment, index + 1, plan.get('speech_language'), plan.get('script_rules_revision')))
         requests.append(args)
     total = sum(args['max_credits'] for args in requests)
     if total + int(plan.get('preparation_credits', 0)) > min(budget, int(grant['daily_budget'])):
@@ -818,7 +833,7 @@ def run_day(path, budget):
 
 
 def day_plan_request_version(grant):
-    for version in (10, 9):
+    for version in (11, 10, 9):
         if version in grant.get('supported_day_plan_request_versions', []):
             return version
     return grant['day_plan_request_version'] if grant.get('day_plan_request_version') in (5, 6, 7, 8) else 4
@@ -910,7 +925,7 @@ def scheduled_store_work(client, phase, grant, day, slot, reminder):
                 from day_preparation import prepare_assets
                 directory = STATE / 'runs' / claim['run_no']
                 directory.mkdir(parents=True, exist_ok=True)
-                if result['plan'].get('script_rules_revision') == '64':
+                if result['plan'].get('script_rules_revision') in ('64', '65'):
                     execute(client, claim, day_plan=result['plan'], budget=int(grant['daily_budget']))
                     return
                 from render.preflight import require_film_preflight

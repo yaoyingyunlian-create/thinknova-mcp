@@ -156,7 +156,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
 
 
 
-def check_dialogue_capacity(segment, index, language=None, duration=None):
+def check_dialogue_capacity(segment, index, language=None, duration=None, revision=None):
     """Check the spoken script against the requested or quoted video duration."""
     lines = segment.get('dialogue') or []
     seconds = segment.get('duration_seconds') if duration is None else duration
@@ -171,7 +171,12 @@ def check_dialogue_capacity(segment, index, language=None, duration=None):
         return
     switches = sum(first.get('speaker') != second.get('speaker') for first, second in zip(lines, lines[1:]))
     required = cjk / 4.6 + english / 2.8 + switches * 0.25 + 0.4
-    if required > seconds + 1e-9:
+    if revision == '65':
+        minimum, maximum = seconds * 0.8, seconds * (14 / 15)
+        if not minimum <= required <= maximum:
+            raise ValueError(f'FILM_DIALOGUE_CAPACITY: segment {index}, needs {required:.2f}s, '
+                             f'target {minimum:.2f}–{maximum:.2f}s of quoted {seconds}s')
+    elif required > seconds + 1e-9:
         raise ValueError(f'FILM_DIALOGUE_OVER_CAPACITY: segment {index}, needs {required:.2f}s, available {seconds}s')
 
 
@@ -183,7 +188,7 @@ def validate_day_plan(plan):
     day = plan.get('date')
     if not isinstance(day, str) or date.fromisoformat(day).isoformat() != day or type(plan.get('rules_version')) is not int:
         raise ValueError('DAY_PLAN_DATE_OR_RULES_INVALID')
-    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') in ('59', '60', '64')
+    for field in (('featured_service', 'opening', 'visual_batch') if plan.get('script_rules_revision') in ('59', '60', '64', '65')
                   else ('shop_name', 'featured_service', 'opening', 'visual_batch')):
         if not isinstance(plan.get(field), str) or not plan[field].strip():
             raise ValueError(f'DAY_PLAN_REQUIRED: {field}')
@@ -223,6 +228,8 @@ def validate_day_plan(plan):
             validate_explainer_durations(durations)
             return plan
         expected = [15, 15] if plan['film_purpose'] == 'service' or plan.get('dialogue_rules_revision') == '2.4' else [15]
+        if plan.get('script_rules_revision') == '65' and (len(durations) == 1 or durations == [15, 15]):
+            return plan
         if durations != expected:
             raise ValueError('FILM_DIALOGUE_SEGMENTS_INVALID')
         return plan

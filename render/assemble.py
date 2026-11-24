@@ -382,6 +382,73 @@ def plan_dialogue_cuts(durations, windows, budget):
     return list(zip(starts, ends))
 
 
+
+def plan_store_dialogue_edits(durations, windows, budget):
+    """Share the cut budget across verified gaps, preserving dialogue and its immediate reactions."""
+    starts, ends = [0.0] * len(durations), list(durations)
+    cuts = [[] for _ in durations]
+    gaps = [[] for _ in durations]
+    candidates = []
+    for index, points in enumerate(windows):
+        for (_, left), (right, _) in zip(points, points[1:]):
+            if right - left > 1:
+                candidates.append((right - left, index, left, right, False))
+        if index and points and windows[index - 1]:
+            left, right = windows[index - 1][-1][1], points[0][0]
+            gap = durations[index - 1] - left + right
+            if gap > 1:
+                candidates.append((gap, index, left, right, True))
+
+    def available(left, right, index, boundary):
+        return (max(0.0, durations[index - 1] - left - 0.2) + max(0.0, right - 0.2)
+                if boundary else max(0.0, right - left - 0.4))
+
+    lo, hi = 1.0, max((entry[0] for entry in candidates), default=1.0)
+    for _ in range(32):
+        mid = (lo + hi) / 2
+        if sum(min(gap - mid, available(left, right, index, boundary))
+               for gap, index, left, right, boundary in candidates if gap > mid) > budget:
+            lo = mid
+        else:
+            hi = mid
+    for gap, index, left, right, boundary in candidates:
+        room = available(left, right, index, boundary)
+        removed = min(room, max(0.0, gap - hi))
+        if removed < 0.04:
+            removed = 0.0
+        if boundary and removed:
+            tail = max(0.0, durations[index - 1] - left - 0.2)
+            ends[index - 1] -= removed * tail / room
+            starts[index] += removed * (room - tail) / room
+        elif removed:
+            middle = (left + right) / 2
+            cuts[index].append((middle - removed / 2, middle + removed / 2))
+        gaps[index].append({'kind': 'boundary' if boundary else 'internal', 'start': left, 'end': right,
+                            'source_seconds': round(gap, 3), 'remaining_seconds': round(gap - removed, 3)})
+    return list(zip(starts, ends)), cuts, gaps
+
+
+def edited_timestamp(timestamp, start, removals):
+    return timestamp - start - sum(max(0, min(timestamp, right) - left) for left, right in removals)
+
+
+def trim_store_dialogue(ff, shot, start, end, removals, work, index):
+    if not removals:
+        return trim_dialogue_shot(ff, shot, start, end, work, index)
+    ranges = list(zip([start, *(right for _, right in removals)], [*(left for left, _ in removals), end]))
+    filters = []
+    for number, (begin, finish) in enumerate(ranges):
+        filters += [f'[0:v]trim=start={begin}:end={finish},setpts=PTS-STARTPTS[v{number}]',
+                    f'[0:a]atrim=start={begin}:end={finish},asetpts=PTS-STARTPTS[a{number}]']
+    inputs = ''.join(f'[v{number}][a{number}]' for number in range(len(ranges)))
+    filters.append(f'{inputs}concat=n={len(ranges)}:v=1:a=1[v][a]')
+    target = os.path.join(work, f'trimmed_{index:03d}.mp4')
+    run_ff(ff, ['-i', shot, '-filter_complex', ';'.join(filters), '-map', '[v]', '-map', '[a]',
+                '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '18', '-c:a', 'aac', target],
+           f'trim verified dialogue pauses in clip {index + 1}')
+    return target
+
+
 def dialogue_pace_adjustment(rate, language, duration, intervals, max_duration=None):
     """Prefer exact duration, then use a bounded amount of the film duration tolerance."""
     high = 5.2 if language == 'zh' else 3.0
@@ -514,7 +581,7 @@ def store_caption_font():
 
 
 def pick_font(job, text):
-    if job.get('script_rules_revision') == '64':
+    if job.get('script_rules_revision') in ('64', '65'):
         return store_caption_font()
     if job.get("font"):
         return job["font"]
@@ -561,7 +628,7 @@ def write_ass(path, job, cues, card_span, font):
            "ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding")
     style = u"Style: %s,{f},%d,%s,%s,%s,&H00000000,-1,0,0,0,100,100,0,0,1,%d,0,%d,60,60,%d,1\n"
     head = u"[Script Info]\nScriptType: v4.00+\nPlayResX: %d\nPlayResY: %d\nWrapStyle: 0\n\n[V4+ Styles]\nFormat: Name, %s\n" % (W, H, fmt)
-    revision64 = job.get('script_rules_revision') == '64'
+    revision64 = job.get('script_rules_revision') in ('64', '65')
     if revision64:
         size, bottom = 87, round(H * 400 / 1920)
     boxed = not revision64 and (job.get('film_profile') == 'store_v2' or job.get('subtitle_style') == 'box')
@@ -956,19 +1023,21 @@ def main():
     store_film = quality_policy.store_job(job)
     if store_film:
         job['film_profile'] = 'store_v2'
-    revision64 = store_film and job.get('script_rules_revision') == '64'
+    revision64 = store_film and job.get('script_rules_revision') in ('64', '65')
+    revision65 = store_film and job.get('script_rules_revision') == '65'
     if store_film:
         from render.native_dialogue import inspect, script_lines
     if revision64:
         if job.get('srt'):
-            raise Stop('FILM_STORE_USE_SCRIPT_DIALOGUE: revision 64 subtitles are derived from dialogue', 2)
+            raise Stop('FILM_STORE_USE_SCRIPT_DIALOGUE: store subtitles are derived from dialogue', 2)
+        max_lines = 8 if revision65 else 6
         for index, clip in enumerate(job.get('clips', []), 1):
             lines = clip.get('dialogue')
-            if not isinstance(lines, list) or not 4 <= len(lines) <= 6 or any(
+            if not isinstance(lines, list) or not 4 <= len(lines) <= max_lines or any(
                 not isinstance(line, dict) or not isinstance(line.get('text'), str) or not line['text'].strip()
                 for line in lines
             ):
-                raise Stop(f'FILM_STORE_USE_SCRIPT_DIALOGUE: clip {index} requires 4–6 lines', 2)
+                raise Stop(f'FILM_STORE_USE_SCRIPT_DIALOGUE: clip {index} requires 4–{max_lines} lines', 2)
             clip['subs'] = [line['text'] for line in lines]
             for cue, text in enumerate(clip['subs'], 1):
                 try:
@@ -993,7 +1062,7 @@ def main():
                 validate_beats(job.get('clips', []), job.get('film_type'))
             except ValueError as exc:
                 raise Stop(str(exc), 2) from exc
-        for key in (('featured_service',) if job.get('script_rules_revision') in ('59', '60', '64') else ('shop_name', 'featured_service')):
+        for key in (('featured_service',) if job.get('script_rules_revision') in ('59', '60', '64', '65') else ('shop_name', 'featured_service')):
             if not isinstance(job.get(key), str) or not job[key].strip():
                 raise Stop(f'FILM_PROFILE_REQUIRED: {key}', 2)
     validate_job(job)
@@ -1091,6 +1160,8 @@ def main():
         reliable = [[] for _ in prepared]
         cuts = [(0, duration) for _, duration in prepared]
         edit_report = []
+        internal_cuts = [[] for _ in prepared]
+        gap_report = [[] for _ in prepared]
         if native_edit:
             for i, (shot, dur) in enumerate(prepared):
                 windows[i] = sorted(native_reports[i].get('cues', {}).values())
@@ -1101,7 +1172,10 @@ def main():
             if not planned and job.get('end_card'):
                 minimum -= float(job['end_card'].get('dur') or 2.2)
             budget = max(0.0, sum(dur for _, dur in prepared) - minimum - 0.08)
-            cuts = plan_dialogue_cuts([dur for _, dur in prepared], reliable, budget)
+            if revision65:
+                cuts, internal_cuts, gap_report = plan_store_dialogue_edits([dur for _, dur in prepared], reliable, budget)
+            else:
+                cuts = plan_dialogue_cuts([dur for _, dur in prepared], reliable, budget)
         for i, (c, (shot, dur), (start, end)) in enumerate(zip(job['clips'], prepared, cuts)):
             if native_edit:
                 points = windows[i]
@@ -1117,9 +1191,11 @@ def main():
                                     'original_gap_seconds': original_gap, 'gap_before_seconds': gap,
                                     'status': 'checked' if reliable[i] else
                                     ('speech_alignment_uncertain' if points else 'speech_unavailable')})
-                if start or end < dur:
-                    shot = trim_dialogue_shot(ff, shot, start, end, wk, i)
-                    dur = end - start
+                if revision65:
+                    edit_report[-1].update(internal_cuts=internal_cuts[i], dialogue_gaps=gap_report[i])
+                if start or end < dur or internal_cuts[i]:
+                    shot = trim_store_dialogue(ff, shot, start, end, internal_cuts[i], wk, i)
+                    dur = edited_timestamp(end, start, internal_cuts[i])
             if 'cutaway' in c:
                 shot = apply_cutaway(ff, fp, base, shot, dur, c['cutaway'], i, wk)
             parts.append(shot)
@@ -1139,8 +1215,8 @@ def main():
             if revision64:
                 report = native_reports[i]
                 for index, (begin, finish) in sorted(((int(key), timing) for key, timing in report.get('cues', {}).items())):
-                    cue = {'text': lines[index], 'start': t + max(0, begin - start),
-                           'end': t + min(dur, finish - start)}
+                    cue = {'text': lines[index], 'start': t + max(0, edited_timestamp(begin, start, internal_cuts[i])),
+                           'end': t + min(dur, edited_timestamp(finish, start, internal_cuts[i]))}
                     if cue['end'] > cue['start']:
                         if secondary is not None:
                             cue['text2'] = secondary[index]
@@ -1282,6 +1358,13 @@ def main():
             result['native_audio_issues'] = native_issues
             diagnostics.extend(native_issues)
             report += '\n' + '\n'.join(item['message'] for item in native_issues)
+        if revision65:
+            for index, gaps in enumerate(gap_report):
+                remaining = [gap for gap in gaps if gap['remaining_seconds'] > 1.5]
+                if remaining:
+                    diagnostics.append({'code': 'FILM_DIALOGUE_GAP_REVIEW', 'severity': 'warning', 'clip': index + 1,
+                                        'task_no': job['clips'][index].get('task_id'), 'gaps': remaining,
+                                        'message': f'Clip {index + 1}: review dialogue pauses longer than 1.5 seconds.'})
         if relaxed and caption_alignment_pending:
             diagnostics.append({'code': 'SPEECH_CHECK_PENDING', 'severity': 'warning',
                                 'message': 'Some subtitle timings could not be verified.'})

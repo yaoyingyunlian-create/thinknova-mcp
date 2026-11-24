@@ -82,3 +82,7 @@ This is a video-production toolkit. Install with bootstrap.py setup --json, make
 Before quoting, check that the dialogue fits the requested duration. If FILM_DIALOGUE_OVER_CAPACITY identifies a segment, shorten its dialogue and update its captions together. The edit_timeline report records source in/out points and the remaining dialogue gap at each join.
 
 Scheduling and publishing use the customer's AI assistant's native timers and Ego Lite. The toolkit installs no OS tasks and no longer supplies active upload/login implementations. Old commands return migration guidance. Reuse MCP OAuth for quotes, generation and downloads, then use the toolkit to assemble the video. Keep the confirmed budget and existing idempotency keys. No pilot or device pairing is needed. No platform OAuth or browser login is required for creation. Preserve customer memory, assets, platform sessions and work during upgrades.
+
+修订 65（以 MCP 返回的生效修订为准）：主推项、三条不同已确认卖点、一个行动指引，缺一就只问缺项，保存确认后的项目规则再报价。多段固定同一获授权人物板，用 edit_image 备竖屏首帧再 animate_image。4–8 句覆盖生效时长的 80%–93.33%，对白只用原生音轨，字幕源自逐句稿。店员可对镜头说咨询动作。段内与段间长空档先从原素材剪，保留可靠对白和动作。已有任务复用原任务号。
+
+Revision 65 applies when active on MCP. Ask only for missing facts before quoting: featured item, three distinct verified facts, and one viewer action. Use a shared approved continuity board, portrait first frames, and native dialogue only. Write 4–8 lines filling 80%–93.33% of the effective duration. Trim verified unwanted gaps and re-time exact-script captions. Resume existing tasks as recorded.
