@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.34
+# ThinkNova 视频制作工具包 v3.1.35
 
 新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
 
@@ -43,7 +43,9 @@ Run `film-preflight` before new paid jobs to check rendering, subtitles and the 
 
 After download, the toolkit checks the original audio and saves line timings against the original task and source hash. It retries the affected audio window for missing timings and retains a playable preview with the original audio if recognition is unavailable. Retakes require evidence for the affected clip and an approved budget.
 
-助理运行 `toolkit.py film-events job.json`，使用 MCP 的 report_film_events 提交 events，随后只对服务端返回的 acknowledged ID 使用 `toolkit.py film-events job.json --ack EVENT_ID`（多个 ID 重复传入 --ack）。断网时留在本地，下次巡检继续递送。日志仅包含结构化诊断字段。
+助理在开工前运行 `toolkit.py film-events job.json` 获取运行号，运行 `toolkit.py film-preflight job.json` 记录预检故障，报价和建单使用同一 `film_run_id`（服务器支持时）。制作结束时，即使失败，助理也运行 `toolkit.py film-events job.json`，使用 MCP 的 report_film_events 提交 events，随后只对服务端返回的 acknowledged ID 使用 `toolkit.py film-events job.json --ack EVENT_ID`（多个 ID 重复传入 --ack）。断网时留在本地，下次巡检继续递送。日志仅包含结构化诊断字段。
+
+Use the same job path and film run ID for preflight, quotes, creation, and incident reporting. Relay pending events after every attempt and acknowledge only IDs returned by MCP. The toolkit records delivery only after the final file matches its quality receipt.
 
 ## 成片交付与发布确认
 

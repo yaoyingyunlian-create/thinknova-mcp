@@ -289,7 +289,8 @@ def main() -> int:
     film_events_parser = sub.add_parser("film-events", help="List pending film diagnostics or acknowledge delivered events")
     film_events_parser.add_argument("job", type=Path)
     film_events_parser.add_argument("--ack", action="append", default=[])
-    film_events_parser.add_argument("--record-stage", choices=("generation", "download"))
+    film_events_parser.add_argument("--segment", type=int)
+    film_events_parser.add_argument("--record-stage", choices=("preflight", "generation", "download", "assembly", "captions", "quality", "recheck"))
     film_events_parser.add_argument("--outcome", choices=("started", "passed", "failed"))
     film_events_parser.add_argument("--code", default="")
     film_events_parser.add_argument("--task-no")
@@ -304,7 +305,8 @@ def main() -> int:
     handoff_parser.add_argument("--platform")
     handoff_parser.add_argument("--observed-account")
     handoff_parser.add_argument("--verified-absent", action="store_true")
-    sub.add_parser("film-preflight", help="Test local rendering, captions and speech before creating paid jobs")
+    film_preflight_parser = sub.add_parser("film-preflight", help="Test local rendering, captions and speech before creating paid jobs")
+    film_preflight_parser.add_argument('job', type=Path, nargs='?', help='Film job path for queuing diagnostic events')
     film_parser = sub.add_parser("film", help="Render and prepare a local film for review")
     film_parser.add_argument("job", type=Path)
     film_mode = film_parser.add_mutually_exclusive_group()
@@ -325,7 +327,28 @@ def main() -> int:
     args = parser.parse_args()
     if args.command == "film-preflight":
         from render.preflight import film_preflight
-        result = film_preflight()
+        from film_recovery import film_run_id, pending_events, record_external_event
+        job_path = args.job.resolve() if args.job else None
+        run_id = None
+        if job_path:
+            try:
+                run_id = film_run_id(job_path)
+            except (OSError, ValueError, LocalStateBusy):
+                pass
+        try:
+            result = film_preflight()
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+            result = {'status': 'blocked', 'stage': 'media', 'error': 'FILM_LOCAL_PREFLIGHT_FAILED'}
+        if job_path:
+            try:
+                if not run_id:
+                    raise ValueError('FILM_EVENTS_UNAVAILABLE')
+                result['run_id'] = run_id
+                if result['status'] != 'ready':
+                    record_external_event(ROOT, job_path, 'preflight', 'failed', result['error'])
+                result['diagnostic_events'] = pending_events(job_path)
+            except (OSError, ValueError, LocalStateBusy):
+                result['diagnostic_status'] = 'FILM_EVENTS_UNAVAILABLE'
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result["status"] == "ready" else 2
     if args.command == "prepare-reference":
@@ -363,16 +386,14 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False))
         return 0
     if args.command == "film-events":
-        from film_recovery import pending_events, record_external_event
+        from film_recovery import film_run_id, pending_events, record_external_event
         from local_state import LocalStateBusy
         try:
             if args.record_stage:
-                record_external_event(ROOT, args.job.resolve(), args.record_stage, args.outcome, args.code, args.task_no)
+                record_external_event(ROOT, args.job.resolve(), args.record_stage, args.outcome,
+                                      args.code, args.task_no, segment=args.segment)
             events = pending_events(args.job.resolve(), set(args.ack))
-            if events:
-                print(json.dumps({'events': events}, ensure_ascii=False))
-            else:
-                print('{"events":[]}')
+            print(json.dumps({'run_id': film_run_id(args.job.resolve()), 'events': events}, ensure_ascii=False))
             return 0
         except (OSError, ValueError, LocalStateBusy):
             print('{"error":"FILM_EVENTS_UNAVAILABLE"}')
@@ -385,6 +406,19 @@ def main() -> int:
         except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError) as exc:
             result = {'status': 'blocked', 'delivery_status': 'technical_fix_required',
                       'error': str(exc) if isinstance(exc, ValueError) else 'FILM_REVIEW_PREPARATION_FAILED'}
+        from film_recovery import film_run_id, pending_events, record_external_event
+        job_path = args.job.resolve()
+        try:
+            result['run_id'] = film_run_id(job_path)
+            if result.get('delivery_status') == 'delivered':
+                record_external_event(ROOT, job_path, 'delivery', 'passed', 'FILM_DELIVERED', fingerprint=result['sha256'])
+            elif not any(event['outcome'] == 'failed' for event in result.get('diagnostic_events', [])):
+                code = str(result.get('error', '')).split(':', 1)[0]
+                safe_code = code if re.fullmatch(r'[A-Z0-9_]{2,64}', code) else 'FILM_REVIEW_PREPARATION_FAILED'
+                record_external_event(ROOT, job_path, 'recheck' if args.recheck else 'quality', 'failed', safe_code)
+            result['diagnostic_events'] = pending_events(job_path)
+        except (OSError, ValueError, LocalStateBusy):
+            result['diagnostic_status'] = 'FILM_EVENTS_UNAVAILABLE'
         print(json.dumps(result, ensure_ascii=False))
         return 0 if result['status'] == 'awaiting_review' else 2
     if args.command == "assistant-schedule":

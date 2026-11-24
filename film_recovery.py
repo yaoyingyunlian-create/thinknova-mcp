@@ -61,9 +61,21 @@ def render_film(root, job_path, job, recheck=False):
         return 2, {'status': 'blocked', 'error': 'FILM_RUN_BUSY'}
 
 
-def record_external_event(root, job_path, stage, outcome, code, task_no):
+def film_run_id(job_path):
     from automation import atomic
-    if stage not in ('generation', 'download', 'quality') or outcome not in ('started', 'passed', 'failed'):
+    state_path = job_path.with_name('.' + job_path.name + '.film-state.json')
+    with state_lock(state_path):
+        try:
+            return json.loads(state_path.read_text(encoding='utf-8'))['run_id']
+        except FileNotFoundError:
+            run_id = uuid.uuid4().hex
+            atomic(state_path, {'run_id': run_id, 'events': []})
+            return run_id
+
+
+def record_external_event(root, job_path, stage, outcome, code, task_no=None, *, segment=None, fingerprint=None):
+    from automation import atomic
+    if stage not in ('preflight', 'generation', 'download', 'assembly', 'quality', 'captions', 'recheck', 'delivery') or outcome not in ('started', 'passed', 'failed'):
         raise ValueError('FILM_EVENT_INVALID')
     if not re.fullmatch(r'[A-Z0-9_]{0,64}', code) or (outcome == 'failed' and not code):
         raise ValueError('FILM_EVENT_INVALID')
@@ -76,11 +88,21 @@ def record_external_event(root, job_path, stage, outcome, code, task_no):
         except FileNotFoundError:
             state = {'run_id': uuid.uuid4().hex, 'events': []}
         version = json.loads((root / 'manifest.json').read_text(encoding='utf-8'))['version']
-        item = {'event_id': uuid.uuid4().hex, 'run_id': state['run_id'], 'stage': stage,
+        event_id = (hashlib.sha256(json.dumps([state['run_id'], stage, outcome, code, task_no, segment, fingerprint, state.get('last_failure_event_id')]).encode()).hexdigest()[:32]
+                    if fingerprint else uuid.uuid4().hex)
+        if any(event['event_id'] == event_id for event in state['events']):
+            return
+        item = {'event_id': event_id, 'run_id': state['run_id'], 'stage': stage,
                 'outcome': outcome, 'code': code, 'toolkit_version': version, 'rule_version': 'default', 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
         if task_no:
             item['task_no'] = task_no
+        if segment is not None:
+            if type(segment) is not int or not 1 <= segment <= 200:
+                raise ValueError('FILM_EVENT_INVALID')
+            item['segment'] = segment
         state['events'].append(item)
+        if outcome == 'failed':
+            state['last_failure_event_id'] = event_id
         atomic(state_path, state)
 
 
@@ -134,7 +156,10 @@ def _render(root, job_path, job, recheck, state_path, atomic):
         rule_version = 'default'
 
     def event(stage, outcome, code='', details=None):
-        state['events'].append({'event_id': uuid.uuid4().hex, 'run_id': state['run_id'], 'stage': stage,
+        event_id = uuid.uuid4().hex
+        if outcome == 'failed':
+            state['last_failure_event_id'] = event_id
+        state['events'].append({'event_id': event_id, 'run_id': state['run_id'], 'stage': stage,
                                 'outcome': outcome, 'code': code, 'toolkit_version': toolkit_version,
                                 'rule_version': rule_version, 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                                 **(details or {})})
@@ -166,6 +191,13 @@ def _render(root, job_path, job, recheck, state_path, atomic):
             matches = [item for item in report.get('diagnostics', [])
                        if isinstance(item, dict) and item.get('code') == reason] if code else []
             for diagnostic in matches or [{}]:
+                fault_stage = stage
+                if code and stage == 'quality':
+                    render_stage = str(report.get('stage', ''))
+                    if render_stage.startswith(('shot ', 'cutaway ', 'joining', 'loudness', 'render', 'normalize')):
+                        fault_stage = 'assembly'
+                    elif render_stage.startswith(('subs', 'burning subtitles')) or reason.startswith('FILM_CAPTION_'):
+                        fault_stage = 'captions'
                 details = {}
                 clip, task = diagnostic.get('clip'), diagnostic.get('task_no')
                 if type(clip) is int and 1 <= clip <= 200:
@@ -178,7 +210,7 @@ def _render(root, job_path, job, recheck, state_path, atomic):
                     start, end = (round(float(value) * 1000) for value in match.groups())
                     if 0 <= start <= end <= 3600000:
                         details.update(start_ms=start, end_ms=end)
-                event(stage, 'failed' if code else 'passed', reason if code else '', details)
+                event(fault_stage, 'failed' if code else 'passed', reason if code else '', details)
 
     def run_stage(stage, args):
         state['operation'] = {'id': uuid.uuid4().hex, 'stage': stage, 'args': args}

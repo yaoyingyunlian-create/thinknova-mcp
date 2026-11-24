@@ -11,6 +11,37 @@ from local_state import state_lock
 
 
 class FilmRecoveryTests(unittest.TestCase):
+    def test_cli_queues_early_faults_and_final_delivery_with_one_run(self):
+        from io import StringIO
+        import sys
+        import toolkit
+
+        def call(*args):
+            with patch.object(sys, 'argv', ['toolkit.py', *args]), patch.object(sys, 'stdout', new_callable=StringIO) as output:
+                toolkit.main()
+                return json.loads(output.getvalue())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            job = str(Path(tmp) / 'film.json')
+            initial = call('film-events', job)
+            self.assertEqual(initial['events'], [])
+            with patch('render.preflight.film_preflight', side_effect=OSError('environment error')):
+                failed = call('film-preflight', job)
+            self.assertEqual(failed['run_id'], initial['run_id'])
+            self.assertEqual(failed['diagnostic_events'][0]['code'], 'FILM_LOCAL_PREFLIGHT_FAILED')
+            with patch('toolkit.film_review', return_value={'status': 'blocked', 'error': 'FILM_RECHECK_SOURCE_MISSING',
+                                                           'delivery_status': 'preview_available'}):
+                failure = call('film', job, '--recheck')
+            self.assertEqual({row['stage'] for row in failure['diagnostic_events']}, {'preflight', 'recheck'})
+            with patch('toolkit.film_review', return_value={'status': 'awaiting_review', 'delivery_status': 'delivered',
+                                                           'sha256': 'a' * 64}):
+                first = call('film', job)
+                second = call('film', job)
+            self.assertEqual(first['diagnostic_events'], second['diagnostic_events'])
+            last = second['diagnostic_events'][-1]
+            self.assertEqual((last['stage'], last['outcome'], last['code']), ('delivery', 'passed', 'FILM_DELIVERED'))
+            self.assertEqual(len(call('film-events', job, '--ack', last['event_id'])['events']), 2)
+
     def test_captions_keep_existing_dialogue(self):
         job = {'clips': [{'dialogue': [{'text': '这是一个需要拆分的字幕测试'}]}]}
         revised = caption_repair(job)
