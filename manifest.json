@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.36",
+  "version": "thinknova-automation-toolkit-v3.1.37",
   "text_line_endings": "lf",
-  "revision": "0a01b6303b4589249be579086b130535659b7b0d91065513fc23d9680e4697e5",
+  "revision": "50b1ae4de08ebdc0d79fc2fa5d6d67d8dcf663483fbebd0f871478f87523193b",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "b030043d170f3de17295a4e05ea678022e49ad9845c5cc7f119bf72cd194d031"
+      "sha256": "fe593e17111c4b46140a524e00ec71e7229e9e7fd67d60d0a388eeeff3e44d4d"
     },
     {
       "path": "AUTOMATION.md",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "6504d2b7a9c3305239dc79e44c7d35a5e9ab4e59ee3b6079764e3d670d66eb93"
+      "sha256": "fd329ed6dab47e5420e806908830bd8c0059b5e0fae1acd088675f34c49eaef4"
     },
     {
       "path": "clip_recovery.py",
@@ -349,7 +349,7 @@
     },
     {
       "path": "rules/store-film-rules-v64.md",
-      "sha256": "88389322a40e91d8f2d0e613a0db61f5143d50f768f5f815654137eb3480abda"
+      "sha256": "4f27520155a5955603192c31949291350b6fec9eb25955530e3b2c05c93b6794"
     },
     {
       "path": "rules/\u56fa\u5b9a\u89d2\u8272\u7cfb\u5217\u77ed\u7247.md",
