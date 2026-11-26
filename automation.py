@@ -247,6 +247,7 @@ def preflight_store_script(plan, rules, directory, steps):
 
 def quoted_generation_args(client, tool, args, balance, require_duration=False, dialogue_check=None):
     from dialogue_encoding import validate_text
+    args = {key: value for key, value in args.items() if key not in ('quote_fingerprint', 'max_credits')}
     if 'prompt' in args:
         validate_text(args['prompt'], args.get('dialogue_language'))
     # Quotes always use a read-only tool. Old/mixed deployments can omit the quote, but cannot create paid work.
@@ -269,7 +270,10 @@ def quoted_generation_args(client, tool, args, balance, require_duration=False, 
             raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_MISMATCH')
     if 'reference_roles' in args and quote.get('applied_reference_asset_ids') != args['reference_asset_ids']:
         raise RuntimeError('MCP_FILM_QUOTE_REFERENCE_MISMATCH')
-    return {**args,'max_credits':credits}
+    creation = {**args, 'max_credits': credits}
+    if quote.get('quote_fingerprint'):
+        creation['quote_fingerprint'] = quote['quote_fingerprint']
+    return creation
 
 
 @keep_run_alive
@@ -547,13 +551,13 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             args['film_rules_revision'] = '2.4'
         if plan.get('script_rules_revision') in ('59', '60', '64', '65'):
             args['dialogue_language'] = 'zh' if re.search(r'[\u3400-\u9fff]', ''.join(segment.get('subs', []))) else plan.get('speech_language', 'en')
+        if plan.get('script_rules_revision') in ('64', '65') and segment.get('dialogue'):
+            args['dialogue'] = [{key: line[key] for key in ('speaker', 'text')} for line in segment['dialogue']]
         if revision65:
             from film_recovery import film_run_id
             boards = segment.get('reference_boards') or {}
-            args.update(dialogue=[{key: line[key] for key in ('speaker', 'text')}
-                                  for line in segment['dialogue']],
-                        film_run_id=film_run_id(directory / 'assemble.json'),
-                        film_segment_count=len(plan['segments']))
+            args.update(film_run_id=film_run_id(directory / 'assemble.json'),
+                        film_segment_count=len(plan['segments']), film_segment_number=index + 1)
             if len(plan['segments']) > 1:
                 args['continuity_asset_id'] = boards.get('cast') or boards.get('staff')
                 if not args['continuity_asset_id']:
@@ -648,7 +652,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         from render.native_dialogue import inspect, script_lines
         source_seconds, _, has_audio = probe(tool('ffprobe'), str(path))
         dialogue = inspect(path, script_lines(clip), plan.get('speech_language'), tool('ffmpeg'), source_seconds,
-                           has_audio, directory / '.native-dialogue', selected_task)
+                           has_audio, directory / '.native-dialogue', selected_task, resume=True)
         if dialogue['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
             native_issues.append({'clip': index + 1, 'task_no': selected_task, 'code': dialogue['code']})
         if plan.get('film_type') == 'explainer':

@@ -5,6 +5,8 @@
 工具包只负责制作：素材准备 → ThinkNova 生成与取件 → 拼片 → 字幕 → 质检 → 成片待审包。
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
 
+门店项目每段都提交结构化 `dialogue`，从同一稿生成字幕。报价返回 `quote_fingerprint` 时，原样带入建单。门店主副字幕使用白字黑描边。
+
 ## 首次使用与更新
 1. 用现有 MCP OAuth 连接调用 get_balance、get_toolkit、get_content_rules。会员、预算及素材许可按服务端实际结果判断。
 2. 缺工具包自动准备；开工运行 bootstrap.py update --workspace "<客户工作目录>" --json。按返回的 active_toolkit、python 继续；冲突用官方干净副本自动恢复，保留工作目录与客户数据。
@@ -37,5 +39,6 @@ Check that the customer AI supports native timers and local execution; otherwise
 每天先回看当前项目最近一条的顾客、开场画面和主讲卖点。新片换顾客和具体情境，店员按本条剧情选角，授权商品可复用。项目通过 shop_profile.staff_casting 选择 fixed 且有授权参考图时，复用固定店员；同一个真实地点可换区域、时段或正在做的事。旧双人参考只可提取固定店员。给每条新顾客单独备图，同一条片各镜共用。只有重试原任务才继续沿用旧镜头和请求号。
 
 ## English
+For a store project, submit the approved `dialogue` for every segment and use it as the caption source. Carry `quote_fingerprint` unchanged when returned by the quote. Both store caption languages use white text with a black outline.
 For a new work, read the project’s latest customer, opening and selling point. Choose a visibly distinct fictional customer and a different situation. Use story-appropriate staff and keep approved products. Reuse a staff reference across films when the project selects fixed casting, and reuse today’s cast within the same film. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Run toolkit.py film-preflight with the production Python before new paid work. Keep fetching and rechecking existing work if the preflight fails. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.
 Keep one job path and run ID per film. Under revision 65 send visual direction as prompt and the exact approved speaker/text lines as dialogue. Multi-segment calls use the same continuity_asset_id and film_segment_count. Send queued film events through the existing MCP OAuth connection after every attempt, including failures, and during patrol. Only acknowledge IDs returned by the server. Send the film and available assets whenever delivery_status=delivered. Use speech_review.json to identify terms that need listening. Its publication_ready field does not describe delivery status. Use film --existing for a checked legacy output and film --recheck for a failed preview. Reuse the original media and task IDs. Scheduling belongs to the customer's AI assistant. Use existing MCP OAuth for quotes and generation, then toolkit.py film for local production. Publishing uses Ego Lite within confirmed accounts and consent. Keep credentials out of memory and record actual outcomes.

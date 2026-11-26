@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.37",
+  "version": "thinknova-automation-toolkit-v3.1.38",
   "text_line_endings": "lf",
-  "revision": "50b1ae4de08ebdc0d79fc2fa5d6d67d8dcf663483fbebd0f871478f87523193b",
+  "revision": "ba9c1a38c4e6357d9120664688faea23d1a68b6a3c3bbb27ce28f1f37b58dfcb",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "fe593e17111c4b46140a524e00ec71e7229e9e7fd67d60d0a388eeeff3e44d4d"
+      "sha256": "e07d6d831785dd2a152dd0808c049ef87a0674647f450f53ca9c6042fe4b9004"
     },
     {
       "path": "AUTOMATION.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "4fcbe2a6d70e39dbe57d829a6bd8e74f65a39eaef40726317e2005f77c0c2ddf"
+      "sha256": "0bf5dd1ee465fbd1b793bddf50b4c14c450c469e7fa5e1fd34b80fc24a736f06"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "fd329ed6dab47e5420e806908830bd8c0059b5e0fae1acd088675f34c49eaef4"
+      "sha256": "2788e95a93114b90097c8d2048afae778e5639454dac1abcada97ffb8e195991"
     },
     {
       "path": "clip_recovery.py",
@@ -249,7 +249,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "18ccda17018b8ca8ff6c4a2679c806b251ed42e36642723125f0b6c5898ef581"
+      "sha256": "5f510372d9f2002efac5e60dc836b9684cc779a70e650ea1b58d498b1f969bcd"
     },
     {
       "path": "render/captions.py",
@@ -393,7 +393,7 @@
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "19b231a683a93ded84fa28623b4a93401f9cfaf1548b3243f5bff8e975910f3a"
+      "sha256": "95afe2c8697bda81396bc4c4a95cae82c51d5baf1e1550face53c5cff1d5de9b"
     },
     {
       "path": "speech_recovery.py",
@@ -481,7 +481,7 @@
     },
     {
       "path": "test_subtitle_layout.py",
-      "sha256": "203e4586c2b0f769055a28d4c5cfbc4bedfe0af322dc75815a9e6c965fb939f3"
+      "sha256": "85aaf9538d8e405c16fa5d07605751495d110b060e97f10e0ddd4f38368735a7"
     },
     {
       "path": "toolkit.py",

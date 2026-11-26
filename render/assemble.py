@@ -631,20 +631,26 @@ def write_ass(path, job, cues, card_span, font):
     revision64 = job.get('script_rules_revision') in ('64', '65')
     if revision64:
         size, bottom = 87, round(H * 400 / 1920)
-    boxed = not revision64 and (job.get('film_profile') == 'store_v2' or job.get('subtitle_style') == 'box')
+    store_film = job.get('film_profile') == 'store_v2' or revision64
+    boxed = not store_film and job.get('subtitle_style') == 'box'
     size2 = max(24, round(size * 0.72))
     box = ("Style: %s,{f},%d,%s,%s,&H50141414,&H00000000,-1,0,0,0,100,100,0,0,"
            "3,16,0,2,60,60,%d,1\n")
     for label, pixels, colour, outline in [('Sub', size, '&H00FFFFFF', 13 if revision64 else 7),
-                                           ('Sub2', size2, '&H008AE0F5', 6)]:
+                                           ('Sub2', size2, '&H00FFFFFF' if store_film else '&H008AE0F5', 6)]:
         row = box % (label, pixels, colour, colour, bottom) if boxed else (
-            style % (label, pixels, colour, colour, '&H00000000' if revision64 else '&H00141414', outline, 2, bottom))
+            style % (label, pixels, colour, colour, '&H00000000' if store_film else '&H00141414', outline, 2, bottom))
         head += row.replace("{f}", font)
     head += (style % ("Badge", 30, "&H00FFFFFF", "&H00FFFFFF", "&H00141414", 3, 7, 60)).replace("{f}", font)
     head += (style % ("Card", 110, "&H00232D3C", "&H00232D3C", "&H00FFFFFF", 0, 5, 0)).replace("{f}", font)
     closing = ("Style: Closing,{f},80,&H00FFFFFF,&H00FFFFFF,&H50141414,&H00000000,"
                "-1,0,0,0,100,100,0,0,3,16,0,8,60,60,%d,1\n")
-    head += (closing % job.get('closing_overlay_top', 220)).replace("{f}", font)
+    top = job.get('closing_overlay_top', 220)
+    if store_film:
+        closing = style % ("Closing", 80, "&H00FFFFFF", "&H00FFFFFF", "&H00000000", 8, 8, top)
+    else:
+        closing %= top
+    head += closing.replace("{f}", font)
     head += u"\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
     rows = []
     for index, cue in enumerate(cues, 1):
@@ -1051,7 +1057,7 @@ def main():
         job['quality_policy'] = quality_policy.store_policy(job.get('quality_policy'))
     relaxed = quality_policy.enabled(job.get('quality_policy'))
     if store_film:
-        job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='box')
+        job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='outline')
         from store_film import validate_beats
         if job.get('film_schema_version') == 3:
             counts = (3, 4) if job.get('film_type') == 'explainer' else (1, 2)

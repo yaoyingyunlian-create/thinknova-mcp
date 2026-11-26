@@ -22,6 +22,10 @@ description: 片段都生成好之后，拼成片、验收、交给店主之前�
 ## 一、先报价
 get_balance 的 quote_request 把这条片要的首帧和每段视频逐项报出来（视频带 `duration_seconds`），合计一句话告诉店主。在店主给过的每日上限内直接做；超了才问。网络重试沿用原请求号。
 
+从 MCP 读取当前修订的创作规则。规则附有餐饮、美业和商品的逐句画面范例时，只借用结构，使用客户自己的已确认事实和素材。逐句稿单独提交为 `dialogue`。门店报价返回 `quote_fingerprint` 时，建单沿用该值及原参数。收到 `MCP_STORE_QUOTE_CHANGED` 时先重新报价。
+
+Read the effective creation rules from MCP. Use the food, beauty and retail dialogue examples as structure for the customer's own verified facts. Submit speaker and text in `dialogue`. When the quote includes `quote_fingerprint`, carry it with the unchanged generation arguments. Request a fresh quote if ThinkNova returns `MCP_STORE_QUOTE_CHANGED`.
+
 ## 二、怎么拼
 
 新版 2.4 产品片和服务片都用两段 15 秒，每段 55–62 字。手写 job 填 `film_profile: "store_v2"`、`film_schema_version: 3`、`film_rules_revision: "2.4"`、`dialogue_segment_count: 2` 和 `short_dialogue_seconds: 30`。用 `closing_overlay` 在最后 2.5 秒叠加已确认信息，`closing_overlay_top` 可在 150–380 调整。字幕按转写对齐，不确定时留本机预览。可在 `srt` 指定已经核对的成片字幕时间，拼片将保持片段原速。模板见 `render/templates/store-film-v24.example.json`。
@@ -33,8 +37,9 @@ For revision 2.4, ordinary product and service films use two 15-second segments.
 .venv/bin/python render/assemble.py job.json --json
 ```
 - **整段用，段与段直接接。** 台词写够了的片段不用裁。只裁两种：每段开头结尾多出来的空白（超过 1 秒才裁，量法：`ffmpeg -i clip.mp4 -af silencedetect=noise=-35dB:d=0.4 -f null -`）；某个阶段画面坏了（多了字、人走样），只剪掉那一阶段。
-- 片段里有超过 1 秒的没人声：不是去剪画面，是台词写短了——下次把这一段台词写够；这一次用配乐垫住，或把这一段带着更长的台词重新生成（先说明费用）。
+- 片段里出现意外空档时，回听原声并记录时间段。先用原片缩短可剪空档，保留完整对白和自然换气，再重新对齐字幕。
 - `subs` 逐字照台词写，每屏一句、不超过 8 个非空白字符（字号 90）；长句拆成几屏。双语在旁边加 `subs2`，条数一一对应。
+- 门店片两种语言均使用白字黑描边。Store captions use white text with a black outline in both languages.
 - 口播或字幕必须含店名或主推项。到店片由店里的人说一个已核实的位置提示或预约动作，并将店名和该项信息叠在原画面末尾。完整地址和电话放账号主页。
 - 有店主批准的配乐就加 `music`，`music_db` 用 -22。
 

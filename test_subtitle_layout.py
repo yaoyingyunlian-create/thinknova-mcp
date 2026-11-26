@@ -28,6 +28,22 @@ class SubtitleLayoutTests(unittest.TestCase):
             self.assertIn('WrapStyle: 0',data)
             self.assertIn(r'\N',data)
 
+    def test_store_subtitles_override_legacy_box_for_both_languages(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'captions.ass'
+            cues = [{'start': 0, 'end': 2, 'text': '一杯茶', 'text2': 'A cup of tea'}]
+            for revision in (None, '64', '65'):
+                job = {'film_profile': 'store_v2', 'script_rules_revision': revision, 'subtitle_style': 'box'}
+                assemble.write_ass(str(path), job, cues, None, 'Microsoft YaHei')
+                styles = {row.split(',')[0]: row.split(',')
+                          for row in path.read_text(encoding='utf-8').splitlines() if row.startswith('Style: ')}
+                for name in ('Sub', 'Sub2', 'Closing'):
+                    with self.subTest(revision=revision, name=name):
+                        style = styles[f'Style: {name}']
+                        self.assertEqual(style[3], '&H00FFFFFF')
+                        self.assertEqual(style[5], '&H00000000')
+                        self.assertEqual(style[15], '1')
+
     def test_closing_overlay_has_a_box_and_rejects_unsafe_width(self):
         with tempfile.TemporaryDirectory() as folder:
             path = str(Path(folder) / 'closing.ass')
