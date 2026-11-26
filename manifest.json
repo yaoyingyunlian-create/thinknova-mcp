@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.38",
+  "version": "thinknova-automation-toolkit-v3.1.39",
   "text_line_endings": "lf",
-  "revision": "ba9c1a38c4e6357d9120664688faea23d1a68b6a3c3bbb27ce28f1f37b58dfcb",
+  "revision": "97373616bd79cb8c2ac33fc5347fa1bed0e90b82823a6629b2799b55bf11f1db",
   "files": [
     {
       "path": ".gitignore",
@@ -9,7 +9,7 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "e07d6d831785dd2a152dd0808c049ef87a0674647f450f53ca9c6042fe4b9004"
+      "sha256": "c27bf7839debf6317a1f55aa0460f2616ed4ad6d0d9c3840fd4e1a9ba36c0c31"
     },
     {
       "path": "AUTOMATION.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "0bf5dd1ee465fbd1b793bddf50b4c14c450c469e7fa5e1fd34b80fc24a736f06"
+      "sha256": "20406885e4424b6cf41979378cf34ee3d97ffa41ef93ddf333260f14650702d8"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "2788e95a93114b90097c8d2048afae778e5639454dac1abcada97ffb8e195991"
+      "sha256": "1b6ec8693c8012e33859b7a50fd8a7d97ea3558f3127f5f0c5447e568c9f1c55"
     },
     {
       "path": "clip_recovery.py",
@@ -249,7 +249,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "5f510372d9f2002efac5e60dc836b9684cc779a70e650ea1b58d498b1f969bcd"
+      "sha256": "ea989b1bc2bf8beb73b70831ae8b8a2d967a1e1b3f7c35ba7e6f34f0bdd7e4f4"
     },
     {
       "path": "render/captions.py",
@@ -257,7 +257,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "1efb861de0dcd0d822b16057ddb6cdef9bfb6fbb004e9a2f3b03e6c89e8c3236"
+      "sha256": "154f0153fd3211eee599c5556f1f6dc569f706a1f7c85af3f9eff7abbc072627"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -393,7 +393,7 @@
     },
     {
       "path": "skills/\u95e8\u5e97\u6210\u7247/SKILL.md",
-      "sha256": "95afe2c8697bda81396bc4c4a95cae82c51d5baf1e1550face53c5cff1d5de9b"
+      "sha256": "74db85d2674bbe2f44f2adc68914543f10d98e066fbc554679d764c714f47ecf"
     },
     {
       "path": "speech_recovery.py",
@@ -401,11 +401,11 @@
     },
     {
       "path": "store_editorial.py",
-      "sha256": "ed43434902e07221c8e6955a1a1c08b2d7d54bb886066c36674353de2e6ccf8d"
+      "sha256": "ed33a58f7b0c7fc2794706098591a58157a4853f47b8ab1a98c29a392121d25d"
     },
     {
       "path": "store_film.py",
-      "sha256": "cc7baf68e447c3f2b7dd496fde779e29caffdb3d1f722cff67351ebd8221c151"
+      "sha256": "4cdf6969227be90e362a6631e76a6b0af1a4cb0808acb0e0b782c2106038f8d7"
     },
     {
       "path": "test_automation.py",
@@ -477,7 +477,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "cb275ee6c1a146515562ea09083c1d778672a57bb906a76b5f83bececf4780e6"
+      "sha256": "400fe0dd4e9996a263623c7268d1ddb682f453a495b5a1d70e812cff60ce9fd6"
     },
     {
       "path": "test_subtitle_layout.py",

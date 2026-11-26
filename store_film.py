@@ -199,9 +199,11 @@ def validate_day_plan(plan):
         validate_beats(segments, plan.get('film_type'))
     from store_editorial import validate_script
     validate_script(plan)
+    story = plan.get('script_rules_revision') == '65' and plan.get('story_narrative') is True
     for segment in segments:
         lines = segment.get('subs')
-        if not isinstance(lines, list) or not lines or any(not isinstance(line, str) or not line.strip() for line in lines):
+        if (not isinstance(lines, list) or (not story and not lines)
+                or any(not isinstance(line, str) or not line.strip() for line in lines)):
             raise ValueError('DAY_PLAN_CAPTIONS_REQUIRED')
     platforms = plan.get('platforms')
     if not isinstance(platforms, dict) or not platforms:
@@ -225,7 +227,7 @@ def validate_day_plan(plan):
         if plan.get('film_type') == 'explainer':
             if plan.get('dialogue_rules_revision') != '2.4':
                 raise ValueError('DAY_PLAN_SCHEMA_UNSUPPORTED')
-            validate_explainer_durations(durations)
+            validate_explainer_durations(durations, minimum=30 if plan.get('story_narrative') is True else 45)
             return plan
         expected = [15, 15] if plan['film_purpose'] == 'service' or plan.get('dialogue_rules_revision') == '2.4' else [15]
         if plan.get('script_rules_revision') == '65' and (len(durations) == 1 or durations == [15, 15]):
@@ -251,8 +253,8 @@ def validate_day_plan(plan):
     return plan
 
 
-def validate_explainer_durations(durations):
+def validate_explainer_durations(durations, minimum=45):
     if (len(durations) not in (3, 4)
             or any(type(value) is not int or not 10 <= value <= 15 for value in durations)
-            or not 45 <= sum(durations) <= 60):
-        raise ValueError('FILM_EXPLAINER_DURATION_INVALID: 3–4 segments, 10–15 seconds each, 45–60 seconds total')
+            or not minimum <= sum(durations) <= 60):
+        raise ValueError(f'FILM_EXPLAINER_DURATION_INVALID: 3–4 segments, 10–15 seconds each, {minimum}–60 source seconds')

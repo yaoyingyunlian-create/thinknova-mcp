@@ -19,7 +19,7 @@ def normalized(value):
     return ' '.join(unicodedata.normalize('NFKC', value).casefold().split())
 
 
-def validate_rotation(rows, history, profile, schema_version=1, script_rules_revision=None, warnings=None):
+def validate_rotation(rows, history, profile, schema_version=1, script_rules_revision=None, warnings=None, *, story_narrative=False):
     warnings = warnings if warnings is not None else []
     def repeat(message):
         if script_rules_revision in ('59', '60', '64', '65'):
@@ -61,7 +61,7 @@ def validate_rotation(rows, history, profile, schema_version=1, script_rules_rev
             if not 0 < age < (14 if v3 else 56):
                 continue
             same = tuple(field for field in ('row', 'col', 'format') if row[field] == old[field])
-            if age == 1 and ('format' in same or (not v3 and same)):
+            if not story_narrative and age == 1 and ('format' in same or (not v3 and same)):
                 repeat(f'PLAN_CONSECUTIVE_REPEAT: {row["date"]} {", ".join(same)}')
             same_cell = 'row' in same and 'col' in same
             if (not minimal and same_cell and ((not v3 and age < 28) or 'format' in same)
@@ -144,7 +144,25 @@ VOICE_FLAT = re.compile(r'语速平稳|声音温和|平静|monotone|steady pace|
 REPORT_WORDS = ('了解', '安排', '问清楚', '记下', '项目', '预约问题')
 
 
+def validate_story_turns(segments):
+    speakers = set()
+    exchange = False
+    for segment in segments:
+        previous = None
+        for line in segment.get('dialogue') or []:
+            if not isinstance(line, dict) or line.get('speaker') not in ('staff', 'customer'):
+                raise ValueError('FILM_DIALOGUE_LINE_INVALID')
+            speakers.add(line['speaker'])
+            if (previous and previous.get('kind') == 'question' and line.get('kind') == 'answer'
+                    and previous.get('speaker') != line.get('speaker')):
+                exchange = True
+            previous = line
+    if not {'staff', 'customer'} <= speakers or not exchange:
+        raise ValueError('FILM_STORY_DIALOGUE_REQUIRED: include an in-scene exchange between staff and customer')
+
+
 def validate_dialogue_v3(plan):
+    story = plan.get('script_rules_revision') == '65' and plan.get('story_narrative') is True
     script = plan.get('script')
     customer = plan.get('customer_identity')
     overlay = plan.get('closing_overlay')
@@ -156,7 +174,7 @@ def validate_dialogue_v3(plan):
             or not isinstance(customer, str) or not customer.strip() or len(customer.encode('utf-8')) > 120
             or not isinstance(overlay, list) or not 1 <= len(overlay) <= 2
             or not all(isinstance(line, str) and line.strip() and len(line.encode('utf-8')) <= 120 for line in overlay)
-            or overlay[0] != expected_overlay):
+            or (not story and overlay[0] != expected_overlay)):
         raise ValueError('FILM_DIALOGUE_PROFILE_INVALID')
     revision21 = plan.get('dialogue_rules_revision') in ('2.1', '2.4')
     final_rules = plan.get('script_rules_revision') in ('52', '54', '59', '60', '64', '65')
@@ -165,7 +183,7 @@ def validate_dialogue_v3(plan):
     revision65 = plan.get('script_rules_revision') == '65'
     for index, segment in enumerate(plan['segments'], 1):
         final_cta = revision65 and index == len(plan['segments'])
-        may_address_camera = final_rules and plan.get('film_type') == 'explainer' and index > 1
+        may_address_camera = not story and final_rules and plan.get('film_type') == 'explainer' and index > 1
         low, high = (55, 62) if plan.get('dialogue_rules_revision') == '2.4' else (60, 70)
         if plan.get('film_type') == 'explainer':
             seconds = segment.get('duration_seconds')
@@ -174,7 +192,7 @@ def validate_dialogue_v3(plan):
             low, high = (low * seconds + 14) // 15, high * seconds // 15
         dialogue = segment.get('dialogue')
         prompt = str(segment.get('prompt', ''))
-        if (not isinstance(dialogue, list) or len(dialogue) not in ({'65': range(4, 9), '64': range(4, 7), '60': range(5, 9)}.get(plan.get('script_rules_revision'), (3, 4)))
+        if (not isinstance(dialogue, list) or len(dialogue) not in (range(9) if story else {'65': range(4, 9), '64': range(4, 7), '60': range(5, 9)}.get(plan.get('script_rules_revision'), (3, 4)))
                 or re.search(r'旁白|画外音|不对口型|narration|voice[ -]?over|^\s*\d+(?:[.,]\d+)?\s*[-–—~～至到]\s*\d+(?:[.,]\d+)?\s*(?:s\b|秒)', prompt, re.I | re.M)
                 or (not may_address_camera and not final_cta and re.search(r'对着镜头|talking to camera', prompt, re.I))):
             raise ValueError(f'FILM_DIALOGUE_LINES_INVALID: {index}')
@@ -216,6 +234,11 @@ def validate_dialogue_v3(plan):
                     code = f'SCRIPT_CONVERSATION_ADVICE_UNMET:{index - 1}'
                     if code not in plan.setdefault('warnings', []): plan['warnings'].append(code)
 
+    if story:
+        validate_story_turns(plan['segments'])
+        closing = plan['segments'][-1]['dialogue']
+        if not closing or overlay != [closing[-1]['text']]:
+            raise ValueError('DAY_PLAN_VIEWER_ACTION_INVALID')
     if final_rules:
         validate_script_evidence(plan)
 

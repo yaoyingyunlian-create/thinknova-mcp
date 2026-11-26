@@ -88,7 +88,7 @@ def get_opts(argv):
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
          "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
-    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58", "--native-dialogue", "--dialogue-checked-per-clip"}
+    flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58", "--native-dialogue", "--dialogue-checked-per-clip", "--store-final-playback"}
     pos, on, i = [], set(), 0
     while i < len(argv):
         a = argv[i]
@@ -439,7 +439,20 @@ def main():
     o["v3_dialogue"] = "--v3-dialogue" in on
     if o["film"]:
         planned = o.get('--planned-film-seconds')
-        if planned is not None:
+        if '--store-final-playback' in on and o['store_film']:
+            if dur > 60:
+                fail('FILM_DURATION', 'store film exceeds 60 seconds after final playback speed')
+            elif not 30 <= dur <= 40:
+                warn('FILM_DURATION_TARGET', 'target 30–40 seconds after final playback speed')
+            if planned is not None:
+                try:
+                    measured = float(o['--outro-start']) if '--separate-end-card' in on else dur
+                    expected = int(planned) / 1.25
+                except (TypeError, ValueError):
+                    measured, expected = 0, 0
+                if expected <= 0 or abs(measured - expected) > max(2, expected * 0.1):
+                    fail('FILM_DURATION', 'final duration differs from the authorized clip length at 1.25x')
+        elif planned is not None:
             allowed = range(45, 61) if o['explainer_preview'] else (*range(6, 16), 30)
             try:
                 measured = float(o['--outro-start']) if '--separate-end-card' in on else dur

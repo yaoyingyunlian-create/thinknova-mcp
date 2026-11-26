@@ -28,7 +28,9 @@ Read the effective creation rules from MCP. Use the food, beauty and retail dial
 
 ## 二、怎么拼
 
-新版 2.4 产品片和服务片都用两段 15 秒，每段 55–62 字。手写 job 填 `film_profile: "store_v2"`、`film_schema_version: 3`、`film_rules_revision: "2.4"`、`dialogue_segment_count: 2` 和 `short_dialogue_seconds: 30`。用 `closing_overlay` 在最后 2.5 秒叠加已确认信息，`closing_overlay_top` 可在 150–380 调整。字幕按转写对齐，不确定时留本机预览。可在 `srt` 指定已经核对的成片字幕时间，拼片将保持片段原速。模板见 `render/templates/store-film-v24.example.json`。
+按生效报价规划约三段 10–15 秒的场景，段间硬切。手写多场景 job 用 `film_profile: "store_v2"`、`film_schema_version: 3`、`film_type: "explainer"`、`story_narrative: true`，登记实际片段数和源素材时长，各段用 `planned_seconds`。用 `closing_overlay` 在正常画面上叠店名和一个已核实的行动。逐句字幕随原生对白对齐，渲染最后把画面和声音同步加速到 1.25 倍、保留原音高，字幕同轴缩放。最终尽量 30–40 秒，最长 60 秒。
+
+Use roughly three 10–15 second scenes with hard cuts. Align captions to the generated dialogue before the toolkit applies 1.25x final playback with pitch-preserving audio. Aim for 30–40 seconds after playback scaling and cap delivery at 60 seconds.
 
 For revision 2.4, ordinary product and service films use two 15-second segments. Use a closing overlay unless the customer explicitly asks for a separate card. Explainer films use 3–4 segments, each 10–15 seconds, totaling 45–60 seconds. Reuse the original dialogue track across cutaways.
 

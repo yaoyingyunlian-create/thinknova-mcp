@@ -10,6 +10,41 @@ from store_film import generation_arguments, validate_beats
 
 
 class StoreFilmTests(unittest.TestCase):
+    def test_story_allows_visual_only_segment_but_requires_dialogue_exchange(self):
+        from store_editorial import validate_story_turns
+
+        question = {'speaker': 'customer', 'kind': 'question'}
+        answer = {'speaker': 'staff', 'kind': 'answer'}
+        validate_story_turns([{'dialogue': [question, answer]}, {'dialogue': []}])
+        with self.assertRaisesRegex(ValueError, 'FILM_STORY_DIALOGUE_REQUIRED'):
+            validate_story_turns([{'dialogue': [question]}, {'dialogue': [answer]}])
+
+    def test_reviewed_story_keeps_the_original_task_and_uses_approved_tail(self):
+        from automation import reviewed_store_segment
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            client = Mock()
+            args = {'client_request_id': 'run:store:1', 'reference_asset_ids': ['asset_first'],
+                    'prompt': 'Scene', 'duration_seconds': 13}
+            segment = {'shop_location': 'counter'}
+            prior = ('counter', {'tail_asset_id': 'asset_approved'})
+            pending = {'status': 'succeeded', 'segment_review': {'status': 'pending'}}
+            client.tool.return_value = pending
+            self.assertEqual(reviewed_store_segment(client, args, segment, 1, prior, {}, 100, root,
+                                                    {'task_1': 'task_original'}, Mock()), (None, 'pending'))
+            client.tool.assert_called_once_with('get_task', {'task_id': 'task_original'})
+
+            client.tool.reset_mock()
+            client.tool.side_effect = [{}, {'task_id': 'task_next'}]
+            steps = {}
+            with unittest.mock.patch('render.preflight.require_film_preflight'), unittest.mock.patch(
+                    'automation.quoted_generation_args', side_effect=lambda c, t, a, b, **kw: dict(a, max_credits=20)):
+                self.assertEqual(reviewed_store_segment(client, args, segment, 1, prior, {}, 100, root,
+                                                        steps, Mock()), (None, 'pending'))
+            self.assertEqual(client.tool.call_args.args[1]['reference_asset_ids'], ['asset_approved'])
+            self.assertEqual(steps['task_1'], 'task_next')
+
     def test_browser_receipt_preserves_each_platform_and_is_idempotent(self):
         from browser_receipt import initialize, record
         from render.assemble import file_digest

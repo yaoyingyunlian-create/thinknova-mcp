@@ -464,6 +464,82 @@ def render_store_candidate(job_path):
     return report
 
 
+def reviewed_store_segment(client, args, segment, index, prior, plan, budget, directory, steps, checkpoint):
+    from render.preflight import require_film_preflight
+
+    key = f'task_{index}'
+    last_task = steps.get(key)
+    attempt = 1
+    defect = None
+    if last_task:
+        task = client.tool('get_task', {'task_id': last_task})
+        if task['status'] in ('failed', 'canceled', 'cancelled'):
+            raise RuntimeError('GENERATION_TERMINAL_FAILURE')
+        review = task.get('segment_review') or {}
+        if task['status'] != 'succeeded' or review.get('status') == 'pending':
+            return None, 'pending'
+        if review.get('status') == 'pass':
+            return review, 'pass'
+        defect = review.get('code')
+        if review.get('status') != 'fail' or defect not in (
+            'FILM_VISUAL_DEFORMATION', 'FILM_VISUAL_IDENTITY_SWAP', 'FILM_VISUAL_RATIO_INVALID',
+            'FILM_VISUAL_DIALOGUE_MISMATCH',
+        ):
+            return None, defect or 'FILM_REVIEW_UNAVAILABLE'
+        attempt = int(review.get('attempt_number', 1)) + 1
+        if attempt > 3:
+            return None, 'FILM_VISUAL_RETAKES_EXHAUSTED'
+    require_film_preflight(steps)
+    argument_file = directory / f'.story-segment-{index}-{attempt}.json'
+    if argument_file.is_file():
+        request = json.loads(argument_file.read_text(encoding='utf-8'))
+    else:
+        request = dict(args)
+        if prior and prior[0] == segment['shop_location']:
+            tail = prior[1].get('tail_asset_id')
+            if not tail:
+                return None, 'FILM_TAIL_FRAME_UNAVAILABLE'
+            request['reference_asset_ids'] = [tail, *request['reference_asset_ids'][1:]]
+        if attempt > 1:
+            request['client_request_id'] += f':retry:{attempt - 1}'
+            request['retake_of_task_id'] = last_task
+            if attempt == 3 and defect == steps.get(f'story_first_defect_{index}'):
+                direction = {
+                    'FILM_VISUAL_DEFORMATION': 'Use a stable waist-up shot showing hands naturally at rest; keep the actual action visible.',
+                    'FILM_VISUAL_IDENTITY_SWAP': 'Use a single stable camera and keep both approved faces clearly visible; preserve costume and identity.',
+                    'FILM_VISUAL_RATIO_INVALID': 'Frame at native 9:16 with no optical squeeze; use a centred, undistorted medium shot.',
+                    'FILM_VISUAL_DIALOGUE_MISMATCH': 'Keep the action described for each spoken line visible in a simple medium shot.',
+                }[defect]
+                request['prompt'] += '\nChange camera and blocking for this replacement. ' + direction
+        try:
+            request = quoted_generation_args(client, 'animate_image', request, client.tool('get_balance'),
+                                             require_duration=True)
+        except RuntimeError as error:
+            code = str(error).split(':', 1)[0]
+            if code not in ('MCP_STORE_RETAKE_NOT_AUTHORIZED', 'MCP_STORE_RETAKE_INVALID',
+                            'MCP_STORE_RETAKE_VISUAL_CHANGE_REQUIRED'):
+                raise
+            return None, code
+        already_quoted = sum(int(value) for name, value in steps.items() if name.startswith('story_quoted_'))
+        if already_quoted + request['max_credits'] + int(plan.get('preparation_credits', 0)) > budget:
+            return None, 'DAY_PLAN_OVER_BUDGET'
+        atomic(argument_file, request)
+    steps[f'story_quoted_{index}_{attempt}'] = str(request['max_credits'])
+    if attempt == 2:
+        steps[f'story_first_defect_{index}'] = defect
+    checkpoint()
+    try:
+        created = client.tool('animate_image', request)
+    except RuntimeError as error:
+        if str(error).split(':', 1)[0] not in ('MCP_STORE_RETAKE_NOT_AUTHORIZED', 'MCP_STORE_RETAKE_INVALID',
+                                            'MCP_STORE_RETAKE_VISUAL_CHANGE_REQUIRED'):
+            raise
+        return None, str(error).split(':', 1)[0]
+    steps[key] = created['task_id']
+    checkpoint()
+    return None, 'pending'
+
+
 def execute_store_day(client, claim, plan, budget, rules, balance, directory, steps, checkpoint):
     from store_film import generation_arguments
     from store_editorial import scripted_segment
@@ -516,7 +592,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                     plan.setdefault('warnings', []).append('SCRIPT_CHARACTER_ROTATION_ADVICE_UNMET')
         editorial = plan.get('editorial_profile') if plan.get('script_rules_revision') in ('54', '59', '60', '64', '65') else shop.get('editorial')
         validate_rotation(rows, history, editorial or {}, plan.get('schema_version', 1),
-                          plan.get('script_rules_revision'), plan.setdefault('warnings', []))
+                          plan.get('script_rules_revision'), plan.setdefault('warnings', []),
+                          story_narrative=plan.get('story_narrative') is True)
         editorial_row = next((row for row in rows if row['date'] == plan['date']), None)
         if not editorial_row or editorial_row['opening'] != plan['opening']:
             raise RuntimeError('DAY_PLAN_TOPIC_MISMATCH')
@@ -536,6 +613,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         raise RuntimeError('DAY_PLAN_RUN_ALREADY_USED')
     steps['day_plan_sha256'] = digest
     requests = []
+    story = plan.get('script_rules_revision') == '65' and plan.get('story_narrative') is True
     for index, segment in enumerate(plan['segments']):
         if plan.get('dialogue_rules_revision') in ('2.1', '2.4') and plan.get('script_rules_revision') not in ('59', '60', '64', '65'):
             roles = ['first_frame', 'cast', 'product'] if segment.get('featured_product_visible', plan['film_purpose'] == 'product') else ['first_frame', 'customer', 'staff']
@@ -544,15 +622,18 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         revision65 = plan.get('script_rules_revision') == '65'
         prepared_segment = segment if revision65 else scripted_segment(segment, plan.get("script"), shop)
         if plan.get('script_rules_revision') in ('64', '65'):
-            prepared_segment = {**prepared_segment, 'prompt': prepared_segment['prompt']
-                                + '\nSpeak the approved dialogue exactly. Preserve its product names and confirmed facts.'}
+            voice = ('Use natural scene ambience only. No spoken lines or music.' if story and not segment['dialogue']
+                     else 'Speak the approved dialogue exactly. Preserve its product names and confirmed facts.')
+            prepared_segment = {**prepared_segment, 'prompt': prepared_segment['prompt'] + '\n' + voice}
         args = generation_arguments(prepared_segment, shop_assets, authorized)
         if plan.get('dialogue_rules_revision') == '2.4':
             args['film_rules_revision'] = '2.4'
         if plan.get('script_rules_revision') in ('59', '60', '64', '65'):
             args['dialogue_language'] = 'zh' if re.search(r'[\u3400-\u9fff]', ''.join(segment.get('subs', []))) else plan.get('speech_language', 'en')
-        if plan.get('script_rules_revision') in ('64', '65') and segment.get('dialogue'):
+        if plan.get('script_rules_revision') in ('64', '65') and (story or segment.get('dialogue')):
             args['dialogue'] = [{key: line[key] for key in ('speaker', 'text')} for line in segment['dialogue']]
+        if story:
+            args.update(story_narrative=True, visual_lines=[line['visual'] for line in segment['dialogue']])
         if revision65:
             from film_recovery import film_run_id
             boards = segment.get('reference_boards') or {}
@@ -569,7 +650,9 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         if grant.get('project_key'):
             args['project_key'] = grant['project_key']
         price_key = f'quote_credits_{index}'
-        if f'task_{index}' in steps and price_key in steps:
+        if story:
+            args['max_credits'] = 0  # A downstream quote must use the actual reviewed frame.
+        elif f'task_{index}' in steps and price_key in steps:
             args['max_credits'] = int(steps[price_key])
         else:
             args = quoted_generation_args(client, 'animate_image', args, balance,
@@ -596,8 +679,22 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     steps['stage'] = 'generation'
     checkpoint()
     clips, native_issues = [], []
+    prior = None
     for index, (segment, args) in enumerate(zip(plan['segments'], requests)):
         key = f'task_{index}'
+        if story:
+            if native_issues:
+                checkpoint('waiting_user', 'FILM_NATIVE_AUDIO_REVIEW_REQUIRED')
+                return {'status': 'waiting_user', 'stage': 'native_dialogue', 'run_no': run_no,
+                        'native_audio_issues': native_issues}
+            review, status = reviewed_store_segment(client, args, segment, index, prior, plan,
+                                                    min(budget, int(grant['daily_budget'])), directory, steps, checkpoint)
+            if status != 'pass':
+                if status != 'pending':
+                    checkpoint('waiting_user', status)
+                return {'status': 'running' if status == 'pending' else 'waiting_user', 'stage': 'visual_review',
+                        'run_no': run_no, 'segment': index + 1, 'task_id': steps.get(key), 'reason_code': status}
+            prior = (segment['shop_location'], review)
         if key not in steps:
             if native_issues:
                 checkpoint('waiting_user', 'FILM_NATIVE_AUDIO_REVIEW_REQUIRED')
@@ -626,7 +723,7 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
                 return {'status': 'running', 'stage': 'generation', 'run_no': run_no}
             checkpoint()
             time.sleep(20)
-        path = directory / f'shot{index}.mp4'
+        path = directory / (f'shot{index}-{steps[key]}.mp4' if story else f'shot{index}.mp4')
         if path.is_file():
             validate_media(path)
         else:
@@ -648,12 +745,14 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
         selected_task = steps.get(f'recovery_task_{index}') if path.name.endswith('-recovery.mp4') else steps[key]
         clip = {'file': path.name, 'fit': 'cover', 'task_id': selected_task, **{
             key: segment[key] for key in ('beats', 'dialogue', 'subs', 'subs2') if key in segment}}
+        if story:
+            clip['segment_review'] = review
         from render.assemble import probe, tool
         from render.native_dialogue import inspect, script_lines
         source_seconds, _, has_audio = probe(tool('ffprobe'), str(path))
         dialogue = inspect(path, script_lines(clip), plan.get('speech_language'), tool('ffmpeg'), source_seconds,
                            has_audio, directory / '.native-dialogue', selected_task, resume=True)
-        if dialogue['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
+        if (not story or script_lines(clip)) and dialogue['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
             native_issues.append({'clip': index + 1, 'task_no': selected_task, 'code': dialogue['code']})
         if plan.get('film_type') == 'explainer':
             clip['planned_seconds'] = segment['duration_seconds']
@@ -669,6 +768,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
     job = {'out': output.name, 'film_profile': 'store_v2', 'film_type': plan['film_type'],
            'shop_name': plan['shop_name'], 'featured_service': plan['featured_service'], 'clips': clips,
            'script_rules_revision': plan.get('script_rules_revision'), 'quality_policy': render_policy}
+    if plan.get('story_narrative') is True:
+        job['story_narrative'] = True
     if plan.get('speech_language'):
         job['speech_language'] = plan['speech_language']
     if plan['schema_version'] in (2, 3):

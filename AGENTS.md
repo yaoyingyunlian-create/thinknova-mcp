@@ -1,4 +1,4 @@
-# ThinkNova 视频制作工具包 v3.1.35
+# ThinkNova 视频制作工具包
 
 新门店片先读取服务端生效修订，只有返回 65 时才启用修订 65。先确认主推项、三条不同卖点、一个观众下一步。缺项只问一次，客户确认后读取并合并项目规则，用 expected_version 保存。没有顾客原话可以用已确认的手册。修订 65 逐段 4～8 句，中文和英文预计占报价时长的 80%～93.33%，先独立盲审再报价。多段共用获授权人物板，使用 9:16 首帧与原生对白。一句台词对应一条原文字幕。已有任务沿用原计划。
 
@@ -6,6 +6,10 @@
 发布和定时由客户 AI 助理负责，推荐其原生定时任务配合 Ego Lite。工具包不登录社交账号、不上传作品、不创建系统计划任务。
 
 门店项目每段都提交结构化 `dialogue`，从同一稿生成字幕。报价返回 `quote_fingerprint` 时，原样带入建单。门店主副字幕使用白字黑描边。
+
+仅当服务端门店规则返回修订 65 且 `story_narrative=true` 时启用新版。整片围绕一个顾虑，用至少两人的画内对白演出解释、过程和结果，产品近景可无对白。同一顾虑可换场景、人物和演法。按报价选约三段 10–15 秒的场景，段间硬切，最终 1.25 倍保原音高并同步字幕，成片目标 30–40 秒、最长 60 秒。结尾采用服务端的已确认尾句。
+
+新版计划按段报价及建单，提交 `story_narrative`、作品及段号、每句台词对应的 `visual_lines`。无对白段传空数组。先等 `get_task.segment_review` 通过再接下一段。同场使用返回的 `tail_asset_id`，换场继续使用已授权首帧。拼片记录同时保留原任务号和同一原片的审查摘要。系统故障或证据不足时复查原片。只在服务端明确的补段授权和预算内补不合格段。
 
 ## 首次使用与更新
 1. 用现有 MCP OAuth 连接调用 get_balance、get_toolkit、get_content_rules。会员、预算及素材许可按服务端实际结果判断。
@@ -39,6 +43,6 @@ Check that the customer AI supports native timers and local execution; otherwise
 每天先回看当前项目最近一条的顾客、开场画面和主讲卖点。新片换顾客和具体情境，店员按本条剧情选角，授权商品可复用。项目通过 shop_profile.staff_casting 选择 fixed 且有授权参考图时，复用固定店员；同一个真实地点可换区域、时段或正在做的事。旧双人参考只可提取固定店员。给每条新顾客单独备图，同一条片各镜共用。只有重试原任务才继续沿用旧镜头和请求号。
 
 ## English
-For a store project, submit the approved `dialogue` for every segment and use it as the caption source. Carry `quote_fingerprint` unchanged when returned by the quote. Both store caption languages use white text with a black outline.
+Use the new story workflow only when revision 65 and `story_narrative=true` are effective. Submit approved `dialogue` and its corresponding `visual_lines`. Use empty arrays for a visual-only scene. Carry the quote fingerprint unchanged into generation. Wait for `get_task.segment_review` before using a scene. Reuse its approved tail frame for the next scene at the same place. Keep original task IDs and review digests with the original files. The final playback is 1.25x with original pitch and synchronized outline captions. Aim for 30–40 seconds and cap at 60 seconds. Use the confirmed final line from the server.
 For a new work, read the project’s latest customer, opening and selling point. Choose a visibly distinct fictional customer and a different situation. Use story-appropriate staff and keep approved products. Reuse a staff reference across films when the project selects fixed casting, and reuse today’s cast within the same film. Keep model-generated dialogue, add captions and check media without automatic speech retiming. Pace and natural pauses warn; unusable media and severe mismatch still block. Run toolkit.py film-preflight with the production Python before new paid work. Keep fetching and rechecking existing work if the preflight fails. Preserve previews and resume checks. Use current server rules, approved facts, references and budgets; quote before charging and reuse stable request IDs on retries. Preserve customer data on updates.
 Keep one job path and run ID per film. Under revision 65 send visual direction as prompt and the exact approved speaker/text lines as dialogue. Multi-segment calls use the same continuity_asset_id and film_segment_count. Send queued film events through the existing MCP OAuth connection after every attempt, including failures, and during patrol. Only acknowledge IDs returned by the server. Send the film and available assets whenever delivery_status=delivered. Use speech_review.json to identify terms that need listening. Its publication_ready field does not describe delivery status. Use film --existing for a checked legacy output and film --recheck for a failed preview. Reuse the original media and task IDs. Scheduling belongs to the customer's AI assistant. Use existing MCP OAuth for quotes and generation, then toolkit.py film for local production. Publishing uses Ego Lite within confirmed accounts and consent. Keep credentials out of memory and record actual outcomes.

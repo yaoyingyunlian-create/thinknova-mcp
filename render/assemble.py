@@ -746,7 +746,7 @@ def validate_job(job):
         durations = [clip.get('planned_seconds', clip.get('dur')) if isinstance(clip, dict) else None
                      for clip in job['clips']]
         try:
-            validate_explainer_durations(durations)
+            validate_explainer_durations(durations, minimum=30 if job.get('story_narrative') is True else 45)
         except ValueError as exc:
             raise Stop(str(exc), 2) from exc
         if job.get('short_dialogue_seconds', sum(durations)) != sum(durations):
@@ -757,7 +757,8 @@ def validate_job(job):
         lines = job['closing_overlay']
         top = job.get('closing_overlay_top', 220)
         if (job.get('end_card') or not isinstance(lines, list) or not 1 <= len(lines) <= 3
-                or not all(isinstance(line, str) and line.strip() and len(line) <= 24 for line in lines)
+                or not all(isinstance(line, str) and line.strip()
+                           and len(line) <= (120 if job.get('story_narrative') is True else 24) for line in lines)
                 or type(top) is not int or not 150 <= top <= 380):
             raise Stop('FILM_CLOSING_OVERLAY_INVALID: use short lines in the upper safe area', 2)
     if 'speech_language' in job and not isinstance(job['speech_language'], str):
@@ -812,6 +813,8 @@ def run_delivery_check(ff, fp, video, srt, options):
         cmd += ['--film', '--outro-start', str(options['outro_start'])]
         if options.get('short_dialogue_seconds'):
             cmd += ['--planned-film-seconds', str(options['short_dialogue_seconds'])]
+        if options.get('final_playback_rate') == 1.25:
+            cmd += ['--store-final-playback']
         if options.get('separate_end_card'):
             cmd += ['--separate-end-card']
         if options.get('explainer_preview'):
@@ -1031,19 +1034,33 @@ def main():
         job['film_profile'] = 'store_v2'
     revision64 = store_film and job.get('script_rules_revision') in ('64', '65')
     revision65 = store_film and job.get('script_rules_revision') == '65'
+    story_narrative = revision65 and job.get('story_narrative') is True
     if store_film:
         from render.native_dialogue import inspect, script_lines
+    if story_narrative:
+        from store_editorial import validate_story_turns
+        try:
+            validate_story_turns(job['clips'])
+        except ValueError as exc:
+            raise Stop(str(exc), 2) from exc
     if revision64:
         if job.get('srt'):
             raise Stop('FILM_STORE_USE_SCRIPT_DIALOGUE: store subtitles are derived from dialogue', 2)
         max_lines = 8 if revision65 else 6
         for index, clip in enumerate(job.get('clips', []), 1):
             lines = clip.get('dialogue')
-            if not isinstance(lines, list) or not 4 <= len(lines) <= max_lines or any(
+            if story_narrative:
+                review = clip.get('segment_review') or {}
+                source = resolve(base, clip.get('file', ''))
+                if review.get('status') != 'pass' or not clip.get('task_id') or review.get('task_id') != clip['task_id'] \
+                        or not os.path.isfile(source) or review.get('source_sha256') != file_digest(source):
+                    raise Stop(f'FILM_SEGMENT_REVIEW_REQUIRED: clip {index} needs its approved original', 2)
+            if not isinstance(lines, list) or not (0 if story_narrative else 4) <= len(lines) <= max_lines or any(
                 not isinstance(line, dict) or not isinstance(line.get('text'), str) or not line['text'].strip()
                 for line in lines
             ):
-                raise Stop(f'FILM_STORE_USE_SCRIPT_DIALOGUE: clip {index} requires 4–{max_lines} lines', 2)
+                min_lines = 0 if story_narrative else 4
+                raise Stop(f'FILM_STORE_USE_SCRIPT_DIALOGUE: clip {index} requires {min_lines}–{max_lines} lines', 2)
             clip['subs'] = [line['text'] for line in lines]
             for cue, text in enumerate(clip['subs'], 1):
                 try:
@@ -1129,7 +1146,7 @@ def main():
                     native = inspect(source, script_lines(c), job.get('speech_language'), ff, source_duration, has_audio,
                                      Path(base) / '.native-dialogue', c.get('task_id'), start,
                                      resume=os.environ.get('THINKNOVA_RESUME_CAPTIONS') == '1')
-                    if native['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
+                    if (not story_narrative or script_lines(c)) and native['status'] in ('missing_audio', 'silent_audio', 'dialogue_mismatch'):
                         native_issues.append({'code': native['code'], 'clip': i + 1, 'task_no': native['task_id'],
                                               'message': f"Clip {i + 1}: {native['status']}." +
                                               (f" Evidence: {native['evidence']}." if native.get('evidence') else '')})
@@ -1142,19 +1159,6 @@ def main():
             planned_clip = c.get('planned_seconds', c.get('dur')) if job.get('film_type') == 'explainer' else None
             if not relaxed and planned_clip is not None and abs(dur - planned_clip) > 0.1:
                 raise Stop(f'FILM_EXPLAINER_SEGMENT_DURATION: clip {i + 1} measured {dur:.2f}s, planned {planned_clip}s', 2)
-            if store_film and not verified_srt and not relaxed:
-                dialogue = bool(job.get('short_dialogue_seconds'))
-                try:
-                    shot, dur, pace = adjust_store_pace(ff, fp, shot, job.get('speech_language'), wk, i,
-                                                        keep_dialogue_duration=dialogue,
-                                                        planned_seconds=(planned_clip if job.get('film_type') == 'explainer'
-                                                                         else job['short_dialogue_seconds'] / len(job['clips'])
-                                                                         if dialogue else None))
-                except Stop as exc:
-                    if not dialogue or not str(exc).startswith('FILM_PACE_UNAVAILABLE'):
-                        raise
-                    pace = {'clip': i + 1, 'status': 'pending', 'reason': str(exc)}
-                pace_report.append(pace)
             if not relaxed and job.get('dialogue_segment_count') == 2 and abs(dur - 15) > 0.5:
                 raise Stop(f'FILM_DIALOGUE_SEGMENT_DURATION: clip {i + 1} is {dur:.2f}s; expected 15s', 2)
             if relaxed and not quality_policy.native(job.get('quality_policy')):
@@ -1229,7 +1233,7 @@ def main():
                         cues.append(cue)
                 missing = report.get('missing_lines') or (
                     list(range(1, len(lines) + 1)) if report.get('status') != 'aligned' else [])
-                if missing:
+                if missing and lines:
                     caption_alignment_pending = True
                     missing_caption_lines.append({'clip': i + 1, 'lines': missing, 'task_no': c.get('task_id'),
                                                   'reason': report.get('code') or 'FILM_CAPTION_ALIGNMENT_PENDING'})
@@ -1278,7 +1282,8 @@ def main():
             planned = job['short_dialogue_seconds']
             count = job.get('dialogue_segment_count', 1)
             explainer = job.get('film_type') == 'explainer'
-            valid = (count in (3, 4) and 45 <= planned <= 60) if explainer else (
+            minimum = 30 if job.get('story_narrative') is True else 45
+            valid = (count in (3, 4) and minimum <= planned <= 60) if explainer else (
                 (count == 1 and 6 <= planned <= 15) or (count == 2 and planned == 30))
             if (type(count) is not int or len(job['clips']) != count or type(planned) is not int or not valid
                     or not (job.get('end_card') or job.get('closing_overlay'))):
@@ -1309,6 +1314,25 @@ def main():
         if music:
             print("Adding music ...")
             cur = add_music(ff, cur, music, job.get("music_db", -22), t, wk)
+        media_speed = 1.25 if story_narrative else 1.0
+        source_edit_seconds = t
+        if store_film:
+            paced = os.path.join(wk, 'final-playback.mp4')
+            run_ff(ff, ['-nostdin', '-i', cur, '-filter:v', 'setpts=PTS/1.25',
+                        '-filter:a', 'atempo=1.25', '-r', str(FPS),
+                        '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p',
+                        '-c:a', 'aac', '-movflags', '+faststart', paced], 'final playback speed')
+            cur = paced
+            t /= media_speed
+            job['_total'] = t
+            for cue in cues:
+                cue['start'] /= media_speed
+                cue['end'] /= media_speed
+            if card_span:
+                card_span = tuple(value / media_speed for value in card_span)
+            segment_boundaries = [value / media_speed for value in segment_boundaries]
+            for edit in edit_report:
+                edit['final_timeline_start'] = round(edit['timeline_start'] / media_speed, 3)
         srt = None
         words = u"".join(c["text"] for c in cues) + u"".join(job.get("end_card", {}).get("lines", [])) + (job.get("badge") or u"")
         if job.get('closing_overlay'):
@@ -1341,6 +1365,7 @@ def main():
             options['segment_boundaries'] = segment_boundaries
         if store_film:
             options.update(film_profile='store_v2', shop_name=job.get('shop_name',''), featured_service=job['featured_service'], quality_policy=job.get('quality_policy', {}))
+            options['final_playback_rate'] = media_speed
         if revision64:
             options['dialogue_checked_per_clip'] = relaxed
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
@@ -1348,6 +1373,8 @@ def main():
                                       else 'aligned' if caption_alignment_used
                                       else 'provided' if job.get('srt') else 'estimated' if cues else 'not_applicable')}
         if store_film:
+            result.update(duration_seconds=probe(fp, out)[0], final_playback_rate=media_speed,
+                          source_edit_seconds=round(source_edit_seconds, 3))
             result['speech_pace'] = pace_report
             result['native_dialogue'] = [
                 {key: report[key] for key in ('task_id', 'source_sha256', 'status', 'code', 'missing_lines', 'cause', 'evidence') if key in report}
