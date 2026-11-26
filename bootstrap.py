@@ -182,13 +182,25 @@ def workspace_update(workspace):
     try:
         with contextlib.redirect_stdout(sys.stderr):
             remote = update(quiet=True)
-        python = workspace_runtime(ROOT, repair=not remote['update_available'])
-        if python:
-            return {'status': 'ready', 'version_status': 'current', 'active_toolkit': str(ROOT),
-                    'python': python, 'recovery': 'fast_forward' if remote['update_available'] else 'current'}
-    except (RuntimeError, OSError, subprocess.SubprocessError):
+        from file_integrity import manifest_mismatches
+        manifest = json.loads((ROOT / 'manifest.json').read_text(encoding='utf-8'))
+        if not manifest_mismatches(ROOT, manifest):
+            python = workspace_runtime(ROOT, repair=not remote['update_available'])
+            if python:
+                return {'status': 'ready', 'version_status': 'current', 'active_toolkit': str(ROOT),
+                        'python': python, 'recovery': 'fast_forward' if remote['update_available'] else 'current'}
+    except (RuntimeError, OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
         pass
     return recovery_report(workspace)
+
+
+def install_workspace_entry(workspace, report):
+    from workspace_launcher import install
+    root = Path(report['active_toolkit'])
+    launcher = install(workspace, root)
+    write_workspace_json(workspace / '.thinknova-toolkit.json',
+                         {'toolkit': str(root), 'python': report['python']})
+    report['launcher'] = str(launcher)
 
 
 def preserve_customer_state(source, candidate):
@@ -266,6 +278,15 @@ def recovery_report(workspace):
         with contextlib.redirect_stdout(sys.stderr):
             remote = check()
         report['version_status'] = 'update_available' if remote['update_available'] else 'current'
+        if remote['update_available']:
+            try:
+                git('merge-base', '--is-ancestor', remote['latest_commit'], remote['installed_commit'], timeout=10)
+            except (RuntimeError, subprocess.SubprocessError):
+                pass
+            else:
+                # A stale mirror is not an upgrade; keep any verified newer local installation.
+                remote = None
+                report['version_status'] = 'unknown'
     except (OSError, RuntimeError, subprocess.SubprocessError):
         remote = None
 
@@ -313,8 +334,6 @@ def recovery_report(workspace):
             python = workspace_runtime(candidate)
             if not python:
                 raise RuntimeError('TOOLKIT_LOCAL_RUNTIME_NOT_READY')
-            write_workspace_json(workspace / '.thinknova-toolkit.json',
-                                 {'toolkit': str(candidate), 'commit': head, 'python': python})
             return {**report, 'status': 'ready', 'active_toolkit': str(candidate), 'version_status': 'current',
                     'recovery': 'clean_copy', 'python': python}
         except (OSError, RuntimeError, subprocess.SubprocessError) as exc:
@@ -385,11 +404,26 @@ def main():
                 subprocess.run([str(python), str(ROOT / 'health.py'), '--json'], check=True)
         elif args.command == 'recover' or (args.command == 'update' and args.workspace is not None):
             workspace = (args.workspace or Path.cwd()).resolve()
-            report = recovery_report(workspace) if args.command == 'recover' else workspace_update(workspace)
-            if report['status'] == 'blocked':
-                write_workspace_json(workspace / 'thinknova-recovery.json', report)
-            print(json.dumps(report, ensure_ascii=False))
-            return 0 if report['status'] == 'ready' else 2
+            from local_state import state_lock
+            from workspace_launcher import active_install
+            workspace.mkdir(parents=True, exist_ok=True)
+            pointer = workspace / '.thinknova-toolkit.json'
+            # Re-running the installer at the original path must not reset a recovered workspace.
+            with state_lock(pointer, timeout=30):
+                try:
+                    active = active_install(workspace)
+                except (OSError, ValueError, KeyError, RuntimeError):
+                    active = ROOT
+                if active == ROOT:
+                    report = recovery_report(workspace) if args.command == 'recover' else workspace_update(workspace)
+                    if report['status'] == 'ready':
+                        install_workspace_entry(workspace, report)
+                    else:
+                        write_workspace_json(workspace / 'thinknova-recovery.json', report)
+                    print(json.dumps(report, ensure_ascii=False))
+                    return 0 if report['status'] == 'ready' else 2
+            return subprocess.run([sys.executable, str(active / 'bootstrap.py'), args.command,
+                                   '--workspace', str(workspace), '--json'], cwd=workspace).returncode
         elif args.command == 'check': check()
         elif args.command == 'prepare-update': prepare_legacy_update()
         else: update(args.user_confirmed)

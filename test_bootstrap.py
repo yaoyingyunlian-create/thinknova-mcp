@@ -84,6 +84,47 @@ class BootstrapTests(unittest.TestCase):
         self.assertEqual(ready['python'], 'verified-python')
         self.assertTrue(runtime.call_args.kwargs['repair'])
 
+    def test_workspace_launcher_runs_recovered_toolkit_instead_of_old_copy(self):
+        import json
+        import sys
+        from workspace_launcher import install
+
+        with tempfile.TemporaryDirectory() as directory:
+            workspace = Path(directory) / 'customer project'
+            old = Path(directory) / 'old toolkit'
+            new = Path(directory) / 'new toolkit'
+            old.mkdir()
+            new.mkdir()
+            launcher = install(workspace, bootstrap.ROOT)
+            bootstrap.write_workspace_json(workspace / '.thinknova-toolkit.json', {'toolkit': str(old)})
+            report = {'status': 'ready', 'version_status': 'current', 'active_toolkit': str(new),
+                      'python': sys.executable}
+            (old / 'bootstrap.py').write_text('print(' + repr(json.dumps(report)) + ')', encoding='utf-8')
+            (old / 'toolkit.py').write_text('raise AssertionError("old copy ran")', encoding='utf-8')
+            (new / 'toolkit.py').write_text(
+                'import sys; from pathlib import Path; print(Path.cwd().name, *sys.argv[1:])', encoding='utf-8')
+            process = subprocess.run([sys.executable, str(launcher), 'film', 'with spaces.json'],
+                                     capture_output=True, text=True, encoding='utf-8', check=True)
+            self.assertEqual(process.stdout.strip(), 'customer project film with spaces.json')
+            self.assertIn(str(new), process.stderr)
+            report['version_status'] = 'update_available'
+            (old / 'bootstrap.py').write_text('print(' + repr(json.dumps(report)) + ')', encoding='utf-8')
+            blocked = subprocess.run([sys.executable, str(launcher), 'film', 'with spaces.json'],
+                                     capture_output=True, text=True, encoding='utf-8')
+            self.assertEqual(blocked.returncode, 2)
+            self.assertIn('TOOLKIT_UPDATE_REQUIRED', blocked.stderr)
+            self.assertEqual(blocked.stdout, '')
+
+    def test_workspace_install_preserves_user_owned_launcher(self):
+        from workspace_launcher import install
+
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / '.thinknova-run.py'
+            path.write_text('customer code', encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError, 'TOOLKIT_LAUNCHER_CONFLICT'):
+                install(path.parent, bootstrap.ROOT)
+            self.assertEqual(path.read_text(encoding='utf-8'), 'customer code')
+
     def test_first_init_preserves_memory(self):
         with tempfile.TemporaryDirectory() as directory:
             memory = Path(directory) / 'memory.md'

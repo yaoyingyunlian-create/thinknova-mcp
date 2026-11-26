@@ -41,4 +41,4 @@ else
     *) echo 'DESTINATION_CONFLICT: existing directory preserved.' >&2; exit 2 ;;
   esac
 fi
-python3 "$destination/bootstrap.py" setup
+python3 "$destination/bootstrap.py" update --workspace "$(pwd)" --json

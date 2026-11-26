@@ -29,6 +29,7 @@ if (-not $python) {
 $github = 'https://github.com/yaoyingyunlian-create/thinknova-mcp.git'
 $gitee = 'https://gitee.com/zhongjianghua_admin/thinknova-mcp.git'
 $repository = if ($Source -eq 'Gitee') { $gitee } else { $github }
+$workspace = (Get-Location).Path
 if (-not (Test-Path -LiteralPath $Destination)) {
     & git -c core.autocrlf=false clone --branch main $repository $Destination
     if ($LASTEXITCODE -ne 0) { throw 'TOOLKIT_CLONE_FAILED: verify the selected Git source and its main branch.' }
@@ -36,5 +37,5 @@ if (-not (Test-Path -LiteralPath $Destination)) {
     $remote = & git -C $Destination remote get-url origin
     if ($LASTEXITCODE -ne 0 -or $remote -notin @($github, $gitee, 'git@github.com:yaoyingyunlian-create/thinknova-mcp.git')) { throw 'DESTINATION_CONFLICT: existing directory is not the expected toolkit; preserved without changes.' }
 }
-& $python (Join-Path $Destination 'bootstrap.py') setup
+& $python (Join-Path $Destination 'bootstrap.py') update --workspace $workspace --json
 if ($LASTEXITCODE -ne 0) { throw "TOOLKIT_SETUP_FAILED: exit $LASTEXITCODE. See the specific dependency error above." }

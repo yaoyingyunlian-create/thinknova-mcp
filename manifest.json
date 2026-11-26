@@ -1,15 +1,15 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.39",
+  "version": "thinknova-automation-toolkit-v3.1.40",
   "text_line_endings": "lf",
-  "revision": "97373616bd79cb8c2ac33fc5347fa1bed0e90b82823a6629b2799b55bf11f1db",
+  "revision": "ab46b7c6a87798f9d7a7a118fc19a2184aacc05412142efdda42b7abdd2bac49",
   "files": [
     {
       "path": ".gitignore",
-      "sha256": "b92143a297e4c98e169d3c3f1c92d52c675323f9d9fd3c344a39b6c51e3b7200"
+      "sha256": "518a04f36c01bb3e440e2cf162107efac07f6a750f1ccd81cf39bc6bf33322db"
     },
     {
       "path": "AGENTS.md",
-      "sha256": "c27bf7839debf6317a1f55aa0460f2616ed4ad6d0d9c3840fd4e1a9ba36c0c31"
+      "sha256": "5500ce39a42cef75cecb2b2e06a736094e3bd99e7113e79a2f4c9d23f1ef8278"
     },
     {
       "path": "AUTOMATION.md",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "54caa9cb39286c4b1db28945f75e1d1fecd003194839464a231aa61cd8aedd19"
+      "sha256": "61054cb1e28bd55cbea2f39de12ba5c847561eb84aa1d4ff4805bdb60bea8b4c"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -41,7 +41,7 @@
     },
     {
       "path": "bootstrap.py",
-      "sha256": "467c8fe8a3be933cc221fc7ddcc00486d8eab08acc64d36d7c9b9a50cff94878"
+      "sha256": "8eeb26a70af0b0d37e9f5a30d2dc94132ee6885d0438659798d4e89748dea04d"
     },
     {
       "path": "browser_receipt.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "1b6ec8693c8012e33859b7a50fd8a7d97ea3558f3127f5f0c5447e568c9f1c55"
+      "sha256": "0a63f70b2caa4f60a393d8c788c7c476988a72994af557ec04113e8c3fca331d"
     },
     {
       "path": "clip_recovery.py",
@@ -97,11 +97,11 @@
     },
     {
       "path": "install.ps1",
-      "sha256": "b080243008ac8d5e35d7750acf5d4164625d31e1f39d32a37c42bc9daf9ece65"
+      "sha256": "6c29b8da5b81e33d087861229719e866e3bcacb68d797adcd10c1db8524b06e9"
     },
     {
       "path": "install.sh",
-      "sha256": "c76ac163b212aad9e091c6d4d34cf8d40b60b1ee9673563ddec505bdf06b4729"
+      "sha256": "3cf354323367ef6a7629c534f364333566c4f74452c5855fa3c3f1427c0941f3"
     },
     {
       "path": "job.example.json",
@@ -413,7 +413,7 @@
     },
     {
       "path": "test_bootstrap.py",
-      "sha256": "28e78d635c13aa8322ea474bd5879af2d7a1f224abc71cacd12e8f0e209a15bb"
+      "sha256": "7232ada7addcf8f7588a15ceadf120a5afc6dd4783dff36d9ffe1b22ab676e88"
     },
     {
       "path": "test_controlled_youtube.py",
@@ -490,6 +490,10 @@
     {
       "path": "update.py",
       "sha256": "165e717dac9fb02d82b69f774b288cc19d26542ee824b8ed6895c73feb5fda2d"
+    },
+    {
+      "path": "workspace_launcher.py",
+      "sha256": "3726e0de7b6719f0fd09ba8347097590417f87abd5ab4de7fa760038f6aa25c4"
     }
   ]
 }

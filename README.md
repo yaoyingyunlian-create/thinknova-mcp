@@ -8,7 +8,7 @@ For new revision 64 store films, confirm the product or service, three distinct 
 
 ## 安装与制作
 
-从官方 GitHub 或 Gitee main 获取工具包，运行 `python bootstrap.py setup --json`。后续安全更新使用 `python bootstrap.py update`；保留客户规则、记忆、素材、登录态和作品。安装不再下载发布用 Playwright Chromium 或 Google OAuth SDK。
+从官方 GitHub 或 Gitee main 获取工具包，运行 `python bootstrap.py setup --json`。后续由客户工作区的 `python .thinknova-run.py` 在执行前自动更新；保留客户规则、记忆、素材、登录态和作品。安装不再下载发布用 Playwright Chromium 或 Google OAuth SDK。
 
 核心依赖为 Python 3.10+、FFmpeg/FFprobe、libass 和中文字体；字幕识别使用本机 Whisper。Ego Lite 由客户 AI 助理独立使用，不影响核心制作。
 
@@ -31,7 +31,7 @@ Run `film-preflight` before new paid jobs to check rendering, subtitles and the 
 
 ## 自动修复旧安装
 
-开工时从已安装工具包运行 `python bootstrap.py update --workspace "<客户工作目录>" --json`。命令在原目录尝试安全更新；遇到源码冲突或完整性错误时自动准备官方干净副本。按返回的 active_toolkit 和 python 继续，同一个客户工作目录和执行记录保持原位。两个官方源都不可达时，验证原副本本机制作可用后继续，版本显示未知。
+开工时从已安装工具包运行 `python bootstrap.py update --workspace "<客户工作目录>" --json`。命令在原目录尝试安全更新；遇到源码冲突或完整性错误时自动准备官方干净副本。升级成功会在客户工作区安装固定入口 `.thinknova-run.py`。把既有定时任务里的工具包路径就地替换成 `python .thinknova-run.py film job.json` 等对应命令（工作目录使用客户工作区），保留现有时间、对话和请求号。以后入口自动检查并调用生效版本。两个官方源都不可达时，继续使用已验证的本机版本，版本状态显示未知。已知有新版但无法启用时会报告阻塞。旧 bootstrap 执行更新后如未返回 launcher，用实际生效目录的新版 bootstrap 再运行一次同一条更新命令。
 
 遇到 AUTOMATION_PILOT_NOT_ALLOWED 或旧制作入口时，原 AI 定时任务就地改用现有 MCP 连接报价、生成、取件，再调用 toolkit.py film。保留时间、对话和原请求号，先查当天已有任务再决定是否生成。
 
@@ -77,7 +77,7 @@ paid_retake 默认关闭。启用后，只对原质检报告定位到的严重�
 
 ## English
 
-This is a video-production toolkit. Install with bootstrap.py setup --json, make and check videos with toolkit.py film or run-day, and deliver a review package. Store films must retain the original ThinkNova audio. Do not use local TTS, macOS say, muting, or replacement audio. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
+This is a video-production toolkit. After the first workspace update, run `python .thinknova-run.py film job.json` from the customer workspace. It updates before dispatch and follows the active installation. Rebind established assistant schedules once to this workspace entry point. Install with bootstrap.py setup --json, make and check videos with toolkit.py film or run-day, and deliver a review package. Store films must retain the original ThinkNova audio. Do not use local TTS, macOS say, muting, or replacement audio. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
 
 Before quoting, check that the dialogue fits the requested duration. If FILM_DIALOGUE_OVER_CAPACITY identifies a segment, shorten its dialogue and update its captions together. The edit_timeline report records source in/out points and the remaining dialogue gap at each join.
 
