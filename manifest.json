@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.40",
+  "version": "thinknova-automation-toolkit-v3.1.41",
   "text_line_endings": "lf",
-  "revision": "ab46b7c6a87798f9d7a7a118fc19a2184aacc05412142efdda42b7abdd2bac49",
+  "revision": "ad99d2bdab3b865ab1ba2a702c1b888be7a917be7fb4a5be72a4638d0ec76951",
   "files": [
     {
       "path": ".gitignore",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "0a63f70b2caa4f60a393d8c788c7c476988a72994af557ec04113e8c3fca331d"
+      "sha256": "02c6d2677342f3e4c3acf7fc57bc47e5e8169386ccaa83335e5653c1113e83bb"
     },
     {
       "path": "clip_recovery.py",
@@ -249,7 +249,7 @@
     },
     {
       "path": "render/assemble.py",
-      "sha256": "ea989b1bc2bf8beb73b70831ae8b8a2d967a1e1b3f7c35ba7e6f34f0bdd7e4f4"
+      "sha256": "f4fef85507be8d308c8e50a94815ee9e524b289134af5a8107d0a57e3e12105f"
     },
     {
       "path": "render/captions.py",
@@ -257,7 +257,7 @@
     },
     {
       "path": "render/check.py",
-      "sha256": "154f0153fd3211eee599c5556f1f6dc569f706a1f7c85af3f9eff7abbc072627"
+      "sha256": "ad07dffd86f7e8405d4b4d895d3325e0ef45ee81f233d160c9c6e925aa9a98ea"
     },
     {
       "path": "render/hyperframes/vertical-slideshow/assets/images/slide1.jpg",
@@ -477,7 +477,7 @@
     },
     {
       "path": "test_store_film.py",
-      "sha256": "400fe0dd4e9996a263623c7268d1ddb682f453a495b5a1d70e812cff60ce9fd6"
+      "sha256": "ad627c0af1f0a22456f92d35f972217934b5883ab9bf4899ca8471ea07c35ed6"
     },
     {
       "path": "test_subtitle_layout.py",

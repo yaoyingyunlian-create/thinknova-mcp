@@ -10,6 +10,19 @@ from store_film import generation_arguments, validate_beats
 
 
 class StoreFilmTests(unittest.TestCase):
+    def test_store_playback_speed_matches_the_rendered_timeline(self):
+        from render.assemble import playback_matches_timeline, render_final_playback
+
+        with unittest.mock.patch('render.assemble.run_ff') as ffmpeg:
+            self.assertEqual(render_final_playback('ffmpeg', 'joined.mp4', 'paced.mp4', 1.0), 'joined.mp4')
+            ffmpeg.assert_not_called()
+            self.assertEqual(render_final_playback('ffmpeg', 'joined.mp4', 'paced.mp4', 1.25), 'paced.mp4')
+            self.assertIn('setpts=PTS/1.25', ffmpeg.call_args.args[1])
+            self.assertIn('atempo=1.25', ffmpeg.call_args.args[1])
+        self.assertFalse(playback_matches_timeline(28.7, 35.8, 1.0))
+        self.assertTrue(playback_matches_timeline(35.8, 35.8, 1.0))
+        self.assertTrue(playback_matches_timeline(28.7, 35.8, 1.25))
+
     def test_story_allows_visual_only_segment_but_requires_dialogue_exchange(self):
         from store_editorial import validate_story_turns
 

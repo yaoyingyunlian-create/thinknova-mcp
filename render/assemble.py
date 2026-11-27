@@ -805,6 +805,21 @@ def ensure_output_available(output, overwrite):
         raise Stop('OUTPUT_EXISTS: use --overwrite to replace existing artifacts')
 
 
+def playback_matches_timeline(measured, source_seconds, speed):
+    expected = source_seconds / speed
+    return abs(measured - expected) <= max(0.35, expected * 0.01)
+
+
+def render_final_playback(ff, source, output, speed):
+    if speed == 1.0:
+        return source
+    run_ff(ff, ['-nostdin', '-i', source, '-filter:v', f'setpts=PTS/{speed}',
+                '-filter:a', f'atempo={speed}', '-r', str(FPS),
+                '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p',
+                '-c:a', 'aac', '-movflags', '+faststart', output], 'final playback speed')
+    return output
+
+
 def run_delivery_check(ff, fp, video, srt, options):
     folder = os.path.dirname(video)
     cmd = [sys.executable, os.path.join(HERE, 'check.py'), video, '--sheet', folder,
@@ -815,6 +830,8 @@ def run_delivery_check(ff, fp, video, srt, options):
             cmd += ['--planned-film-seconds', str(options['short_dialogue_seconds'])]
         if options.get('final_playback_rate') == 1.25:
             cmd += ['--store-final-playback']
+            if options.get('expected_final_seconds') is not None:
+                cmd += ['--expected-final-seconds', str(options['expected_final_seconds'])]
         if options.get('separate_end_card'):
             cmd += ['--separate-end-card']
         if options.get('explainer_preview'):
@@ -1000,6 +1017,11 @@ def recheck(receipt, overwrite):
             temp_srt = None
         if options.get('film_profile') == 'store_v2':
             options['quality_policy'] = quality_policy.store_policy(options.get('quality_policy'))
+            source_seconds = record['result'].get('source_edit_seconds')
+            speed = options.get('final_playback_rate', 1.0)
+            if (type(source_seconds) in (int, float) and source_seconds > 0 and speed in (1.0, 1.25)
+                    and not playback_matches_timeline(probe(fp, video)[0], source_seconds, speed)):
+                raise Stop('FILM_PLAYBACK_TIMELINE_MISMATCH: reassemble the original clips with the current toolkit', 2)
         if options.get('caption_alignment_pending') and (options.get('require_caption_alignment') or not quality_policy.enabled(options.get('quality_policy'))):
             raise Stop('FILM_CAPTION_ALIGNMENT_PENDING: reassemble with verified subtitle timing', 2)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, video, temp_srt, options)
@@ -1316,13 +1338,8 @@ def main():
             cur = add_music(ff, cur, music, job.get("music_db", -22), t, wk)
         media_speed = 1.25 if story_narrative else 1.0
         source_edit_seconds = t
-        if store_film:
-            paced = os.path.join(wk, 'final-playback.mp4')
-            run_ff(ff, ['-nostdin', '-i', cur, '-filter:v', 'setpts=PTS/1.25',
-                        '-filter:a', 'atempo=1.25', '-r', str(FPS),
-                        '-c:v', 'libx264', '-crf', '18', '-pix_fmt', 'yuv420p',
-                        '-c:a', 'aac', '-movflags', '+faststart', paced], 'final playback speed')
-            cur = paced
+        if media_speed != 1.0:
+            cur = render_final_playback(ff, cur, os.path.join(wk, 'final-playback.mp4'), media_speed)
             t /= media_speed
             job['_total'] = t
             for cue in cues:
@@ -1366,6 +1383,7 @@ def main():
         if store_film:
             options.update(film_profile='store_v2', shop_name=job.get('shop_name',''), featured_service=job['featured_service'], quality_policy=job.get('quality_policy', {}))
             options['final_playback_rate'] = media_speed
+            options['expected_final_seconds'] = t
         if revision64:
             options['dialogue_checked_per_clip'] = relaxed
         result = {'duration_seconds': t, 'width': W, 'height': H, 'fps': FPS,
@@ -1385,6 +1403,11 @@ def main():
         if missing_caption_lines:
             result.update(subtitle_timing='review_required', missing_caption_lines=missing_caption_lines)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
+        if store_film and not playback_matches_timeline(result['duration_seconds'], source_edit_seconds, media_speed):
+            passed = False
+            message = 'Rendered media duration does not match the edited timeline and recorded playback speed. Reassemble the original clips.'
+            diagnostics.append({'code': 'FILM_PLAYBACK_TIMELINE_MISMATCH', 'message': message})
+            report += '\n  [FILM_PLAYBACK_TIMELINE_MISMATCH] ' + message
         if native_issues:
             passed = False
             options['native_audio_issues'] = native_issues

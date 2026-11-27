@@ -87,7 +87,7 @@ def get_opts(argv):
          "--lufs": "-14", "--lufs-tol": "2", "--max-tp": "-1", "--max-silence-pct": "10",
          "--min-cuts": "3", "--max-chars": None, "--max-lines": "1", "--max-gap": "3",
          "--max-tail": "4.5", "--ffmpeg": None, "--ffprobe": None, "--srt": None,
-         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
+         "--sheet": None, "--lang": None, "--model": "small", "--outro-start": None, "--planned-film-seconds": None, "--expected-final-seconds": None, "--store-boundaries": None, "--shop-name": None, "--featured-service": None}
     flags = {"--speech", "--allow-silent", "--film", "--store-film", "--v3-dialogue", "--no-outro", "--explainer-preview", "--separate-end-card", "--quality-58", "--native-dialogue", "--dialogue-checked-per-clip", "--store-final-playback"}
     pos, on, i = [], set(), 0
     while i < len(argv):
@@ -444,7 +444,15 @@ def main():
                 fail('FILM_DURATION', 'store film exceeds 60 seconds after final playback speed')
             elif not 30 <= dur <= 40:
                 warn('FILM_DURATION_TARGET', 'target 30–40 seconds after final playback speed')
-            if planned is not None:
+            edited = o.get('--expected-final-seconds')
+            if edited is not None:
+                try:
+                    expected = float(edited)
+                except (TypeError, ValueError):
+                    expected = 0
+                if not 0 < expected < float('inf') or abs(dur - expected) > max(0.35, expected * 0.01):
+                    fail('FILM_PLAYBACK_TIMELINE_MISMATCH', 'final duration differs from the edited timeline at 1.25x')
+            elif planned is not None:
                 try:
                     measured = float(o['--outro-start']) if '--separate-end-card' in on else dur
                     expected = int(planned) / 1.25
