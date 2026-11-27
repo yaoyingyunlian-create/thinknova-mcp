@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.41",
+  "version": "thinknova-automation-toolkit-v3.1.42",
   "text_line_endings": "lf",
-  "revision": "ad99d2bdab3b865ab1ba2a702c1b888be7a917be7fb4a5be72a4638d0ec76951",
+  "revision": "724e449e3d6b20f24d0e6272adbc68087619eea9df1b6fac12263cc05c27d3da",
   "files": [
     {
       "path": ".gitignore",
@@ -9,15 +9,15 @@
     },
     {
       "path": "AGENTS.md",
-      "sha256": "5500ce39a42cef75cecb2b2e06a736094e3bd99e7113e79a2f4c9d23f1ef8278"
+      "sha256": "ffc290b45a70310a57c34a0b5996985f05b1c559e0b6602f1d48c4890b34412c"
     },
     {
       "path": "AUTOMATION.md",
-      "sha256": "954a009b74d1486fba519ed27ed9336d54b37773413ec3e4e2f2c88f45cf6f24"
+      "sha256": "2c551b3a34af73cbb276751a823733f903eaf4d55dc4e71412f6829b1efdaac7"
     },
     {
       "path": "README.md",
-      "sha256": "61054cb1e28bd55cbea2f39de12ba5c847561eb84aa1d4ff4805bdb60bea8b4c"
+      "sha256": "51329027d9adeca9bb7f59a41ba1af7243356bad99b664c7f0af83872a4f655d"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -29,7 +29,7 @@
     },
     {
       "path": "automation.py",
-      "sha256": "20406885e4424b6cf41979378cf34ee3d97ffa41ef93ddf333260f14650702d8"
+      "sha256": "a6a687479652dad58165936e7b15c6b94c3f56bb96bceaf48e7dcd45f28f6d16"
     },
     {
       "path": "automation_client.py",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "02c6d2677342f3e4c3acf7fc57bc47e5e8169386ccaa83335e5653c1113e83bb"
+      "sha256": "53150917c7177c0aab6513ec917b774f867f3c53464c281b412b1dce2bb91414"
     },
     {
       "path": "clip_recovery.py",
@@ -485,7 +485,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "3c2c48f9c651d094183f69dfe4f5420e8fb9c6801767a9e82b46944aea4edb4f"
+      "sha256": "cae87554a2c49a046cdd0c18e00f629bf6290f935bcf9e9ac238e9dabdbc5614"
     },
     {
       "path": "update.py",

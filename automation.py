@@ -877,6 +877,8 @@ def assistant_schedule():
     return {'status': 'assistant_workflow', 'scheduler': 'customer_ai_assistant',
             'production': {'connection': 'existing_thinknova_mcp_oauth',
                            'device_pairing_required': False,
+                           'local_command': 'python .thinknova-run.py film job.json',
+                           'connection_check': 'If the ThinkNova connector reports a missing link_id, reconnect it in the affected assistant and verify get_balance, get_content_rules and existing task IDs before starting new generation.',
                            'migration': {'update_existing_tasks': True, 'preserve_schedule_and_chat': True,
                                          'replace_legacy_commands': ['enable-production', 'produce-once',
                                                                      'run-day', 'daily-film'],
@@ -929,6 +931,8 @@ def run_day(path, budget):
     with state_lock(STATE / 'runner'):
         if (STATE / 'paused.json').exists():
             raise RuntimeError('AUTOMATION_PAUSED')
+        if not CREDENTIALS.is_file():
+            raise RuntimeError('AUTOMATION_AUTHORIZATION_REQUIRED')
         client = Client(secure_state.load(CREDENTIALS))
         preflight_plan_copy(client, plan)
         claim = client.claim('produce')

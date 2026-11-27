@@ -312,11 +312,11 @@ def main() -> int:
     film_mode = film_parser.add_mutually_exclusive_group()
     film_mode.add_argument("--recheck", action="store_true")
     film_mode.add_argument("--existing", action="store_true", help="Package the existing checked output without rendering")
-    daily_film_parser = sub.add_parser("daily-film", help="Use today's authorized server store-film plan")
+    daily_film_parser = sub.add_parser("daily-film", help="Controlled device only: use the authorized server store-film plan")
     daily_film_parser.add_argument("--project", required=True)
     daily_film_parser.add_argument("--date", required=True)
     daily_film_parser.add_argument("--work-slot", type=int, choices=range(1, 6), default=1)
-    run_day_parser = sub.add_parser("run-day", description="Run an approved schema_version=1 day plan JSON with date, project_key, rules_version, opening, segments and platforms. Uses --max-credits as the budget cap. Exit 2 if blocked.")
+    run_day_parser = sub.add_parser("run-day", description="Controlled device only: run an approved schema_version=1 day plan JSON with date, project_key, rules_version, opening, segments and platforms. Uses --max-credits as the budget cap. Exit 2 if blocked.")
     run_day_parser.add_argument("plan", type=Path)
     run_day_parser.add_argument("--max-credits", required=True, type=int)
     authorization_parser = sub.add_parser("authorization", description="Read the paired project grant. Exit 2 on authorization or installation failure.")
@@ -458,21 +458,27 @@ def main() -> int:
             print(json.dumps({'status': 'invalid', 'error': str(exc)}, ensure_ascii=False))
             return 2
     if args.command == "daily-film":
-        from automation import daily_film
+        from automation import assistant_schedule, daily_film
         try:
             result = daily_film(args.project, args.date, args.work_slot)
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result.get('status') in ('awaiting_review', 'ready_to_publish', 'not_due') else 2
         except (ValueError, RuntimeError, OSError, KeyError) as exc:
-            print(json.dumps({'status': 'failed', 'error': str(exc)}, ensure_ascii=False))
+            result = {'status': 'failed', 'error': str(exc)}
+            if str(exc) == 'AUTOMATION_AUTHORIZATION_REQUIRED':
+                result.update(status='migration_required', production=assistant_schedule()['production'])
+            print(json.dumps(result, ensure_ascii=False))
             return 2
     if args.command == "run-day":
-        from automation import run_day
+        from automation import assistant_schedule, run_day
         try:
             print(json.dumps(run_day(args.plan, args.max_credits), ensure_ascii=False))
             return 0
         except (ValueError, RuntimeError, OSError, KeyError) as exc:
-            print(json.dumps({'status': 'failed', 'error': str(exc)}, ensure_ascii=False))
+            result = {'status': 'failed', 'error': str(exc)}
+            if str(exc) == 'AUTOMATION_AUTHORIZATION_REQUIRED':
+                result.update(status='migration_required', production=assistant_schedule()['production'])
+            print(json.dumps(result, ensure_ascii=False))
             return 2
     if args.command == "init": return init()
     if args.command == "verify": return verify()
