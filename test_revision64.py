@@ -17,8 +17,13 @@ class Revision64Tests(unittest.TestCase):
                 'confirmed_facts': {'methods_and_reasons': ['暖机', '一键排水', '一键排水。'],
                                     'visible_details': ['面板显示余量'],
                                     'customer_situations': ['早班来不及']}}
+        self.assertEqual(missing_product_facts(shop), [])
+        shop['confirmed_facts']['methods_and_reasons'] = ['暖机']
+        shop['confirmed_facts']['visible_details'] = []
         self.assertEqual(missing_product_facts(shop), ['shop_profile.confirmed_facts'])
         shop['confirmed_facts']['visible_details'].append('可拆洗滤网')
+        shop.pop('viewer_action')
+        shop['viewer_action_spec'] = {'mode': 'message', 'channel': 'dm', 'keyword': '暖机'}
         self.assertEqual(missing_product_facts(shop), [])
 
     def test_repetition_and_inflight_compatibility(self):

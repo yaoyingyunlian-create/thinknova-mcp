@@ -97,12 +97,12 @@ During speech, keep the speaker's mouth visible. An explainer can use one roughl
 Keep the speaker’s mouth visible during speech. Use at most one detail cutaway per segment, no longer than two seconds and only over the latter half of a spoken line. Use natural in-scene dialogue. Quote 15 seconds in 9:16. Put the actual first frame first, followed by both character boards, or by the approved cast board and the product board. Verify that the quote applies all three references. For an undersized local image, run `toolkit.py prepare-reference input.png --output prepared.png` with the edge limits from the quote. Upload and authorize the derivative before quoting with its new asset ID.
 
 
-修订64执行补充：按 rules/store-film-rules-v64.md 开工。先确认主推项、三条不同的卖点和一个收尾动作；缺资料先问并保存已确认规则。缺照片或顾客原话按规则使用示意素材或店员说明。脚本独立盲审，每段 4～6 句，逐句字幕保留原文标点。旧任务按原契约续跑。
+修订64执行补充：按 rules/store-film-rules-v64.md 开工。先确认主推项、一条已核实的可公开事实和一个收尾动作；缺资料先问并保存已确认规则。缺照片或顾客原话按规则使用示意素材或店员说明。脚本独立盲审，每段 4～6 句，逐句字幕保留原文标点。旧任务按原契约续跑。
 Revision 60 uses the current server rules and prepares missing illustrative assets automatically within the approved budget. Missing shop names or quotes do not block a film. Apply server policy 58 warnings and bounded speech recovery where enabled; unknown ASR is explicitly recorded and does not create another approval requirement within a valid publication grant. Old plans keep their original contracts.
 
 修订60：每段5～8句、总55～62字，短接话仍计对白与字幕，只免计情境句额度；第二段接第一段末句，第二卖点由对方问出，至少两处自然反应。门店结尾说已确认地址，缺地址不编造或停工。
 Revision 60: use 5–8 connected lines and 55–62 Chinese characters per segment. Short reactions remain in dialogue, captions and total counts; only the context quota is exempt. Bridge segments, let the other person elicit the second benefit, and include two natural reactions. Speak a confirmed address in store-film endings; never invent a missing address or block production for it.
 
-修订 65（以 MCP 返回的生效修订为准）：主推项、三条不同已确认卖点、一个行动指引，缺一就只问缺项，保存确认后的项目规则再报价。多段固定同一获授权人物板，用 edit_image 备竖屏首帧再 animate_image。4–8 句覆盖生效时长的 80%–93.33%，对白只用原生音轨，字幕源自逐句稿。店员可对镜头说咨询动作。段内与段间长空档先从原素材剪，保留可靠对白和动作。已有任务复用原任务号。
+修订 65（以 MCP 返回的生效修订为准）：主推项、一条已核实的可公开事实、一个行动指引，缺一就只问缺项，保存确认后的项目规则再报价。多段固定同一获授权人物板，用 edit_image 备竖屏首帧再 animate_image。4–8 句覆盖生效时长的 80%–93.33%，对白只用原生音轨，字幕源自逐句稿。店员可对镜头说咨询动作。段内与段间长空档先从原素材剪，保留可靠对白和动作。已有任务复用原任务号。
 
-Revision 65 applies when active on MCP. Ask only for missing facts before quoting: featured item, three distinct verified facts, and one viewer action. Use a shared approved continuity board, portrait first frames, and native dialogue only. Write 4–8 lines filling 80%–93.33% of the effective duration. Trim verified unwanted gaps and re-time exact-script captions. Resume existing tasks as recorded.
+Revision 65 applies when active on MCP. Ask only for missing facts before quoting: featured item, one verifiable public fact, and one viewer action. Use a shared approved continuity board, portrait first frames, and native dialogue only. Write 4–8 lines filling 80%–93.33% of the effective duration. Trim verified unwanted gaps and re-time exact-script captions. Resume existing tasks as recorded.

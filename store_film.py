@@ -17,9 +17,13 @@ def missing_product_facts(shop):
     missing = []
     if not product:
         missing.append('shop_profile.featured_service')
-    if len(independent) < 3:
+    if not independent:
         missing.append('shop_profile.confirmed_facts')
-    if not (shop.get('viewer_action') or '').strip():
+    action = shop.get('viewer_action_spec') or {}
+    visit = isinstance(action, dict) and action.get('mode') == 'visit' and bool(action.get('location'))
+    message = (isinstance(action, dict) and action.get('mode') == 'message'
+               and action.get('channel') in ('dm', 'pm', 'whatsapp') and bool(action.get('keyword')))
+    if not (shop.get('viewer_action') or '').strip() and not (visit or message):
         missing.append('shop_profile.viewer_action')
     return missing
 

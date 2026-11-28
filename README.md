@@ -1,8 +1,8 @@
 # ThinkNova 视频制作工具包
 
-新门店片按修订 64 制作。主推项、三条不同卖点和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
+新门店片按修订 64 制作。主推项、一条已核实的可公开事实和收尾动作由客户确认后写进项目规则。新脚本逐段 4–6 句，盲审通过再报价，字幕使用逐句原文。服务器日计划携带与台词摘要绑定的盲审结果；本机自带计划可用 Codex 独立盲审和限一次改稿。已有任务按原规则续跑。
 
-For new revision 64 store films, confirm the product or service, three distinct selling points, and the viewer’s next action before quoting. Use 4–6 spoken lines per segment and an independent dialogue review. Subtitles use the exact script text and spoken timestamps. Existing tasks resume under their original rules.
+For new revision 64 store films, confirm the product or service, one verifiable public fact, and the viewer’s next action before quoting. Use 4–6 spoken lines per segment and an independent dialogue review. Subtitles use the exact script text and spoken timestamps. Existing tasks resume under their original rules.
 
 工具包交付成片与待审包。自动发布推荐使用 **客户 AI 助理的原生定时任务 + Ego Lite**；工具包不再发布、登录社交账号或注册电脑系统任务。
 
@@ -84,6 +84,6 @@ Before quoting, check that the dialogue fits the requested duration. If FILM_DIA
 
 Scheduling and publishing use the customer's AI assistant's native timers and Ego Lite. The toolkit installs no OS tasks and no longer supplies active upload/login implementations. Old commands return migration guidance. Reuse MCP OAuth for quotes, generation and downloads, then use the toolkit to assemble the video. Keep the confirmed budget and existing idempotency keys. No pilot or device pairing is needed. No platform OAuth or browser login is required for creation. Preserve customer memory, assets, platform sessions and work during upgrades.
 
-修订 65（以 MCP 返回的生效修订为准）：主推项、三条不同已确认卖点、一个行动指引，缺一就只问缺项，保存确认后的项目规则再报价。多段固定同一获授权人物板，用 edit_image 备竖屏首帧再 animate_image。4–8 句覆盖生效时长的 80%–93.33%，对白只用原生音轨，字幕源自逐句稿。店员可对镜头说咨询动作。段内与段间长空档先从原素材剪，保留可靠对白和动作。已有任务复用原任务号。
+修订 65（以 MCP 返回的生效修订为准）：主推项、一条已核实的可公开事实、一个行动指引，缺一就只问缺项，保存确认后的项目规则再报价。多段固定同一获授权人物板，用 edit_image 备竖屏首帧再 animate_image。4–8 句覆盖生效时长的 80%–93.33%，对白只用原生音轨，字幕源自逐句稿。店员可对镜头说咨询动作。段内与段间长空档先从原素材剪，保留可靠对白和动作。已有任务复用原任务号。
 
-Revision 65 applies when active on MCP. Ask only for missing facts before quoting: featured item, three distinct verified facts, and one viewer action. Use a shared approved continuity board, portrait first frames, and native dialogue only. Write 4–8 lines filling 80%–93.33% of the effective duration. Trim verified unwanted gaps and re-time exact-script captions. Resume existing tasks as recorded.
+Revision 65 applies when active on MCP. Ask only for missing facts before quoting: featured item, one verifiable public fact, and one viewer action. Use a shared approved continuity board, portrait first frames, and native dialogue only. Write 4–8 lines filling 80%–93.33% of the effective duration. Trim verified unwanted gaps and re-time exact-script captions. Resume existing tasks as recorded.
