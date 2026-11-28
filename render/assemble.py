@@ -383,7 +383,7 @@ def plan_dialogue_cuts(durations, windows, budget):
 
 
 
-def plan_store_dialogue_edits(durations, windows, budget):
+def plan_store_dialogue_edits(durations, windows, budget, *, trim_opening=False):
     """Share the cut budget across verified gaps, preserving dialogue and its immediate reactions."""
     starts, ends = [0.0] * len(durations), list(durations)
     cuts = [[] for _ in durations]
@@ -399,7 +399,13 @@ def plan_store_dialogue_edits(durations, windows, budget):
             if gap > 1:
                 candidates.append((gap, index, left, right, True))
 
+    if trim_opening and windows[0] and windows[0][0][0] > 0.5:
+        start = windows[0][0][0]
+        candidates.append((start, 0, 0.0, start, True))
+
     def available(left, right, index, boundary):
+        if boundary and index == 0:
+            return max(0.0, right - 0.2)
         return (max(0.0, durations[index - 1] - left - 0.2) + max(0.0, right - 0.2)
                 if boundary else max(0.0, right - left - 0.4))
 
@@ -416,14 +422,16 @@ def plan_store_dialogue_edits(durations, windows, budget):
         removed = min(room, max(0.0, gap - hi))
         if removed < 0.04:
             removed = 0.0
-        if boundary and removed:
+        if boundary and index == 0:
+            starts[0] += removed
+        elif boundary and removed:
             tail = max(0.0, durations[index - 1] - left - 0.2)
             ends[index - 1] -= removed * tail / room
             starts[index] += removed * (room - tail) / room
         elif removed:
             middle = (left + right) / 2
             cuts[index].append((middle - removed / 2, middle + removed / 2))
-        gaps[index].append({'kind': 'boundary' if boundary else 'internal', 'start': left, 'end': right,
+        gaps[index].append({'kind': ('opening' if index == 0 else 'boundary') if boundary else 'internal', 'start': left, 'end': right,
                             'source_seconds': round(gap, 3), 'remaining_seconds': round(gap - removed, 3)})
     return list(zip(starts, ends)), cuts, gaps
 
@@ -683,7 +691,10 @@ def write_ass(path, job, cues, card_span, font):
         card_style = 'Closing' if overlay else 'Card'
         if overlay:
             try:
-                lines = [safe_subtitle_text(x, W, H, 80, job.get('closing_overlay_top', 220), 16, max_lines=1, allow_shrink=False)
+                story_overlay = job.get('script_rules_revision') == '65' and job.get('story_narrative') is True
+                lines = [safe_subtitle_text(x, W, H, 80, job.get('closing_overlay_top', 220), 16,
+                                            max_lines=2 if story_overlay else 1, allow_shrink=False,
+                                            measure=store_font_measure(font) if story_overlay else None)
                          for x in overlay]
             except ValueError as exc:
                 raise Stop('FILM_CLOSING_OVERLAY_INVALID: shorten the closing text', 2) from exc
@@ -895,6 +906,8 @@ def deliver(video, srt, sheet, output, options, result, warnings, overwrite, rep
         with open(receipt, 'w', encoding='utf-8') as stream:
             json.dump({'sha256': file_digest(video), 'state': 'awaiting_review',
                        'machine_check': 'pass', 'outro_start': options['outro_start'],
+                       **{key: result[key] for key in ('script_rules_revision', 'story_narrative', 'toolkit_version',
+                                                          'final_playback_rate', 'story_cadence', 'story_timing') if key in result},
                        **quality_policy.receipt(options.get('quality_policy', {}), warnings)}, stream)
     # Clear any previous receipt before replacing the artifacts. A partial delivery
     # cannot inherit a passing receipt from an earlier output.
@@ -1059,10 +1072,18 @@ def main():
     story_narrative = revision65 and job.get('story_narrative') is True
     if store_film:
         from render.native_dialogue import inspect, script_lines
+    story_timing = None
+    if 'story_plan' in job and not story_narrative:
+        raise Stop('FILM_STORY_PLAN_INVALID: use the revision 65 story profile for this plan', 2)
     if story_narrative:
         from store_editorial import validate_story_turns
+        from story_plan import check_story_segments, validate_story_plan
         try:
-            validate_story_turns(job['clips'])
+            if 'story_plan' in job:
+                story_timing = validate_story_plan(job['story_plan'], job.get('closing_overlay', []))
+                check_story_segments(job['story_plan'], job['clips'])
+            else:
+                validate_story_turns(job['clips'])
         except ValueError as exc:
             raise Stop(str(exc), 2) from exc
     if revision64:
@@ -1093,7 +1114,7 @@ def main():
     if store_film and job.get('srt') and not verified_srt:
         raise Stop('FILM_STORE_USE_CLIP_CAPTIONS: use subs/subs2 so captions follow speech edits', 2)
     if store_film:
-        job['quality_policy'] = quality_policy.store_policy(job.get('quality_policy'))
+        job['quality_policy'] = quality_policy.store_policy(None if story_timing is not None else job.get('quality_policy'))
     relaxed = quality_policy.enabled(job.get('quality_policy'))
     if store_film:
         job.update(film=True, font_size=90, subtitle_bottom=12, subtitle_style='outline')
@@ -1194,18 +1215,35 @@ def main():
         edit_report = []
         internal_cuts = [[] for _ in prepared]
         gap_report = [[] for _ in prepared]
+        visual_windows = {}
         if native_edit:
             for i, (shot, dur) in enumerate(prepared):
                 windows[i] = sorted(native_reports[i].get('cues', {}).values())
                 if native_reports[i].get('status') == 'aligned' and 'cutaway' not in job['clips'][i]:
                     reliable[i] = windows[i]
+            if story_narrative:
+                for index, clip in enumerate(job['clips']):
+                    if script_lines(clip):
+                        continue
+                    duration = prepared[index][1]
+                    action = clip.get('action_window', [0, duration])
+                    if (not isinstance(action, list) or len(action) != 2
+                            or any(type(value) not in (int, float) or not math.isfinite(value) for value in action)
+                            or not 0 <= action[0] < action[1] <= duration):
+                        raise Stop(f'FILM_STORY_ACTION_WINDOW_INVALID: clip {index + 1}', 2)
+                    visual_windows[index] = tuple(action)
+                    reliable[index] = [tuple(action)]
             planned = job.get('short_dialogue_seconds')
             minimum = planned - max(2, planned * 0.1) if planned else (45 if job.get('film_type') == 'explainer' else 30)
             if not planned and job.get('end_card'):
                 minimum -= float(job['end_card'].get('dur') or 2.2)
             budget = max(0.0, sum(dur for _, dur in prepared) - minimum - 0.08)
+            if story_narrative:
+                source_seconds = sum(dur for _, dur in prepared)
+                budget = max(0.0, source_seconds - 37.5 - 0.08)
             if revision65:
-                cuts, internal_cuts, gap_report = plan_store_dialogue_edits([dur for _, dur in prepared], reliable, budget)
+                cuts, internal_cuts, gap_report = plan_store_dialogue_edits(
+                    [dur for _, dur in prepared], reliable, budget, trim_opening=story_narrative)
             else:
                 cuts = plan_dialogue_cuts([dur for _, dur in prepared], reliable, budget)
         for i, (c, (shot, dur), (start, end)) in enumerate(zip(job['clips'], prepared, cuts)):
@@ -1225,6 +1263,8 @@ def main():
                                     ('speech_alignment_uncertain' if points else 'speech_unavailable')})
                 if revision65:
                     edit_report[-1].update(internal_cuts=internal_cuts[i], dialogue_gaps=gap_report[i])
+                if i in visual_windows:
+                    edit_report[-1].update(status='protected_visual_action', action_window=visual_windows[i])
                 if start or end < dur or internal_cuts[i]:
                     shot = trim_store_dialogue(ff, shot, start, end, internal_cuts[i], wk, i)
                     dur = edited_timestamp(end, start, internal_cuts[i])
@@ -1400,6 +1440,21 @@ def main():
             ]
         if native_edit:
             result['edit_timeline'] = edit_report
+        if story_narrative:
+            first_speech = next((edit['timeline_start'] + edited_timestamp(points[0][0], cuts[i][0], internal_cuts[i])
+                                 for i, (edit, points) in enumerate(zip(edit_report, windows)) if points), None)
+            cadence = []
+            for index, gaps in enumerate(gap_report):
+                for gap in gaps:
+                    cadence.append({**gap, 'segment': index + 1,
+                                    'final_seconds': round(gap['remaining_seconds'] / media_speed, 3)})
+            result['story_cadence'] = {'first_speech_seconds': None if first_speech is None else round(first_speech / media_speed, 3),
+                                       'gaps': cadence, 'protected_action_segments': [index + 1 for index in visual_windows]}
+            if story_timing is not None:
+                result['story_timing'] = story_timing
+        if store_film:
+            result.update(script_rules_revision=job.get('script_rules_revision'), story_narrative=story_narrative,
+                          toolkit_version=json.loads((Path(HERE).parent / 'manifest.json').read_text(encoding='utf-8'))['version'])
         if missing_caption_lines:
             result.update(subtitle_timing='review_required', missing_caption_lines=missing_caption_lines)
         passed, diagnostics, sheet, report = run_delivery_check(ff, fp, out, srt, options)
@@ -1416,7 +1471,8 @@ def main():
             report += '\n' + '\n'.join(item['message'] for item in native_issues)
         if revision65:
             for index, gaps in enumerate(gap_report):
-                remaining = [gap for gap in gaps if gap['remaining_seconds'] > 1.5]
+                remaining = [{**gap, 'final_seconds': round(gap['remaining_seconds'] / media_speed, 3)}
+                             for gap in gaps if gap['remaining_seconds'] / media_speed > 1.5]
                 if remaining:
                     diagnostics.append({'code': 'FILM_DIALOGUE_GAP_REVIEW', 'severity': 'warning', 'clip': index + 1,
                                         'task_no': job['clips'][index].get('task_id'), 'gaps': remaining,

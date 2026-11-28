@@ -34,6 +34,8 @@ Run `film-preflight` before new paid jobs to check rendering, subtitles and the 
 
 遇到 `AUTOMATION_AUTHORIZATION_REQUIRED`、`AUTOMATION_PILOT_NOT_ALLOWED` 或旧制作入口时，就地更新原 AI 定时任务，用现有 MCP OAuth 连接报价、生成、取件，再调用 `python .thinknova-run.py film job.json`。普通制作无需配对。保留时间、对话和原请求号，先查当天已有任务。若当前助手的连接提示缺 `link_id`，先在受影响的助手中重连 ThinkNova，再验证只读查询。
 
+修订 65 新版使用三段剧情示例 `render/templates/store-film-v65.story-plan.json`。仅在项目返回 `story_plan_version=1` 时，先提交整片计划再按段报价，同一计划贯穿建单和拼片。下载原片后，将同一份 `story_plan` 写入拼片任务，使用 `film_profile=store_v2`、`film_type=explainer`、`film_schema_version=3`，并把各段的原任务号、审查摘要、`planned_seconds` 和逐句稿复制到对应的 `clips`。片长按最终 1.25 倍估算。拼片从原声时间戳裁开场和接缝，无对白的过程镜头默认保留，若本机已核对有效动作起止可填 `action_window`（相对该段裁剪前的秒数）。交付报告记录实际规则、播放速度和接话空档。
+
 ## 成片诊断与自动复检
 
 制作和巡检使用同一份 job.json。工具包记录失败原因，自动尝试字幕修复或原预览复检。可恢复的下载故障由 AI 助理回查原任务并取回原产物。
@@ -77,6 +79,7 @@ When rechecking an old store-film preview created under the generic film profile
 paid_retake 默认关闭。启用后，只对原质检报告定位到的严重故障准备用一次补拍。决策文件记录 authorized、remaining_approved_credits、segment_index、reason_code、tool 和已核对的 arguments。运行 `toolkit.py film-replacement job.json replacement-decision.json` 获取只读报价请求，调用 get_balance 后用 --quoted-credits 传回报价金额。收到 ready_to_submit 后，由 AI 助理使用返回的稳定 client_request_id 和 max_credits 提交，断网续跑复用同一请求号。取得结果后把实际 charged_credits 记录到原制作任务，并用 film-events JOB --record-stage generation --outcome passed --code FILM_PAID_RETAKE --task-no TASK_ID 上报。后台只统计该补拍请求号对应的实际结算积分。用新片重新质检。工作目录保留已用过的补拍授权和请求。
 
 ## English
+For projects advertising `story_plan_version=1`, see `render/templates/store-film-v65.story-plan.json`. Quote each scene against the same whole-film draft. Assembly trims verified dead time using original audio and preserves silent visual actions. An optional `action_window` protects the verified action interval within a silent clip. The delivery report includes the actual revision, playback rate, and measured cadence.
 
 This is a video-production toolkit. After the first workspace update, run `python .thinknova-run.py film job.json` from the customer workspace. It updates before dispatch and follows the active installation. Rebind established assistant schedules once to this workspace entry point. Install with bootstrap.py setup --json, use the existing MCP OAuth connection for generation and the workspace film command for assembly, and deliver a review package. Store films must retain the original ThinkNova audio. Do not use local TTS, macOS say, muting, or replacement audio. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.
 

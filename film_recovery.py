@@ -17,6 +17,11 @@ CAPTION = {'FILM_CAPTIONS_REQUIRED', 'FILM_SUBTITLE_SPLIT_REQUIRED', 'FILM_DIALO
 RECOVERY_ACTIONS = {'captions': 'THINKNOVA_FILM_REPAIR_CAPTIONS', 'recheck': 'THINKNOVA_FILM_REPAIR_RECHECK'}
 
 
+def rule_version(job):
+    value = str(job.get('script_rules_revision') or job.get('film_rules_revision') or job.get('film_schema_version') or 'default')
+    return value if re.fullmatch(r'[A-Za-z0-9_.-]{1,32}', value) else 'default'
+
+
 def failure_codes(report):
     values = [report.get('error', '').split(':', 1)[0]]
     values.extend(item.get('code', '') for item in report.get('diagnostics', []) if isinstance(item, dict) and item.get('severity') != 'warning')
@@ -92,8 +97,13 @@ def record_external_event(root, job_path, stage, outcome, code, task_no=None, *,
                     if fingerprint else uuid.uuid4().hex)
         if any(event['event_id'] == event_id for event in state['events']):
             return
+        try:
+            versioned_job = json.loads(job_path.read_text(encoding='utf-8-sig'))
+            revision = rule_version(versioned_job) if isinstance(versioned_job, dict) else 'default'
+        except (OSError, ValueError):
+            revision = 'default'
         item = {'event_id': event_id, 'run_id': state['run_id'], 'stage': stage,
-                'outcome': outcome, 'code': code, 'toolkit_version': version, 'rule_version': 'default', 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
+                'outcome': outcome, 'code': code, 'toolkit_version': version, 'rule_version': revision, 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}
         if task_no:
             item['task_no'] = task_no
         if segment is not None:
@@ -151,9 +161,7 @@ def _render(root, job_path, job, recheck, state_path, atomic):
     fingerprint = digest.hexdigest()
     if state.get('input_digest') != fingerprint:
         state.update(input_digest=fingerprint, repairs=[], code=None, result={}, operation=None)
-    rule_version = str(job.get('film_rules_revision') or job.get('film_schema_version') or 'default')
-    if not re.fullmatch(r'[A-Za-z0-9_.-]{1,32}', rule_version):
-        rule_version = 'default'
+    revision = rule_version(job)
 
     def event(stage, outcome, code='', details=None):
         event_id = uuid.uuid4().hex
@@ -161,7 +169,7 @@ def _render(root, job_path, job, recheck, state_path, atomic):
             state['last_failure_event_id'] = event_id
         state['events'].append({'event_id': event_id, 'run_id': state['run_id'], 'stage': stage,
                                 'outcome': outcome, 'code': code, 'toolkit_version': toolkit_version,
-                                'rule_version': rule_version, 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                'rule_version': revision, 'occurred_at': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                                 **(details or {})})
         atomic(state_path, state)
 

@@ -10,6 +10,64 @@ from store_film import generation_arguments, validate_beats
 
 
 class StoreFilmTests(unittest.TestCase):
+    def test_story_plan_binds_beats_dialogue_and_final_duration(self):
+        import copy
+        import json
+        from pathlib import Path
+        from story_plan import check_story_segments, validate_story_plan
+
+        job = json.loads((Path(__file__).parent / 'render/templates/store-film-v65.story-plan.json').read_text(encoding='utf-8'))
+        plan = job['story_plan']
+        self.assertAlmostEqual(validate_story_plan(plan, job['closing_overlay'])['estimated_final_seconds'], 33.6)
+        check_story_segments(plan, plan['segments'])
+        shortened = copy.deepcopy(plan)
+        for segment in shortened['segments']:
+            segment['duration_seconds'] = 12
+        self.assertEqual(validate_story_plan(shortened)['estimated_final_seconds'], 28.8)
+        self.assertEqual(validate_story_plan(shortened)['duration_advisory'], 'BELOW_TARGET_BEFORE_TRIMMING')
+        with self.assertRaisesRegex(ValueError, 'segment 1'):
+            check_story_segments(plan, shortened['segments'])
+        missing = copy.deepcopy(plan)
+        missing['beats'].pop(2)
+        with self.assertRaisesRegex(ValueError, 'story_plan.beats'):
+            validate_story_plan(missing)
+        repeated = copy.deepcopy(plan)
+        repeated['segments'][0]['dialogue'][1]['text'] = job['closing_overlay'][0]
+        with self.assertRaisesRegex(ValueError, 'viewer_action'):
+            validate_story_plan(repeated)
+
+    def test_story_closing_wraps_the_approved_action(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from render.assemble import write_ass
+
+        with TemporaryDirectory() as directory:
+            path = Path(directory) / 'layout.ass'
+            write_ass(path, {'film_profile': 'store_v2', 'script_rules_revision': '65', 'story_narrative': True,
+                             'closing_overlay': ['青枝花店，想预留同款就私信「花束」。']}, [], (28, 30), 'Arial')
+            closing = next(row for row in path.read_text(encoding='utf-8').splitlines()
+                           if row.startswith('Dialogue:') and ',Closing,' in row)
+            self.assertIn('青枝花店', closing)
+            self.assertIn('花束', closing)
+            self.assertIn(r'\N', closing)
+
+    def test_story_cadence_trims_open_and_seams_around_visual_action(self):
+        from render.assemble import plan_store_dialogue_edits
+
+        durations = [15, 12, 15]
+        windows = [[(3, 12)], [(1, 10)], [(3, 13)]]
+        cuts, removals, gaps = plan_store_dialogue_edits(durations, windows, 4.42, trim_opening=True)
+        self.assertGreater(cuts[0][0], 0)
+        self.assertEqual(gaps[0][0]['kind'], 'opening')
+        self.assertTrue(all(item['remaining_seconds'] < item['source_seconds'] for group in gaps for item in group))
+        self.assertLessEqual(cuts[1][0], .8)
+        self.assertGreaterEqual(cuts[1][1], 10.2)
+        self.assertEqual(removals[1], [])
+        self.assertGreaterEqual(sum(end - start for start, end in cuts) / 1.25, 30)
+        without_speech, _, unknown = plan_store_dialogue_edits(durations, [[], windows[1], windows[2]], 4.42, trim_opening=True)
+        self.assertEqual(without_speech[0], (0, 15))
+        self.assertEqual(unknown[0], [])
+
     def test_store_playback_speed_matches_the_rendered_timeline(self):
         from render.assemble import playback_matches_timeline, render_final_playback
 

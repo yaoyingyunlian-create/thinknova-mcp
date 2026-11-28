@@ -223,6 +223,9 @@ def film_review(job_path, recheck=False, existing=False):
         package['edit_timeline'] = result['edit_timeline']
     if 'native_dialogue' in result:
         package['native_dialogue'] = result['native_dialogue']
+    for field in ('toolkit_version', 'script_rules_revision', 'story_narrative', 'final_playback_rate', 'story_cadence', 'story_timing'):
+        if field in receipt:
+            package[field] = receipt[field]
     atomic(output, package)
     return {**package, 'review_package': str(output), 'diagnostic_events': result.get('diagnostic_events', []), 'run_id': result['run_id']}
 
@@ -335,10 +338,26 @@ def main() -> int:
                 run_id = film_run_id(job_path)
             except (OSError, ValueError, LocalStateBusy):
                 pass
+        story_timing = None
         try:
-            result = film_preflight()
-        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
-            result = {'status': 'blocked', 'stage': 'media', 'error': 'FILM_LOCAL_PREFLIGHT_FAILED'}
+            if job_path and job_path.is_file():
+                draft = json.loads(job_path.read_text(encoding='utf-8-sig'))
+                if isinstance(draft, dict) and 'story_plan' in draft:
+                    from story_plan import validate_story_plan
+                    from store_film import check_dialogue_capacity
+                    story_timing = validate_story_plan(draft['story_plan'], draft.get('closing_overlay'))
+                    for index, segment in enumerate(draft['story_plan']['segments'], 1):
+                        if segment['dialogue']:
+                            check_dialogue_capacity(segment, index, draft.get('speech_language'), revision='65', require_fill=False)
+        except (OSError, ValueError) as error:
+            result = {'status': 'blocked', 'stage': 'story_plan', 'error': 'FILM_STORY_PLAN_INVALID', 'detail': str(error)}
+        else:
+            try:
+                result = film_preflight()
+            except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
+                result = {'status': 'blocked', 'stage': 'media', 'error': 'FILM_LOCAL_PREFLIGHT_FAILED'}
+        if story_timing is not None:
+            result['story_timing'] = story_timing
         if job_path:
             try:
                 if not run_id:

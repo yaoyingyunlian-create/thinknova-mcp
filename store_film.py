@@ -160,7 +160,7 @@ def generation_arguments(segment, shop_assets, authorized_assets):
 
 
 
-def check_dialogue_capacity(segment, index, language=None, duration=None, revision=None):
+def check_dialogue_capacity(segment, index, language=None, duration=None, revision=None, *, require_fill=True):
     """Check the spoken script against the requested or quoted video duration."""
     lines = segment.get('dialogue') or []
     seconds = segment.get('duration_seconds') if duration is None else duration
@@ -176,7 +176,7 @@ def check_dialogue_capacity(segment, index, language=None, duration=None, revisi
     switches = sum(first.get('speaker') != second.get('speaker') for first, second in zip(lines, lines[1:]))
     required = cjk / 4.6 + english / 2.8 + switches * 0.25 + 0.4
     if revision == '65':
-        minimum, maximum = seconds * 0.8, seconds * (14 / 15)
+        minimum, maximum = seconds * 0.8 if require_fill else 0, seconds * (14 / 15)
         if not minimum <= required <= maximum:
             raise ValueError(f'FILM_DIALOGUE_CAPACITY: segment {index}, needs {required:.2f}s, '
                              f'target {minimum:.2f}–{maximum:.2f}s of quoted {seconds}s')
@@ -204,6 +204,10 @@ def validate_day_plan(plan):
     from store_editorial import validate_script
     validate_script(plan)
     story = plan.get('script_rules_revision') == '65' and plan.get('story_narrative') is True
+    if story and 'story_plan' in plan:
+        from story_plan import check_story_segments, validate_story_plan
+        validate_story_plan(plan['story_plan'], plan.get('closing_overlay', []))
+        check_story_segments(plan['story_plan'], segments)
     for segment in segments:
         lines = segment.get('subs')
         if (not isinstance(lines, list) or (not story and not lines)

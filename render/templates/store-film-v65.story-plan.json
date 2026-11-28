@@ -1,0 +1,84 @@
+{
+  "script_rules_revision": "65",
+  "story_narrative": true,
+  "speech_language": "zh",
+  "closing_overlay": [
+    "青枝花店，想预留同款就私信「花束」。"
+  ],
+  "story_plan": {
+    "version": 1,
+    "concern": "顾客担心花束带回家前缺水。",
+    "segments": [
+      {
+        "duration_seconds": 15,
+        "dialogue": [
+          {
+            "speaker": "customer",
+            "text": "坐一小时车，花会蔫吗？",
+            "kind": "question",
+            "visual": "顾客拎着通勤包，在柜台前拿起一束花。"
+          },
+          {
+            "speaker": "staff",
+            "text": "我把花根包好，路上也能保湿。",
+            "kind": "answer",
+            "visual": "店员接过花束，轻轻翻起包装给顾客看根部。"
+          }
+        ]
+      },
+      {
+        "duration_seconds": 12,
+        "dialogue": []
+      },
+      {
+        "duration_seconds": 15,
+        "dialogue": [
+          {
+            "speaker": "customer",
+            "text": "装得稳，回家直接插花瓶。",
+            "kind": "statement",
+            "visual": "顾客直立提起花束，转身走向门口，花朵保持挺立。"
+          },
+          {
+            "speaker": "staff",
+            "text": "青枝花店，想预留同款就私信「花束」。",
+            "kind": "statement",
+            "visual": "店员在原场景里收好桌面，轻松交代最后一句。"
+          }
+        ]
+      }
+    ],
+    "beats": [
+      {
+        "type": "concern",
+        "segment": 1,
+        "line": 1,
+        "visual": "通勤客担心一小时回程让花束缺水。"
+      },
+      {
+        "type": "explanation",
+        "segment": 1,
+        "line": 2,
+        "visual": "店员翻起花束，说明会包住花根保湿。"
+      },
+      {
+        "type": "process",
+        "segment": 2,
+        "line": 0,
+        "visual": "镜头看店员用保湿棉包好花根，将花束直立装入提袋。"
+      },
+      {
+        "type": "result",
+        "segment": 3,
+        "line": 1,
+        "visual": "顾客提袋时花束保持挺立，带着花束离店。"
+      },
+      {
+        "type": "action",
+        "segment": 3,
+        "line": 2,
+        "visual": "柜台原画面保留店员，并在尾句时同步叠字幕。"
+      }
+    ]
+  }
+}

@@ -185,7 +185,8 @@ def preflight_store_script(plan, rules, directory, steps):
     def checked_lines(candidate):
         validate_dialogue_v3(candidate)
         for clip, segment in enumerate(candidate['segments'], 1):
-            check_dialogue_capacity(segment, clip, candidate.get('speech_language'), revision=candidate.get('script_rules_revision'))
+            check_dialogue_capacity(segment, clip, candidate.get('speech_language'), revision=candidate.get('script_rules_revision'),
+                                    require_fill=candidate.get('story_narrative') is not True)
             if re.search(r'\b(?:invent no|make no|demonstration only)\b', segment.get('prompt', ''), re.I):
                 raise ValueError(f'FILM_PROMPT_UNSUPPORTED_RESTRICTION: segment {clip}')
             for index, line in enumerate(segment['dialogue'], 1):
@@ -264,7 +265,8 @@ def quoted_generation_args(client, tool, args, balance, require_duration=False, 
             if type(specification.get('duration_seconds')) is not int:
                 raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_UNAVAILABLE')
             from store_film import check_dialogue_capacity
-            check_dialogue_capacity(*dialogue_check[:3], revision=dialogue_check[3] if len(dialogue_check) > 3 else None, duration=specification['duration_seconds'])
+            check_dialogue_capacity(*dialogue_check[:3], revision=dialogue_check[3] if len(dialogue_check) > 3 else None,
+                                    duration=specification['duration_seconds'], require_fill=args.get('story_narrative') is not True)
         if require_duration and specification.get('duration_seconds') != args['duration_seconds']:
             raise RuntimeError('MCP_VIDEO_QUOTE_DURATION_MISMATCH')
     if 'reference_roles' in args and quote.get('applied_reference_asset_ids') != args['reference_asset_ids']:
@@ -311,7 +313,8 @@ def execute(client: Client, claim: dict, day_plan=None, budget=None):
             from store_film import check_dialogue_capacity
             for index, segment in enumerate(day_plan['segments']):
                 if not steps.get(f'task_{index}') and f'quote_credits_{index}' not in steps:
-                    check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'), revision=day_plan.get('script_rules_revision'))
+                    check_dialogue_capacity(segment, index + 1, day_plan.get('speech_language'), revision=day_plan.get('script_rules_revision'),
+                                            require_fill=day_plan.get('story_narrative') is not True)
             if (not resuming_paid_plan and day_plan.get('script_rules_revision') in ('59', '60', '64', '65')
                     and day_plan.get('asset_preparation')
                     and len(day_plan.get('asset_bindings') or {}) < len(day_plan['asset_preparation'])):
@@ -633,6 +636,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
             args['dialogue'] = [{key: line[key] for key in ('speaker', 'text')} for line in segment['dialogue']]
         if story:
             args.update(story_narrative=True, visual_lines=[line['visual'] for line in segment['dialogue']])
+            if 'story_plan' in plan:
+                args['story_plan'] = plan['story_plan']
         if revision65:
             from film_recovery import film_run_id
             boards = segment.get('reference_boards') or {}
@@ -769,6 +774,8 @@ def execute_store_day(client, claim, plan, budget, rules, balance, directory, st
            'script_rules_revision': plan.get('script_rules_revision'), 'quality_policy': render_policy}
     if plan.get('story_narrative') is True:
         job['story_narrative'] = True
+        if 'story_plan' in plan:
+            job['story_plan'] = plan['story_plan']
     if plan.get('speech_language'):
         job['speech_language'] = plan['speech_language']
     if plan['schema_version'] in (2, 3):
