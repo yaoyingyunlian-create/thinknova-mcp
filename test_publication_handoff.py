@@ -63,11 +63,24 @@ class PublicationHandoffTests(unittest.TestCase):
                 film_review(job, existing=True)
             render.assert_not_called()
 
-    def test_uncertain_dialogue_remains_version_review(self):
+    def test_uncertain_dialogue_warns_under_standing_authorization(self):
         atomic(self.proof, {'machine_check': 'pass', 'sha256': self.digest, 'speech_status': 'checked',
                             'warnings': [{'code': 'FILM_DIALOGUE_REVIEW_REQUIRED'}]})
+        approval = self.plan['targets']['youtube']['approval']
+        approval['requires_per_version_review'] = True
         result = reserve(self.root, self.package, self.plan, 'youtube', '@right', now=self.now)
-        self.assertEqual(result['reason_code'], 'SPEECH_VERIFICATION_REQUIRED')
+        self.assertEqual(result['reason_code'], 'PUBLICATION_REVIEW_REQUIRED')
+
+        approval['requires_per_version_review'] = False
+        with patch('browser_receipt.check_media'):
+            result = reserve(self.root, self.package, self.plan, 'youtube', '@right', now=self.now)
+        self.assertEqual(result['status'], 'ready_to_publish')
+        self.assertIn('SPEECH_VERIFICATION_PENDING', result['warnings'])
+
+    def test_speech_warning_cannot_clear_a_failed_machine_check(self):
+        atomic(self.proof, {'machine_check': 'fail', 'sha256': self.digest, 'speech_status': 'unknown'})
+        result = reserve(self.root, self.package, self.plan, 'youtube', '@right', now=self.now)
+        self.assertEqual(result['status'], 'quality_blocked')
 
     def test_unknown_is_reconciled_and_cannot_upload_twice(self):
         with patch('browser_receipt.check_media'):

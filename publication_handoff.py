@@ -72,16 +72,13 @@ def reserve(workspace, package_path, plan, platform, observed_account, verified_
                          ('content_review_pending', False)])
     else:
         permitted = False
+    if not permitted:
+        return {'status': 'awaiting_review', 'film_sha256': digest, 'copy_sha256': copy_digest,
+                'reason_code': 'PUBLICATION_REVIEW_REQUIRED'}
     speech_pending = proof.get('speech_status', 'unknown') in ('unknown', 'degraded') or any(
         isinstance(item, dict) and item.get('code') == 'FILM_DIALOGUE_REVIEW_REQUIRED'
         for item in proof.get('warnings', [])
     )
-    if speech_pending and approved.get('scope') != 'version':
-        permitted = False
-    if not permitted:
-        return {'status': 'awaiting_review', 'film_sha256': digest, 'copy_sha256': copy_digest,
-                'reason_code': ('SPEECH_VERIFICATION_REQUIRED' if speech_pending
-                                and approved.get('scope') != 'version' else 'PUBLICATION_REVIEW_REQUIRED')}
     if copy.get('target_account') and copy['target_account'] != observed_account:
         return {'status': 'authorization_required'}
     now = now or datetime.now(timezone.utc)
@@ -108,4 +105,5 @@ def reserve(workspace, package_path, plan, platform, observed_account, verified_
         atomic(claim_path, {'film_sha256': digest, 'retried': bool(grant), 'claimed_at': now.isoformat()})
         return {'status': 'ready_to_publish', 'receipt': str(receipt), 'video': str(video),
                 'film_sha256': digest, 'copy_sha256': copy_digest, 'retried': bool(grant),
+                **({'warnings': ['SPEECH_VERIFICATION_PENDING']} if speech_pending else {}),
                 'upload_report': {'action': 'receipt', 'data': value}}

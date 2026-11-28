@@ -50,10 +50,10 @@ def caption_agreement(expected, actual):
 def evaluate(segments, required):
     transcript = "".join(segment['text'] for segment in segments)
     missing = [term for term in required if normalize(term) not in normalize(transcript)]
-    return {'status': 'speech_mismatch' if missing else 'needs_listening_review',
+    return {'status': 'term_not_matched' if missing else 'term_matched',
             'missing_terms': missing, 'segments': segments,
-            'pronunciation_verified': False, 'publication_ready': False,
-            'next_action': 'Listen to the source audio and verify the intended words; never fix speech by changing subtitle spelling.'}
+            'pronunciation_verified': False, 'advisory_only': True,
+            'next_action': 'Listen to flagged source audio when practical. Use the approved script spelling for subtitles.'}
 
 
 def ensure_runtime(model_name='small'):
@@ -198,9 +198,9 @@ def main():
         report = evaluate(transcribe(args.media,args.model,args.lang),args.required)
         report['source_sha256'] = digest
         print(json.dumps(report,ensure_ascii=False))
-        return 2 if report['missing_terms'] else 0
+        return 0
     except (Exception, SystemExit) as exc:
-        print(json.dumps({'status':'not_checked','pronunciation_verified':False,'publication_ready':False,
+        print(json.dumps({'status':'not_checked','pronunciation_verified':False,'advisory_only':True,
                           'error_code':'SPEECH_REVIEW_UNAVAILABLE','failure':type(exc).__name__,
                           'next_action':'Check FFmpeg, faster-whisper and its local model cache. No model is downloaded automatically.'}))
         return 3

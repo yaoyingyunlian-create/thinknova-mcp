@@ -70,7 +70,7 @@ def make_plan(directory: Path, rules: dict) -> dict:
     if not codex:raise RuntimeError('CODEX_UNAVAILABLE')
     output=directory/'plan.json'
     # Only a constrained content plan is consumed. No model-provided commands or paths.
-    prompt='Create one video content plan matching these account rules. For ordinary human characters require anatomically natural hands, five fingers per fully visible hand, no extra or fused digits/limbs, and simple stable gestures. This does not certify generated anatomy. If the spoken script contains 小程序, add the pronunciation instruction 小程序 = xiǎo chéng xù; keep displayed text unchanged, do not speak the pinyin. Require listening and visual review for suspected defects before release. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
+    prompt='Create one video content plan matching these account rules. For ordinary human characters require anatomically natural hands, five fingers per fully visible hand, no extra or fused digits/limbs, and simple stable gestures. This does not certify generated anatomy. If the spoken script contains 小程序, add the pronunciation instruction 小程序 = xiǎo chéng xù; keep displayed text unchanged, do not speak the pinyin. Keep ASR term misses as advisory evidence. Treat confirmed dialogue defects and visual defects according to the film quality review. Return only the requested JSON. No commands, tool calls, purchases or publication. Do not claim unsupported facts. Rules: '+json.dumps(rules,ensure_ascii=False)
     prompt += (' For each shot set first_frame_asset_id to the exact ThinkNova asset ID only when the account rules explicitly identify '
                'that image as the intended starting frame for the shot. Authorization alone is insufficient. '
                'Never substitute a character sheet, style sample, negative reference or external URL. Use null if no such frame is designated.')
@@ -106,12 +106,11 @@ def review_spoken_terms(path, prompt):
     from render.speech_review import transcribe, evaluate
     try:
         review = evaluate(transcribe(path), ['小程序'])
-        review['source_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
-        atomic(path.with_suffix('.speech-review.json'), review)
-    except Exception:
-        raise RuntimeError('SPEECH_REVIEW_UNAVAILABLE') from None
-    if review['missing_terms']: raise RuntimeError('SPEECH_CONTENT_MISMATCH')
-    # ASR agreement is evidence only, never a pronunciation certificate.
+    except (RuntimeError, ImportError, OSError):
+        review = {'status': 'not_checked', 'pronunciation_verified': False, 'advisory_only': True,
+                  'error_code': 'SPEECH_REVIEW_UNAVAILABLE'}
+    review['source_sha256'] = hashlib.sha256(path.read_bytes()).hexdigest()
+    atomic(path.with_suffix('.speech-review.json'), review)
 
 
 def codex_dialogue_json(prompt, directory):

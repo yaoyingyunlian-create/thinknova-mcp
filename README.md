@@ -38,6 +38,8 @@ Run `film-preflight` before new paid jobs to check rendering, subtitles and the 
 
 制作和巡检使用同一份 job.json。工具包记录失败原因，自动尝试字幕修复或原预览复检。可恢复的下载故障由 AI 助理回查原任务并取回原产物。
 
+术语 ASR 未匹配或未检查只记提示。机器质检通过且满足现有发布授权的作品可继续发布交接。首片审核、客户要求的逐条审核及已确认的严重对白错误仍受原有检查约束。
+
 每段取件后检查原生音轨，并按原任务号和素材摘要保留已确认的逐句时间戳。字幕缺项时仅复查对应音频区间；转写不可用时保留原声预览，并返回镜头和未对齐的句子序号。补拍只处理有缺陷证据的镜头，并沿用已批准的预算。
 
 After download, the toolkit checks the original audio and saves line timings against the original task and source hash. It retries the affected audio window for missing timings and retains a playable preview with the original audio if recognition is unavailable. Retakes require evidence for the affected clip and an approved budget.

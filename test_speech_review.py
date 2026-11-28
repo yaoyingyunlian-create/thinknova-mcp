@@ -22,16 +22,16 @@ class SpeechReviewTests(unittest.TestCase):
 
 
 
-    def test_known_wrong_term_blocks(self):
+    def test_unmatched_term_is_advisory(self):
         report=evaluate([{'start':0,'end':6,'text':'你们有没有小城厨'}],['小程序'])
-        self.assertEqual(report['status'],'speech_mismatch')
+        self.assertEqual(report['status'],'term_not_matched')
         self.assertEqual(report['missing_terms'],['小程序'])
-        self.assertFalse(report['publication_ready'])
+        self.assertTrue(report['advisory_only'])
     def test_match_is_not_pronunciation_approval(self):
         report=evaluate([{'start':0,'end':2,'text':'你们有没有小程序？'}],['小程序'])
-        self.assertEqual(report['status'],'needs_listening_review')
+        self.assertEqual(report['status'],'term_matched')
         self.assertFalse(report['pronunciation_verified'])
-        self.assertFalse(report['publication_ready'])
+        self.assertNotIn('publication_ready', report)
     def test_terms_across_segments_and_punctuation(self):
         report=evaluate([{'text':'小'},{'text':'程，序'}],['小程序'])
         self.assertEqual(report['missing_terms'],[])
@@ -89,20 +89,27 @@ class SpeechGateTests(unittest.TestCase):
                 if not words:
                     self.assertIn(expected, [code for code, _ in check.WARNS])
 
-    def test_mismatch_stops_runner_and_no_media_is_rewritten(self):
+    def test_mismatch_records_advice_without_rewriting_media(self):
         import automation
         import tempfile
         from unittest.mock import patch
         with tempfile.TemporaryDirectory() as folder:
             media=Path(folder)/'sample.mp4';media.write_bytes(b'fixture')
             with patch('render.speech_review.transcribe',return_value=[{'text':'你们有没有小城厨'}]):
-                with self.assertRaisesRegex(RuntimeError,'SPEECH_CONTENT_MISMATCH'):
-                    automation.review_spoken_terms(media,'说小程序')
+                automation.review_spoken_terms(media,'说小程序')
             self.assertEqual(media.read_bytes(),b'fixture')
             self.assertTrue(media.with_suffix('.speech-review.json').exists())
-    def test_missing_runtime_stops_runner(self):
+
+    def test_missing_runtime_records_advice(self):
         import automation
+        import json
+        import tempfile
         from unittest.mock import patch
-        with patch('render.speech_review.transcribe',side_effect=RuntimeError('missing cache')):
-            with self.assertRaisesRegex(RuntimeError,'SPEECH_REVIEW_UNAVAILABLE'):
-                automation.review_spoken_terms(Path('fixture'),'小程序')
+        with tempfile.TemporaryDirectory() as folder:
+            media = Path(folder) / 'sample.mp4'
+            media.write_bytes(b'fixture')
+            with patch('render.speech_review.transcribe', side_effect=RuntimeError('missing cache')):
+                automation.review_spoken_terms(media, '小程序')
+            review = json.loads(media.with_suffix('.speech-review.json').read_text(encoding='utf-8'))
+            self.assertEqual(review['error_code'], 'SPEECH_REVIEW_UNAVAILABLE')
+            self.assertTrue(review['advisory_only'])

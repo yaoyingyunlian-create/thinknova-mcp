@@ -51,7 +51,7 @@ For revision 2.4, ordinary product and service films use two 15-second segments.
 - [ ] 第一秒有人在做事，不是文字卡、不是空镜
 - [ ] 画内对白片检查至片尾叠字前，口播空档不超过 2 秒；允许自然的换人停顿。旧计划仍用自身门槛。
 - [ ] 全片是同一个人：脸、发型、衣服没变；店里的镜头看得出是这家店
-- [ ] 对照脚本回听两人的对白、发音和角色声音，确认人物、产品和动作符合档案。
+- [ ] 首片或客户要求逐条审核时，对照脚本核对对白、发音、人物、产品和动作。已有日常发布授权且机器质检通过的作品，将术语 ASR 未匹配保留为告警；有证据确认读错、漏读或对白严重错配时仍须处理。 For already authorized daily publishing, a term recognition miss is advisory after the film passes machine checks. First-film and customer-required review still apply.
 - [ ] 画面里没有模型自己加的字；字幕和声音逐句对得上（`render/speech_review.py` 核店名、产品名）
 - [ ] 没有编出来的价格、优惠、评价、效果
 
