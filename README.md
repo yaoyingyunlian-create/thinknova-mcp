@@ -80,7 +80,10 @@ When rechecking an old store-film preview created under the generic film profile
 
 paid_retake 默认关闭。启用后，只对原质检报告定位到的严重故障准备用一次补拍。决策文件记录 authorized、remaining_approved_credits、segment_index、reason_code、tool 和已核对的 arguments。运行 `toolkit.py film-replacement job.json replacement-decision.json` 获取只读报价请求，调用 get_balance 后用 --quoted-credits 传回报价金额。收到 ready_to_submit 后，由 AI 助理使用返回的稳定 client_request_id 和 max_credits 提交，断网续跑复用同一请求号。取得结果后把实际 charged_credits 记录到原制作任务，并用 film-events JOB --record-stage generation --outcome passed --code FILM_PAID_RETAKE --task-no TASK_ID 上报。后台只统计该补拍请求号对应的实际结算积分。用新片重新质检。工作目录保留已用过的补拍授权和请求。
 
+缺少 `publication-plan.json` 时，`publication-handoff` 返回 `PUBLICATION_PLAN_MISSING`。只用已有确认的项目、平台账号、授权和时段补齐计划。成片哈希及机器质检通过后可继续使用原片，仍按现有审核要求处理。
+
 ## English
+If `publication-plan.json` is missing, handoff returns `PUBLICATION_PLAN_MISSING`. Prepare the plan from confirmed targets, authorization, and time windows. Reuse the existing machine-checked video and follow its current review requirements.
 `toolkit.py doctor --json` checks local production. The legacy `automation.py doctor --json` reports controlled device readiness. For ordinary publishing, check the film, account, and current authorization in Ego Lite. Device pairing is unnecessary for this path.
 For projects advertising `story_plan_version=1`, see `render/templates/store-film-v65.story-plan.json`. Quote each scene against the same whole-film draft. Assembly trims verified dead time using original audio and preserves silent visual actions. An optional `action_window` protects the verified action interval within a silent clip. The delivery report includes the actual revision, playback rate, and measured cadence.
 

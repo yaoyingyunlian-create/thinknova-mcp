@@ -31,6 +31,26 @@ class PublicationHandoffTests(unittest.TestCase):
                         'approval': {'scope': 'standing', 'first_film_reviewed': True,
                                      'requires_per_version_review': False, 'content_review_pending': False}}}}
 
+    def test_cli_reports_missing_plan_and_missing_account_without_reserving(self):
+        import json
+        from contextlib import redirect_stdout
+        from io import StringIO
+        from toolkit import main
+
+        path = self.root / 'publication-plan.json'
+        args = ['toolkit.py', 'publication-handoff', str(self.root), str(path)]
+        output = StringIO()
+        with patch('sys.argv', args), redirect_stdout(output):
+            self.assertEqual(main(), 2)
+        self.assertEqual(json.loads(output.getvalue())['error'], 'PUBLICATION_PLAN_MISSING')
+        del self.plan['targets']['youtube']['target_account']
+        atomic(path, self.plan)
+        output = StringIO()
+        with patch('sys.argv', args), redirect_stdout(output):
+            self.assertEqual(main(), 2)
+        self.assertEqual(json.loads(output.getvalue())['field'], 'targets.youtube.target_account')
+        self.assertFalse((self.root / '.thinknova-publication').exists())
+
     def test_first_review_replacement_and_time_window(self):
         self.assertEqual(schedule_requests(self.plan)[0]['data']['target_account'], '@right')
         approval = self.plan['targets']['youtube'].pop('approval')

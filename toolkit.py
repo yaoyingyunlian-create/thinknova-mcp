@@ -391,16 +391,26 @@ def main() -> int:
         print(json.dumps(result, ensure_ascii=False))
         return 0
     if args.command == "publication-handoff":
-        from browser_receipt import read
         from local_state import LocalStateBusy
-        from publication_handoff import reserve, schedule_requests
+        from publication_handoff import PublicationInputError, read_input, reserve, schedule_requests
         try:
-            plan = read(args.plan)
+            plan = read_input(args.plan, 'plan')
             result = (reserve(args.workspace.resolve(), args.package.resolve(), plan, args.platform,
                               args.observed_account, args.verified_absent) if args.package
                       else {'reports': schedule_requests(plan)})
-        except (OSError, ValueError, KeyError, TypeError, LocalStateBusy):
-            print('{"status":"blocked","error":"PUBLICATION_HANDOFF_UNAVAILABLE"}')
+        except PublicationInputError as error:
+            action = ('prepare_plan_from_confirmed_targets' if str(error) == 'PUBLICATION_PLAN_MISSING'
+                      else 'use_existing_review_package' if str(error) == 'PUBLICATION_PACKAGE_MISSING'
+                      else 'check_handoff_input')
+            print(json.dumps({'status': 'blocked', 'error': str(error), 'field': error.field, 'next_action': action}))
+            return 2
+        except LocalStateBusy:
+            print('{"status":"blocked","error":"PUBLICATION_HANDOFF_BUSY","next_action":"retry_handoff"}')
+            return 2
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            code = str(error)
+            safe_code = code if re.fullmatch(r'BROWSER_PUBLICATION_[A-Z_]+', code) else 'PUBLICATION_HANDOFF_UNAVAILABLE'
+            print(json.dumps({'status': 'blocked', 'error': safe_code}))
             return 2
         print(json.dumps(result, ensure_ascii=False))
         return 0

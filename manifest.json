@@ -1,7 +1,7 @@
 {
-  "version": "thinknova-automation-toolkit-v3.1.46",
+  "version": "thinknova-automation-toolkit-v3.1.47",
   "text_line_endings": "lf",
-  "revision": "a460f45baad418836d3271bc148138725c06bd911cf7f2e26b59b7fbbdbb6b20",
+  "revision": "6ce1e1cf5498f21bac924e019c806940dd782e545fcf6f295e131bc886d16f23",
   "files": [
     {
       "path": ".gitignore",
@@ -17,7 +17,7 @@
     },
     {
       "path": "README.md",
-      "sha256": "f7e3eaed47ff1aed51651bcedf25a7941bf0fba4a148ebbcaaf9263bda3253ac"
+      "sha256": "871fa54565201367380c9ff43a8183b7869b118c5113005af379e4aee973c150"
     },
     {
       "path": "SPARSE_DELIVERY.md",
@@ -49,7 +49,7 @@
     },
     {
       "path": "build_manifest.py",
-      "sha256": "e605c81ad4c00ef3e790692da3e6b8b926ae1ac9928fc6828c6ca43add27e615"
+      "sha256": "77d38a45f09bdd943b258cf16176e6403ca0024acbd3cb9c3b6872a70b1d37a1"
     },
     {
       "path": "clip_recovery.py",
@@ -125,7 +125,7 @@
     },
     {
       "path": "publication_handoff.py",
-      "sha256": "82ee41028e8d5afaab6337b5b9d86a491fe32dcc5a2be1e534ce5f65813d9367"
+      "sha256": "029a2c5a5d438f616879ba824ed5ebf8026844d0f7b029698fa19682e9f180b6"
     },
     {
       "path": "publish/common/__init__.py",
@@ -453,7 +453,7 @@
     },
     {
       "path": "test_publication_handoff.py",
-      "sha256": "dd2d0ed1accd06cf7a09686919ff0861a72ae0bc535700004ecc90c05fd44443"
+      "sha256": "0ee1190549c6b862f946e67422d66c1d29bfb3328da83605e74a0e2d94cf5bc7"
     },
     {
       "path": "test_render_pipeline.py",
@@ -493,7 +493,7 @@
     },
     {
       "path": "toolkit.py",
-      "sha256": "b4ad36390b4bc859365a9b135736c62789e4bdd0f0e4bd1053374d8cf0100e93"
+      "sha256": "de3077716d59fdaeb1e971dbfeceb6f1d13b72fdf32fa0f9cab23a256153a13d"
     },
     {
       "path": "update.py",
