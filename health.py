@@ -103,6 +103,7 @@ def report(root: Path = ROOT, online: bool = False) -> dict:
     readiness = capabilities(checks)
     local_ready = readiness['core_production'] == 'pass'
     return {'schema_version': 1, 'checked_at': datetime.now(timezone.utc).isoformat(), 'local_ready': local_ready,
+            'readiness_scope': 'local_production', 'affects_ego_lite_publication': False,
             'capabilities': readiness, 'overall': 'partial' if local_ready else 'blocked', 'checks': checks}
 
 

@@ -15,6 +15,15 @@ import urllib.error
 
 
 class HealthTests(unittest.TestCase):
+    def test_missing_device_does_not_report_account_or_ego_publication_as_blocked(self):
+        with patch.object(secure_state, 'load', side_effect=FileNotFoundError):
+            result = automation.connected_report(check_local=False, require_codex=False)
+        checks = {check['name']: check['status'] for check in result['checks']}
+        self.assertFalse(result['automation_ready'])
+        self.assertEqual(checks['device_execution'], 'not_configured')
+        self.assertEqual(checks['account'], 'unknown')
+        self.assertEqual(checks['platform_authorization'], 'not_applicable')
+
     def test_browser_launch_failure_blocks_browser_capability(self):
         with patch.object(health, 'verify_files', return_value=True), patch.object(health, 'chromium_probe', return_value=False):
             result=health.report()

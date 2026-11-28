@@ -28,6 +28,8 @@ Run `film-preflight` before new paid jobs to check rendering, subtitles and the 
 
 `publish/dispatch.py --dry` 只准备本地文案与文件清单；其 `--execute` 及旧平台上传、登录脚本均已退休。实际发布由客户 AI 助理在 Ego Lite 完成，不使用本包发布器。
 
+`toolkit.py doctor --json` 检查本机制作。旧 `automation.py doctor --json` 的 `automation_ready` 仅表示设备受控执行状态。普通发布在 Ego Lite 中核实成片、目标账号和现有授权，无需因设备未配对暂停。
+
 ## 自动修复旧安装
 
 开工时从已安装工具包运行 `python bootstrap.py update --workspace "<客户工作目录>" --json`。命令在原目录尝试安全更新；遇到源码冲突或完整性错误时自动准备官方干净副本。升级成功会在客户工作区安装固定入口 `.thinknova-run.py`。把既有定时任务里的工具包路径就地替换成 `python .thinknova-run.py film job.json` 等对应命令（工作目录使用客户工作区），保留现有时间、对话和请求号。以后入口自动检查并调用生效版本。两个官方源都不可达时，继续使用已验证的本机版本，版本状态显示未知。已知有新版但无法启用时会报告阻塞。旧 bootstrap 执行更新后如未返回 launcher，用实际生效目录的新版 bootstrap 再运行一次同一条更新命令。
@@ -79,6 +81,7 @@ When rechecking an old store-film preview created under the generic film profile
 paid_retake 默认关闭。启用后，只对原质检报告定位到的严重故障准备用一次补拍。决策文件记录 authorized、remaining_approved_credits、segment_index、reason_code、tool 和已核对的 arguments。运行 `toolkit.py film-replacement job.json replacement-decision.json` 获取只读报价请求，调用 get_balance 后用 --quoted-credits 传回报价金额。收到 ready_to_submit 后，由 AI 助理使用返回的稳定 client_request_id 和 max_credits 提交，断网续跑复用同一请求号。取得结果后把实际 charged_credits 记录到原制作任务，并用 film-events JOB --record-stage generation --outcome passed --code FILM_PAID_RETAKE --task-no TASK_ID 上报。后台只统计该补拍请求号对应的实际结算积分。用新片重新质检。工作目录保留已用过的补拍授权和请求。
 
 ## English
+`toolkit.py doctor --json` checks local production. The legacy `automation.py doctor --json` reports controlled device readiness. For ordinary publishing, check the film, account, and current authorization in Ego Lite. Device pairing is unnecessary for this path.
 For projects advertising `story_plan_version=1`, see `render/templates/store-film-v65.story-plan.json`. Quote each scene against the same whole-film draft. Assembly trims verified dead time using original audio and preserves silent visual actions. An optional `action_window` protects the verified action interval within a silent clip. The delivery report includes the actual revision, playback rate, and measured cadence.
 
 This is a video-production toolkit. After the first workspace update, run `python .thinknova-run.py film job.json` from the customer workspace. It updates before dispatch and follows the active installation. Rebind established assistant schedules once to this workspace entry point. Install with bootstrap.py setup --json, use the existing MCP OAuth connection for generation and the workspace film command for assembly, and deliver a review package. Store films must retain the original ThinkNova audio. Do not use local TTS, macOS say, muting, or replacement audio. Minor pace and pause deviations warn. Bad media, wholly silent films and severe dialogue mismatch still block.

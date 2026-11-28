@@ -1133,9 +1133,15 @@ def connected_report(check_local: bool = True, require_codex: bool = True, requi
         except Exception:status('codex_login','waiting_user','CODEX_LOGIN_REQUIRED')
     else:
         status('codex_login','not_applicable','Use the customer assistant plan or the server day plan')
+    status('device_execution', 'unknown', 'Check the device only for controlled execution / 仅受控执行需要检查设备')
+    status('account', 'unknown', 'Check account access through MCP OAuth / 通过 MCP OAuth 核对账户')
+    status('platform_authorization', 'not_applicable', 'Verify each authorized platform in Ego Lite at publish time / 发布时在 Ego Lite 核对各平台账号和授权')
+    device_verified = False
     try:
         client=Client(secure_state.load(CREDENTIALS))
         config,_=client.post('/mcp/device/configuration',{})
+        device_verified = True
+        status('device_execution', 'pass')
         balance=client.tool('get_balance')
         result['available_credits']=int(balance.get('available_credits',0))
         status('server_quote','pass' if balance.get('quote_mode_supported') is True else 'waiting_user','Update ThinkNova API before enabling paid execution / 请先更新支持只读报价的 API')
@@ -1145,20 +1151,28 @@ def connected_report(check_local: bool = True, require_codex: bool = True, requi
         status('rules', 'pass' if (not rules.get('needs_onboarding') or rules.get('defaults_revision'))
                and rules.get('version') == config['data']['rules_version'] else 'waiting_user',
                'Use creation defaults and current rules / 使用创作默认值与当前规则')
-        status('platform_authorization','not_applicable','Publishing is owned by the customer AI assistant and Ego Lite')
-    except (Exception,SystemExit):status('account','waiting_user','Pair an active device/grant; no secrets in chat / 配对有效设备与授权')
-    required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','account','rules','platform_authorization','server_quote')]
-    required = [check for check in required if check['name'] != 'platform_authorization']
+    except FileNotFoundError:
+        if not device_verified:
+            status('device_execution', 'not_configured', 'Pair only if using controlled execution / 仅使用受控执行时配对')
+    except (Exception, SystemExit):
+        if not device_verified:
+            status('device_execution', 'unknown', 'Could not verify the controlled device or its grant / 无法核实受控设备或授权')
+    required=[c for c in result['checks'] if c['name'] in ('python','files','virtual_environment','git','ffmpeg','ffprobe','libass','cjk_font','codex_login','device_execution','account','rules','server_quote')]
     if not require_codex:
         required = [check for check in required if check['name'] != 'codex_login']
-    result['automation_ready']=all(c['status']=='pass' for c in required)
+    result.update(readiness_scope='controlled_execution', affects_ego_lite_publication=False)
+    result['automation_ready'] = (
+        all(c['status'] == 'pass' for c in required)
+        and all(any(c['name'] == name and c['status'] == 'pass' for c in required)
+                for name in ('device_execution', 'server_quote', 'account', 'rules'))
+    )
     result['overall']='partial' if result['automation_ready'] else 'blocked'
     return result
 
 
 def doctor_command(as_json):
     from health import display
-    print('Checking local production and ThinkNova access / 正在检查本机制作及 ThinkNova 访问', file=sys.stderr, flush=True)
+    print('Checking controlled device execution / 正在检查设备受控执行', file=sys.stderr, flush=True)
     if as_json:
         try:
             probe = subprocess.run(
@@ -1181,6 +1195,9 @@ def doctor_command(as_json):
                       'checks': [{'name': 'connected_probe', 'status': 'unknown', 'remedy': 'AUTOMATION_DOCTOR_PROBE_FAILED'}]}
     else:
         result = connected_report(require_codex=False)
+    result.update(readiness_scope='controlled_execution', affects_ego_lite_publication=False)
+    if not as_json:
+        print('This report applies to controlled execution. Verify publishing in Ego Lite. / 本报告检查受控执行。发布请在 Ego Lite 核验。')
     display(result, as_json)
     return 0 if result['automation_ready'] else 2
 
